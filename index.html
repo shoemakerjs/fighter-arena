@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Arena</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%2311151f' stroke='%233be8c8' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23ff4f6d'/%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <canvas id="world"></canvas>
+    <canvas id="hud"></canvas>
+
+    <div id="menu" class="overlay">
+      <div class="panel">
+        <p class="eyebrow">Prototyp · 1v1</p>
+        <h1>ARENA</h1>
+        <p class="lead">Zręcznościowa arena w stylu Battlerite. Celuj myszką, unikaj pocisków, wygraj 3 rundy.</p>
+        <div class="field">
+          <span class="label">Twoja postać</span>
+          <div class="segmented" id="champ">
+            <button data-value="0" class="active">Mag</button>
+            <button data-value="1">Wojownik</button>
+            <button data-value="2">Cień</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="label">Bot gra</span>
+          <div class="segmented" id="bot-champ">
+            <button data-value="0">Mag</button>
+            <button data-value="1">Wojownik</button>
+            <button data-value="2">Cień</button>
+            <button data-value="-1" class="active">Losowo</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="label">Poziom bota</span>
+          <div class="segmented" id="difficulty">
+            <button data-value="easy">Łatwy</button>
+            <button data-value="normal" class="active">Normalny</button>
+            <button data-value="hard">Trudny</button>
+          </div>
+        </div>
+        <button id="play" class="primary">Graj</button>
+        <p class="role" id="role"></p>
+        <dl class="controls" id="controls"></dl>
+        <p class="hint">Rozbij złotą kulę na środku: +HP i energia. Po 60 s arena zaczyna się zamykać.</p>
+      </div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+      <div class="panel small">
+        <h2>Pauza</h2>
+        <button id="resume" class="primary">Wznów</button>
+        <button id="quit" class="ghost">Wyjdź do menu</button>
+      </div>
+    </div>
+
+    <div id="end" class="overlay hidden">
+      <div class="panel small">
+        <p class="eyebrow">Koniec meczu</p>
+        <h2 id="end-title">Zwycięstwo</h2>
+        <p class="score" id="end-score">3 : 1</p>
+        <button id="rematch" class="primary">Rewanż</button>
+        <button id="to-menu" class="ghost">Menu</button>
+      </div>
+    </div>
+
+    <div id="hint-bar" class="hidden">Esc — pauza · M — dźwięk: <span id="sound-state">wł.</span></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

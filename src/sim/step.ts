@@ -1,0 +1,736 @@
+/**
+ * Deterministic game simulation.
+ *
+ * Rules for everything in this folder, so the same code can later run rollback
+ * netcode or verify replays on a server:
+ * - state only changes inside step(), from the previous state + both inputs;
+ * - no Date, no Math.random, no Math.sin/cos/atan2 (engines may differ in the
+ *   last bits) — only + - * / and Math.sqrt;
+ * - iteration order is always array order.
+ */
+import {
+  ARENA_MIN_R,
+  ARENA_R,
+  ARENA_SHRINK,
+  BLINK,
+  BUFFER_TICKS,
+  CHAMPIONS,
+  COUNTDOWN_TICKS,
+  COUNTER,
+  CRY,
+  DASH,
+  EXECUTE,
+  HASTE_MUL,
+  KB_DECAY,
+  LEAP,
+  MARK,
+  MAX_ENERGY,
+  METEOR,
+  ORB_ENERGY,
+  ORB_HEAL,
+  ORB_HP,
+  ORB_R,
+  ORB_RESPAWN,
+  ORB_SPAWN_AT,
+  PILLARS,
+  PLAYER_R,
+  POISON,
+  PROJ,
+  RIFT,
+  ROUND_END_TICKS,
+  ROUNDS_TO_WIN,
+  SLASH,
+  SLOT,
+  SLOT_BUTTONS,
+  SMOKE,
+  SPAWNS,
+  SUDDEN_DEATH_AT,
+  WHIRL,
+  type AbilityDef,
+} from './constants';
+import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type ProjKind } from './types';
+
+export function createMatch(champs: number[] = [0, 0]): GameState {
+  return {
+    frame: 0,
+    champs: champs.slice(),
+    phase: 'countdown',
+    phaseT: COUNTDOWN_TICKS,
+    round: 1,
+    roundFrame: 0,
+    score: [0, 0],
+    lastRoundWinner: -1,
+    arenaR: ARENA_R,
+    players: [createPlayer(0, champs[0]), createPlayer(1, champs[1])],
+    projectiles: [],
+    meteors: [],
+    orb: { active: false, hp: ORB_HP, timer: ORB_SPAWN_AT },
+    nextId: 1,
+  };
+}
+
+export function cloneState(s: GameState): GameState {
+  return structuredClone(s);
+}
+
+export function abilityOf(p: Player, slot: number): AbilityDef {
+  return CHAMPIONS[p.champ].abilities[slot];
+}
+
+export function maxHp(p: Player): number {
+  return CHAMPIONS[p.champ].hp;
+}
+
+function createPlayer(id: number, champ: number): Player {
+  const spawn = SPAWNS[id];
+  return {
+    id,
+    champ,
+    x: spawn.x,
+    y: spawn.y,
+    vx: 0,
+    vy: 0,
+    fx: id === 0 ? 1 : -1,
+    fy: 0,
+    hp: CHAMPIONS[champ].hp,
+    energy: 0,
+    cooldowns: [0, 0, 0, 0, 0, 0],
+    cast: null,
+    buffer: -1,
+    bufferT: 0,
+    prevButtons: 0,
+    dashT: 0,
+    dashX: 0,
+    dashY: 0,
+    dashKind: 0,
+    dashHit: 0,
+    whirlT: 0,
+    markT: 0,
+    stealthT: 0,
+    poisonT: 0,
+    counterT: 0,
+    slowT: 0,
+    slowMul: 1,
+    hasteT: 0,
+    hitT: 0,
+  };
+}
+
+function resetRound(s: GameState) {
+  s.round++;
+  s.roundFrame = 0;
+  s.phase = 'countdown';
+  s.phaseT = COUNTDOWN_TICKS;
+  s.arenaR = ARENA_R;
+  s.players = [createPlayer(0, s.champs[0]), createPlayer(1, s.champs[1])];
+  s.projectiles = [];
+  s.meteors = [];
+  s.orb = { active: false, hp: ORB_HP, timer: ORB_SPAWN_AT };
+}
+
+export function step(s: GameState, inputs: Input[]): GameEvent[] {
+  const ev: GameEvent[] = [];
+  s.frame++;
+
+  switch (s.phase) {
+    case 'countdown':
+      for (let i = 0; i < 2; i++) {
+        const p = s.players[i];
+        aimAt(p, inputs[i]);
+        p.prevButtons = inputs[i].buttons;
+      }
+      if (--s.phaseT <= 0) {
+        s.phase = 'fight';
+        ev.push({ type: 'fight' });
+      }
+      break;
+
+    case 'fight':
+      fight(s, inputs, ev);
+      break;
+
+    case 'roundEnd':
+      // Let the knocked-out player slide; nothing else moves.
+      for (const p of s.players) {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= KB_DECAY;
+        p.vy *= KB_DECAY;
+        collideWorld(s, p);
+      }
+      if (--s.phaseT <= 0) {
+        if (Math.max(s.score[0], s.score[1]) >= ROUNDS_TO_WIN) {
+          s.phase = 'matchEnd';
+          ev.push({ type: 'matchEnd', winner: s.score[0] > s.score[1] ? 0 : 1 });
+        } else {
+          resetRound(s);
+          ev.push({ type: 'roundStart', round: s.round });
+        }
+      }
+      break;
+
+    case 'matchEnd':
+      break;
+  }
+  return ev;
+}
+
+function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
+  s.roundFrame++;
+
+  if (s.roundFrame === SUDDEN_DEATH_AT) ev.push({ type: 'suddenDeath' });
+  if (s.roundFrame > SUDDEN_DEATH_AT && s.arenaR > ARENA_MIN_R) {
+    s.arenaR = Math.max(ARENA_MIN_R, s.arenaR - ARENA_SHRINK);
+  }
+
+  const orb = s.orb;
+  if (!orb.active && --orb.timer <= 0) {
+    orb.active = true;
+    orb.hp = ORB_HP;
+    ev.push({ type: 'orbSpawn' });
+  }
+
+  for (let i = 0; i < 2; i++) updatePlayer(s, s.players[i], inputs[i], ev);
+  separatePlayers(s);
+  updateProjectiles(s, ev);
+  updateMeteors(s, ev);
+
+  const dead = s.players.filter((p) => p.hp <= 0);
+  if (dead.length > 0) {
+    for (const p of dead) ev.push({ type: 'ko', player: p.id, x: p.x, y: p.y });
+    const winner = dead.length === 2 ? -1 : 1 - dead[0].id;
+    if (winner >= 0) s.score[winner]++;
+    s.lastRoundWinner = winner;
+    s.projectiles = [];
+    s.meteors = [];
+    s.phase = 'roundEnd';
+    s.phaseT = ROUND_END_TICKS;
+    ev.push({ type: 'roundEnd', winner });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Players
+
+function aimAt(p: Player, inp: Input) {
+  const dx = inp.ax - p.x;
+  const dy = inp.ay - p.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  if (d > 1) {
+    p.fx = dx / d;
+    p.fy = dy / d;
+  }
+}
+
+/** Mid-leap: in the air, flies over pillars. */
+export function airborne(p: Player): boolean {
+  return p.dashT > 0 && p.dashKind === 1;
+}
+
+/** Leaping or executing: nothing can hit them and they pass through the enemy. */
+export function untargetable(p: Player): boolean {
+  return p.dashT > 0 && p.dashKind >= 1;
+}
+
+function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
+  for (let k = 0; k < p.cooldowns.length; k++) if (p.cooldowns[k] > 0) p.cooldowns[k]--;
+  if (p.slowT > 0 && --p.slowT === 0) p.slowMul = 1;
+  if (p.hasteT > 0) p.hasteT--;
+  if (p.counterT > 0) p.counterT--;
+  if (p.hitT > 0) p.hitT--;
+  if (p.markT > 0) p.markT--;
+  if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
+  if (p.poisonT > 0) {
+    p.poisonT--;
+    if (p.poisonT % POISON.every === 0 && p.hp > 0) {
+      // Damage over time ignores counters and doesn't pop marks.
+      p.hp = Math.max(0, p.hp - POISON.dmg);
+      ev.push({ type: 'hit', target: p.id, source: 1 - p.id, dmg: POISON.dmg, x: p.x, y: p.y, kind: 'poison' });
+    }
+  }
+
+  aimAt(p, inp);
+
+  const pressed = inp.buttons & ~p.prevButtons;
+  p.prevButtons = inp.buttons;
+  for (let k = 1; k < SLOT_BUTTONS.length; k++) {
+    if (pressed & SLOT_BUTTONS[k]) {
+      p.buffer = k;
+      p.bufferT = BUFFER_TICKS;
+    }
+  }
+
+  if (p.bufferT > 0) {
+    if (tryStart(s, p, p.buffer, inp, ev)) {
+      p.buffer = -1;
+      p.bufferT = 0;
+    } else if (--p.bufferT === 0) {
+      p.buffer = -1;
+    }
+  }
+  // The basic attack auto-repeats while held.
+  if (inp.buttons & BTN.M1 && p.bufferT === 0) tryStart(s, p, SLOT.M1, inp, ev);
+
+  if (p.cast && --p.cast.t <= 0) {
+    const slot = p.cast.ability;
+    p.cast = null;
+    release(s, p, slot, inp, ev);
+  }
+
+  if (p.whirlT > 0) {
+    p.whirlT--;
+    if (p.whirlT % WHIRL.every === 0) whirlPulse(s, p, ev);
+  }
+
+  if (p.dashT > 0) {
+    p.dashT--;
+    p.x += p.dashX;
+    p.y += p.dashY;
+    if (p.dashT === 0 && p.dashKind === 1) {
+      collideWorld(s, p);
+      land(s, p, ev);
+    }
+    if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
+  } else {
+    const mx = Math.sign(inp.mx);
+    const my = Math.sign(inp.my);
+    let speed = CHAMPIONS[p.champ].speed;
+    if (p.slowT > 0) speed *= p.slowMul;
+    if (p.hasteT > 0) speed *= HASTE_MUL;
+    if (p.cast) speed *= abilityOf(p, p.cast.ability).castSlow;
+    if (p.counterT > 0) speed *= COUNTER.slow;
+    if (p.whirlT > 0) speed *= WHIRL.speed;
+    if (p.stealthT > 0) speed *= SMOKE.speed;
+    if (mx !== 0 && my !== 0) speed *= Math.SQRT1_2;
+    p.x += mx * speed;
+    p.y += my * speed;
+  }
+  p.x += p.vx;
+  p.y += p.vy;
+  p.vx *= KB_DECAY;
+  p.vy *= KB_DECAY;
+  if (Math.abs(p.vx) < 0.01) p.vx = 0;
+  if (Math.abs(p.vy) < 0.01) p.vy = 0;
+
+  // Pillars don't stop a leap mid-air.
+  if (!airborne(p)) collideWorld(s, p);
+  else clampToArena(s, p);
+}
+
+function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEvent[]): boolean {
+  const def = abilityOf(p, slot);
+  if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
+
+  // Blink: instant teleport, also usable mid-cast (cancels it).
+  if (def.id === 'blink') {
+    if (p.dashT > 0) return false;
+    let tx = inp.ax - p.x;
+    let ty = inp.ay - p.y;
+    const d = Math.sqrt(tx * tx + ty * ty);
+    if (d > BLINK.range) {
+      tx = (tx / d) * BLINK.range;
+      ty = (ty / d) * BLINK.range;
+    }
+    const x0 = p.x;
+    const y0 = p.y;
+    p.cast = null;
+    p.x += tx;
+    p.y += ty;
+    collideWorld(s, p);
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'blink', player: p.id, x0, y0, x: p.x, y: p.y });
+    return true;
+  }
+
+  // Mobility works mid-cast and cancels the cast.
+  if (def.id === 'dash' || def.id === 'leap') {
+    if (p.dashT > 0) return false;
+    p.cast = null;
+    p.counterT = 0;
+    p.whirlT = 0;
+    p.cooldowns[slot] = def.cooldown;
+    if (def.id === 'dash') {
+      p.dashKind = 0;
+      p.dashT = DASH.ticks;
+      p.dashX = p.fx * DASH.speed;
+      p.dashY = p.fy * DASH.speed;
+      ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+    } else {
+      let tx = inp.ax - p.x;
+      let ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      if (d > LEAP.range) {
+        tx = (tx / d) * LEAP.range;
+        ty = (ty / d) * LEAP.range;
+      }
+      p.dashKind = 1;
+      p.dashT = LEAP.ticks;
+      p.dashX = tx / LEAP.ticks;
+      p.dashY = ty / LEAP.ticks;
+      ev.push({ type: 'leap', player: p.id, x: p.x, y: p.y });
+    }
+    return true;
+  }
+
+  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0) return false;
+
+  if (def.id === 'counter') {
+    p.counterT = COUNTER.ticks;
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'counter', player: p.id });
+    return true;
+  }
+  if (def.id === 'whirl') {
+    p.whirlT = WHIRL.ticks;
+    p.cooldowns[slot] = def.cooldown;
+    return true;
+  }
+  if (def.id === 'smoke') {
+    p.stealthT = SMOKE.ticks;
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'stealth', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
+
+  p.cast = { ability: slot, t: def.cast };
+  ev.push({ type: 'cast', player: p.id, ability: def.id });
+  return true;
+}
+
+function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEvent[]) {
+  const def = abilityOf(p, slot);
+  p.cooldowns[slot] = def.cooldown;
+  p.energy -= def.energyCost;
+  const foe = s.players[1 - p.id];
+  // Attacking out of stealth reveals you.
+  if (p.stealthT > 0) {
+    p.stealthT = 0;
+    ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
+  }
+
+  switch (def.id) {
+    case 'meteor': {
+      let tx = inp.ax - p.x;
+      let ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      if (d > METEOR.range) {
+        tx = (tx / d) * METEOR.range;
+        ty = (ty / d) * METEOR.range;
+      }
+      s.meteors.push({ id: s.nextId++, owner: p.id, x: p.x + tx, y: p.y + ty, t: METEOR.delay });
+      ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'slash': {
+      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      const reach = 2 * PLAYER_R + SLASH.reach;
+      if (inCone(p, foe.x, foe.y, reach)) {
+        hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+      }
+      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + SLASH.reach)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'execute': {
+      p.dashKind = 2;
+      p.dashHit = 0;
+      p.dashT = EXECUTE.ticks;
+      p.dashX = (p.fx * EXECUTE.range) / EXECUTE.ticks;
+      p.dashY = (p.fy * EXECUTE.range) / EXECUTE.ticks;
+      ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'cry': {
+      ev.push({ type: 'nova', player: p.id, x: p.x, y: p.y });
+      areaHit(s, p, p.x, p.y, CRY.r, CRY.dmg, CRY.energy, CRY.kb, 'cry', ev);
+      return;
+    }
+
+    case 'rift': {
+      ev.push({ type: 'rift', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      const x0 = p.x + p.fx * PLAYER_R;
+      const y0 = p.y + p.fy * PLAYER_R;
+      const x1 = x0 + p.fx * RIFT.len;
+      const y1 = y0 + p.fy * RIFT.len;
+      if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= (RIFT.half + PLAYER_R) * (RIFT.half + PLAYER_R) && hit(p, foe, RIFT.dmg, 0, 'rift', foe.x, foe.y, ev)) {
+        knockback(foe, p.fx, p.fy, RIFT.kb);
+      }
+      if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (RIFT.half + ORB_R) * (RIFT.half + ORB_R)) damageOrb(s, p.id, RIFT.dmg, 0, 0, ev);
+      return;
+    }
+
+    default: {
+      const kind = def.id as ProjKind;
+      const pd = PROJ[kind];
+      const off = PLAYER_R + pd.r * 0.5;
+      const x = p.x + p.fx * off;
+      const y = p.y + p.fy * off;
+      s.projectiles.push({
+        id: s.nextId++,
+        owner: p.id,
+        kind,
+        x,
+        y,
+        vx: p.fx * pd.speed,
+        vy: p.fy * pd.speed,
+        r: pd.r,
+        life: Math.floor(pd.range / pd.speed),
+        age: 0,
+      });
+      ev.push({ type: 'release', player: p.id, ability: def.id, x, y });
+    }
+  }
+}
+
+function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
+  const foe = s.players[1 - p.id];
+  const dx = foe.x - p.x;
+  const dy = foe.y - p.y;
+  const reach = 2 * PLAYER_R + 8;
+  if (dx * dx + dy * dy > reach * reach || foe.hp <= 0) return;
+  p.dashHit = 1;
+  const lethal = foe.hp <= maxHp(foe) * EXECUTE.threshold;
+  ev.push({ type: 'execute', player: p.id, x: foe.x, y: foe.y, lethal });
+  hit(p, foe, lethal ? EXECUTE.dmg * 2 : EXECUTE.dmg, 0, 'execute', foe.x, foe.y, ev);
+}
+
+function whirlPulse(s: GameState, p: Player, ev: GameEvent[]) {
+  ev.push({ type: 'whirl', player: p.id, x: p.x, y: p.y });
+  areaHit(s, p, p.x, p.y, WHIRL.r, WHIRL.dmg, WHIRL.energy, 0, 'whirl', ev);
+}
+
+function land(s: GameState, p: Player, ev: GameEvent[]) {
+  ev.push({ type: 'land', player: p.id, x: p.x, y: p.y });
+  areaHit(s, p, p.x, p.y, LEAP.r, LEAP.dmg, LEAP.energy, LEAP.kb, 'leap', ev);
+}
+
+/** Target center within `reach` and in front of the attacker. */
+function inCone(p: Player, x: number, y: number, reach: number): boolean {
+  const dx = x - p.x;
+  const dy = y - p.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  if (d > reach) return false;
+  if (d < PLAYER_R) return true;
+  return (dx * p.fx + dy * p.fy) / d >= SLASH.minDot;
+}
+
+function segDist2(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((px - x0) * dx + (py - y0) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x0 + dx * t - px;
+  const cy = y0 + dy * t - py;
+  return cx * cx + cy * cy;
+}
+
+/** Circle around (x, y): hits the enemy (pushed outwards by kb) and the orb. */
+function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: number, energy: number, kb: number, kind: HitKind, ev: GameEvent[]) {
+  const foe = s.players[1 - p.id];
+  let dx = foe.x - x;
+  let dy = foe.y - y;
+  let d = Math.sqrt(dx * dx + dy * dy);
+  if (d < r + PLAYER_R && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev) && kb > 0) {
+    if (d < 0.0001) {
+      dx = p.fx;
+      dy = p.fy;
+      d = 1;
+    }
+    knockback(foe, dx / d, dy / d, kb);
+  }
+  if (s.orb.active && Math.sqrt(x * x + y * y) < r + ORB_R) damageOrb(s, p.id, dmg, 0, 0, ev);
+}
+
+function collideWorld(s: GameState, p: Player) {
+  for (const pl of PILLARS) {
+    let dx = p.x - pl.x;
+    let dy = p.y - pl.y;
+    const min = pl.r + PLAYER_R;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < min * min) {
+      let d = Math.sqrt(d2);
+      if (d < 0.0001) {
+        dx = 1;
+        dy = 0;
+        d = 1;
+      }
+      p.x = pl.x + (dx / d) * min;
+      p.y = pl.y + (dy / d) * min;
+    }
+  }
+  clampToArena(s, p);
+}
+
+function clampToArena(s: GameState, p: Player) {
+  const lim = s.arenaR - PLAYER_R;
+  const d = Math.sqrt(p.x * p.x + p.y * p.y);
+  if (d > lim) {
+    p.x *= lim / d;
+    p.y *= lim / d;
+  }
+}
+
+function separatePlayers(s: GameState) {
+  const [a, b] = s.players;
+  if (untargetable(a) || untargetable(b)) return;
+  let dx = b.x - a.x;
+  let dy = b.y - a.y;
+  const min = PLAYER_R * 2;
+  const d2 = dx * dx + dy * dy;
+  if (d2 >= min * min) return;
+  let d = Math.sqrt(d2);
+  if (d < 0.0001) {
+    dx = 1;
+    dy = 0;
+    d = 1;
+  }
+  const push = (min - d) / 2;
+  a.x -= (dx / d) * push;
+  a.y -= (dy / d) * push;
+  b.x += (dx / d) * push;
+  b.y += (dy / d) * push;
+  collideWorld(s, a);
+  collideWorld(s, b);
+}
+
+// ---------------------------------------------------------------------------
+// Damage
+
+/** Applies a hit unless the target is untargetable or countering. Returns true if it landed. */
+function hit(attacker: Player, target: Player, dmg: number, energy: number, kind: HitKind, x: number, y: number, ev: GameEvent[]): boolean {
+  if (target.hp <= 0 || untargetable(target)) return false;
+  if (target.counterT > 0) {
+    block(target, x, y, ev);
+    return false;
+  }
+  if (target.markT > 0 && kind !== 'mark') {
+    target.markT = 0;
+    dmg += MARK.bonus;
+    ev.push({ type: 'markPop', player: target.id, x: target.x, y: target.y });
+  }
+  target.hp = Math.max(0, target.hp - dmg);
+  target.hitT = 8;
+  attacker.energy = Math.min(MAX_ENERGY, attacker.energy + energy);
+  ev.push({ type: 'hit', target: target.id, source: attacker.id, dmg, x, y, kind });
+  return true;
+}
+
+function block(target: Player, x: number, y: number, ev: GameEvent[]) {
+  target.counterT = 0;
+  target.energy = Math.min(MAX_ENERGY, target.energy + COUNTER.energy);
+  target.hasteT = COUNTER.haste;
+  ev.push({ type: 'block', player: target.id, x, y });
+}
+
+function knockback(target: Player, nx: number, ny: number, force: number) {
+  target.vx += nx * force;
+  target.vy += ny * force;
+  target.cast = null;
+  target.whirlT = 0;
+}
+
+function damageOrb(s: GameState, owner: number, dmg: number, x: number, y: number, ev: GameEvent[]) {
+  const orb = s.orb;
+  if (!orb.active) return;
+  orb.hp -= dmg;
+  ev.push({ type: 'orbHit', x, y });
+  if (orb.hp <= 0) {
+    orb.active = false;
+    orb.timer = ORB_RESPAWN;
+    const p = s.players[owner];
+    p.hp = Math.min(maxHp(p), p.hp + ORB_HEAL);
+    p.energy = Math.min(MAX_ENERGY, p.energy + ORB_ENERGY);
+    ev.push({ type: 'orbBreak', player: owner, x: 0, y: 0 });
+  }
+}
+
+function hitsPillar(x: number, y: number, r: number): boolean {
+  for (const pl of PILLARS) {
+    const dx = x - pl.x;
+    const dy = y - pl.y;
+    const min = pl.r + r;
+    if (dx * dx + dy * dy < min * min) return true;
+  }
+  return false;
+}
+
+function updateProjectiles(s: GameState, ev: GameEvent[]) {
+  const alive = [];
+  for (const pr of s.projectiles) {
+    pr.x += pr.vx;
+    pr.y += pr.vy;
+    pr.age++;
+
+    if (pr.age > pr.life) {
+      ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+      continue;
+    }
+    const ad = Math.sqrt(pr.x * pr.x + pr.y * pr.y);
+    if (ad > s.arenaR - pr.r * 0.5 || hitsPillar(pr.x, pr.y, pr.r)) {
+      ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+      continue;
+    }
+
+    const target = s.players[1 - pr.owner];
+    const tdx = target.x - pr.x;
+    const tdy = target.y - pr.y;
+    const tmin = PLAYER_R + pr.r;
+    // Untargetable champions let projectiles fly through.
+    if (!untargetable(target) && tdx * tdx + tdy * tdy < tmin * tmin) {
+      const pd = PROJ[pr.kind];
+      if (hit(s.players[pr.owner], target, pd.dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
+        if (pd.kb !== 0) {
+          const sp = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy);
+          knockback(target, pr.vx / sp, pr.vy / sp, pd.kb);
+        }
+        if (pd.slowT > 0) {
+          target.slowT = pd.slowT;
+          target.slowMul = pd.slowMul;
+        }
+        if (pr.kind === 'mark') target.markT = MARK.ticks;
+        if (pr.kind === 'poison') target.poisonT = POISON.ticks;
+      }
+      continue;
+    }
+
+    if (s.orb.active) {
+      const omin = ORB_R + pr.r;
+      if (pr.x * pr.x + pr.y * pr.y < omin * omin) {
+        damageOrb(s, pr.owner, PROJ[pr.kind].dmg, pr.x, pr.y, ev);
+        continue;
+      }
+    }
+
+    alive.push(pr);
+  }
+  s.projectiles = alive;
+}
+
+function updateMeteors(s: GameState, ev: GameEvent[]) {
+  const pending = [];
+  for (const m of s.meteors) {
+    if (--m.t > 0) {
+      pending.push(m);
+      continue;
+    }
+    ev.push({ type: 'meteor', owner: m.owner, x: m.x, y: m.y });
+    const owner = s.players[m.owner];
+    const target = s.players[1 - m.owner];
+    let dx = target.x - m.x;
+    let dy = target.y - m.y;
+    let d = Math.sqrt(dx * dx + dy * dy);
+    if (d < METEOR.r + PLAYER_R && hit(owner, target, METEOR.dmg, 0, 'meteor', target.x, target.y, ev)) {
+      if (d < 0.0001) {
+        dx = 1;
+        dy = 0;
+        d = 1;
+      }
+      knockback(target, dx / d, dy / d, METEOR.kb);
+    }
+    if (s.orb.active && Math.sqrt(m.x * m.x + m.y * m.y) < METEOR.r + ORB_R) damageOrb(s, m.owner, METEOR.dmg, 0, 0, ev);
+  }
+  s.meteors = pending;
+}
