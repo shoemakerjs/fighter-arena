@@ -18,6 +18,7 @@
         <p class="eyebrow">Prototyp · 1v1</p>
         <h1>ARENA</h1>
         <p class="lead">Zręcznościowa arena w stylu Battlerite. Celuj myszką, unikaj pocisków, wygraj 3 rundy.</p>
+        <p class="note hidden" id="menu-note"></p>
         <div class="field">
           <span class="label">Twoja postać</span>
           <div class="segmented" id="champ">
@@ -43,10 +44,42 @@
             <button data-value="hard">Trudny</button>
           </div>
         </div>
-        <button id="play" class="primary">Graj</button>
+        <div class="play-row">
+          <button id="play" class="primary">Graj z botem</button>
+          <button id="play-online" class="secondary">Graj 1v1 online</button>
+        </div>
         <p class="role" id="role"></p>
         <dl class="controls" id="controls"></dl>
         <p class="hint">Rozbij złotą kulę na środku: +HP i energia. Po 60 s arena zaczyna się zamykać.</p>
+      </div>
+    </div>
+
+    <div id="lobby" class="overlay hidden">
+      <div class="panel">
+        <p class="eyebrow">1v1 online</p>
+        <h2 id="lobby-title">Twoje lobby</h2>
+        <p class="lead" id="lobby-status"></p>
+        <div id="lobby-share" class="share hidden">
+          <input id="lobby-link" readonly />
+          <button id="lobby-copy" class="secondary">Kopiuj</button>
+        </div>
+        <div class="slots">
+          <div class="slot">
+            <div class="slot-head"><span class="who me">Ty</span><span class="state" id="lobby-me-state">Wybiera…</span></div>
+            <div class="segmented" id="lobby-champ">
+              <button data-value="0">Mag</button>
+              <button data-value="1">Wojownik</button>
+              <button data-value="2">Cień</button>
+            </div>
+            <p class="slot-role" id="lobby-me-role"></p>
+          </div>
+          <div class="slot">
+            <div class="slot-head"><span class="who foe">Przeciwnik</span><span class="state" id="lobby-foe-state">Nie dołączył</span></div>
+            <p class="slot-champ" id="lobby-foe-champ">—</p>
+          </div>
+        </div>
+        <button id="lobby-ready" class="primary" disabled>Gotowy</button>
+        <button id="lobby-leave" class="ghost">Wyjdź</button>
       </div>
     </div>
 

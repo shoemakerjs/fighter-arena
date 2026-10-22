@@ -276,3 +276,158 @@ h2 {
     font-size: 52px;
   }
 }
+
+.play-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.play-row .primary {
+  font-size: 15px;
+}
+
+.secondary {
+  padding: 12px 14px;
+  border: 1px solid rgba(59, 232, 200, 0.45);
+  border-radius: 12px;
+  background: rgba(59, 232, 200, 0.08);
+  color: var(--p0);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background 0.15s;
+}
+
+.secondary:hover {
+  background: rgba(59, 232, 200, 0.16);
+}
+
+#lobby .panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#lobby .lead {
+  margin-bottom: 4px;
+}
+
+.share {
+  display: flex;
+  gap: 8px;
+}
+
+.share input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+
+.slot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.slot .segmented {
+  flex-wrap: wrap;
+}
+
+.slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.who {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.who.me {
+  color: var(--p0);
+}
+
+.who.foe {
+  color: var(--p1);
+}
+
+.state {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.state.ready {
+  color: var(--p0);
+  font-weight: 700;
+}
+
+.slot-role {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.slot-champ {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+@media (max-width: 520px) {
+  .slots,
+  .play-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.note {
+  margin: -6px 0 16px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 79, 109, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 79, 109, 0.08);
+  color: #ffb3c0;
+  font-size: 13px;
+}
+
+.primary:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.slot .segmented {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.slot .segmented button {
+  padding: 7px 4px;
+  font-size: 13px;
+}
+
+.slot .segmented button:disabled {
+  cursor: default;
+}

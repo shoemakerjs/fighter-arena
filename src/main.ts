@@ -2,18 +2,21 @@ import './style.css';
 import { Bot, type Difficulty } from './input/bot';
 import { LocalInput } from './input/local';
 import { Sfx } from './render/audio';
-import { Fx } from './render/fx';
+import { Fx, PLAYER_NAMES } from './render/fx';
 import { Hud } from './render/hud';
 import type { WorldView } from './render/view';
 import { World2D } from './render/world2d';
 import { World3D } from './render/world3d';
+import { Lobby } from './net/lobby';
+import type { RollbackSession } from './net/rollback';
 import { CHAMPIONS, TICK_MS } from './sim/constants';
 import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
 
-type Mode = 'menu' | 'play' | 'pause' | 'end';
+type Mode = 'menu' | 'lobby' | 'play' | 'pause' | 'end';
 
-const LOCAL_ID = 0;
+/** Which player slot this browser controls (the guest of an online match is 1). */
+let localId = 0;
 
 const $ = (id: string) => document.getElementById(id)!;
 
@@ -57,20 +60,71 @@ let prev: GameState = cloneState(state);
 let controllers: (Bot | null)[] = [];
 let seed = 1;
 let endTimer = 0;
+/** Online match in progress (null when playing the bot). */
+let session: RollbackSession | null = null;
 
 function newMatch(ctrl: (Bot | null)[], champs: number[]) {
   state = createMatch(champs);
   prev = cloneState(state);
   controllers = ctrl;
+  session = null;
+  localId = 0;
+  setNames('TY', 'BOT');
   fx.reset();
   clearTimeout(endTimer);
+}
+
+function setNames(a: string, b: string) {
+  PLAYER_NAMES[0] = a;
+  PLAYER_NAMES[1] = b;
 }
 
 function startAttract() {
   newMatch([new Bot(0, 'hard', seed++), new Bot(1, 'hard', seed++)], [randomChamp(), randomChamp()]);
   fx.silent = true;
-  setMode('menu');
+  setMode(lobbyOpen ? 'lobby' : 'menu');
 }
+
+// ------------------------------------------------------------------ online 1v1
+
+let lobbyOpen = false;
+const lobby = new Lobby({
+  onStart(s) {
+    sfx.unlock();
+    session = s;
+    controllers = [];
+    localId = s.localId;
+    setNames(localId === 0 ? 'TY' : 'RYWAL', localId === 0 ? 'RYWAL' : 'TY');
+    state = s.state;
+    prev = s.prev;
+    fx.reset();
+    fx.silent = false;
+    clearTimeout(endTimer);
+    endShown = false;
+    input.clear();
+    setMode('play');
+  },
+  onBack() {
+    startAttract();
+  },
+  onExit(reason) {
+    lobbyOpen = false;
+    $('menu-note').textContent = reason ?? '';
+    $('menu-note').classList.toggle('hidden', !reason);
+    startAttract();
+  },
+});
+
+function openLobby(code?: string) {
+  sfx.unlock();
+  lobbyOpen = true;
+  if (code) void lobby.join(code, myChamp);
+  else void lobby.host(myChamp);
+  $('menu-note').classList.add('hidden');
+  startAttract();
+}
+
+let endShown = false;
 
 function startMatch() {
   sfx.unlock();
@@ -97,6 +151,7 @@ function renderControls() {
 function setMode(m: Mode) {
   mode = m;
   ui.menu.classList.toggle('hidden', m !== 'menu');
+  if (m === 'lobby') lobby.show();
   ui.pause.classList.toggle('hidden', m !== 'pause');
   ui.end.classList.toggle('hidden', m !== 'end');
   ui.hint.classList.toggle('hidden', m !== 'play');
@@ -107,21 +162,37 @@ function setMode(m: Mode) {
 
 function showEnd(winner: number) {
   const title = $('end-title');
-  title.textContent = winner === LOCAL_ID ? 'Zwycięstwo' : 'Porażka';
-  title.className = winner === LOCAL_ID ? 'win' : 'lose';
-  $('end-score').textContent = `${state.score[0]} : ${state.score[1]}`;
+  title.textContent = winner === localId ? 'Zwycięstwo' : 'Porażka';
+  title.className = winner === localId ? 'win' : 'lose';
+  $('end-score').textContent = localId === 0 ? `${state.score[0]} : ${state.score[1]}` : `${state.score[1]} : ${state.score[0]}`;
+  $('rematch').textContent = session ? 'Wróć do lobby' : 'Rewanż';
   setMode('end');
 }
 
 function tick() {
+  if (session) {
+    // Online: the rollback session owns the state; skip a tick when we run ahead.
+    if (session.shouldWait()) return;
+    const events = session.tick(input.read());
+    state = session.state;
+    prev = session.prev;
+    fx.handle(events, state, localId);
+    if (state.phase === 'matchEnd' && !endShown && mode === 'play') {
+      endShown = true;
+      const winner = state.score[0] > state.score[1] ? 0 : 1;
+      endTimer = window.setTimeout(() => showEnd(winner), 700);
+    }
+    return;
+  }
+
   const inputs: Input[] = controllers.map((c) => (c ? c.think(state) : input.read()));
   prev = cloneState(state);
   const events = step(state, inputs);
-  fx.handle(events, state, mode === 'menu' ? null : LOCAL_ID);
+  fx.handle(events, state, mode === 'menu' || mode === 'lobby' ? null : localId);
 
   for (const e of events) {
     if (e.type !== 'matchEnd') continue;
-    if (mode === 'menu') {
+    if (mode === 'menu' || mode === 'lobby') {
       startAttract();
     } else {
       endTimer = window.setTimeout(() => {
@@ -138,7 +209,7 @@ function frame(now: number) {
   const dt = Math.min(now - last, 250);
   last = now;
 
-  if (mode !== 'pause') {
+  if (mode !== 'pause' || session) {
     acc += dt;
     while (acc >= TICK_MS) {
       tick();
@@ -151,9 +222,9 @@ function frame(now: number) {
 }
 
 function draw(dt: number) {
-  const alpha = mode === 'pause' ? 1 : acc / TICK_MS;
+  const alpha = mode === 'pause' && !session ? 1 : acc / TICK_MS;
   const opts = {
-    localId: mode === 'menu' ? null : LOCAL_ID,
+    localId: mode === 'menu' || mode === 'lobby' ? null : localId,
     cursor: mode === 'play' && input.hasPointer ? { x: input.screenX, y: input.screenY } : null,
   };
   view.render(prev, state, alpha, fx, dt, opts);
@@ -179,19 +250,25 @@ segmented('champ', (v) => {
 segmented('bot-champ', (v) => (botChamp = Number(v)));
 renderControls();
 $('play').addEventListener('click', startMatch);
-$('rematch').addEventListener('click', startMatch);
+$('play-online').addEventListener('click', () => openLobby());
+$('rematch').addEventListener('click', () => {
+  if (!session) return startMatch();
+  lobby.backToLobby();
+  startAttract();
+});
 $('resume').addEventListener('click', () => setMode('play'));
-$('quit').addEventListener('click', startAttract);
-$('to-menu').addEventListener('click', startAttract);
+$('quit').addEventListener('click', () => (session ? lobby.leave() : startAttract()));
+$('to-menu').addEventListener('click', () => (session ? lobby.leave() : startAttract()));
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
+    // Online the match can't stop; the pause screen just offers a way out.
     if (mode === 'play') setMode('pause');
     else if (mode === 'pause') setMode('play');
   } else if (e.code === 'KeyM') {
     sfx.muted = !sfx.muted;
     $('sound-state').textContent = sfx.muted ? 'wył.' : 'wł.';
-  } else if (e.code === 'Enter' && (mode === 'menu' || mode === 'end')) {
+  } else if (e.code === 'Enter' && (mode === 'menu' || (mode === 'end' && !session))) {
     startMatch();
   }
 });
@@ -202,6 +279,7 @@ if (import.meta.env.DEV) {
     __arena: {
       get state() { return state; },
       get mode() { return mode; },
+      get session() { return session; },
       view,
       startMatch,
       /** Run n ticks immediately (rAF is paused in background tabs). */
@@ -215,5 +293,7 @@ if (import.meta.env.DEV) {
   });
 }
 
-startAttract();
+const joinCode = new URLSearchParams(location.search).get('lobby');
+if (joinCode) openLobby(joinCode);
+else startAttract();
 requestAnimationFrame(frame);
