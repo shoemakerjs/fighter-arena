@@ -888,6 +888,11 @@ export class World3D implements WorldView {
 function setGhost(root: THREE.Object3D, ghost: boolean) {
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
+    // Outlines share one material across champions: hide them instead of fading.
+    if (o.userData.outline) {
+      o.visible = !ghost;
+      return;
+    }
     if (!mesh.isMesh && !(o as THREE.Sprite).isSprite) return;
     const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const m of mats) {
