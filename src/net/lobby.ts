@@ -1,4 +1,4 @@
-import type { ChampionSelect } from '../ui/select';
+import { setStatusChip, type ChampionSelect } from '../ui/select';
 import { NetLink, type NetMsg } from './link';
 import { RollbackSession } from './rollback';
 
@@ -14,9 +14,10 @@ export interface LobbyHooks {
 const $ = (id: string) => document.getElementById(id)!;
 
 /**
- * Online 1v1: the host opens a lobby and shares a link, the guest opens it, then
- * both pick on the champion select screen and lock in. The host is always player 0
- * and decides when the match starts, so both sides agree on the champions.
+ * Online 1v1: the host opens a lobby and shares a link, the guest opens it and
+ * shows up on the lobby screen, the host presses Start and both pick on the
+ * champion select screen. The host is always player 0 and decides when the match
+ * starts, so both sides agree on the champions.
  */
 export class Lobby {
   private link: NetLink | null = null;
@@ -39,6 +40,11 @@ export class Lobby {
       setTimeout(() => ($('invite-copy').textContent = 'Copy'), 1500);
     });
     $('invite-leave').addEventListener('click', () => this.leave());
+    $('lobby-start').addEventListener('click', () => {
+      if (!this.isHost || !this.link?.connected) return;
+      this.link.send({ t: 'go' });
+      this.openSelect();
+    });
   }
 
   get localId() {
@@ -51,14 +57,13 @@ export class Lobby {
 
   async host(champ: number) {
     this.reset(true, champ);
-    $('invite-title').textContent = 'Invite a friend';
     this.status('Creating a lobby…');
     try {
       const code = await this.link!.host();
       const url = `${location.origin}${location.pathname}?lobby=${code}`;
       ($('invite-link') as HTMLInputElement).value = url;
       $('invite-share').classList.remove('hidden');
-      this.status('Send this link to a friend. The match setup opens as soon as they join.');
+      this.status('Send this link to a friend. Start unlocks when they join.');
     } catch (err) {
       this.status((err as Error).message);
     }
@@ -66,8 +71,7 @@ export class Lobby {
 
   async join(code: string, champ: number) {
     this.reset(false, champ);
-    $('invite-title').textContent = 'Joining a lobby';
-    this.status('Connecting…');
+    this.status('Connecting to the lobby…');
     try {
       await this.link!.join(code);
     } catch (err) {
@@ -83,14 +87,13 @@ export class Lobby {
     this.maybeStart();
   }
 
-  /** After a match: both go back to champion select. */
+  /** After a match: both go back to the lobby screen; the host starts the next pick. */
   backToLobby(notify = true) {
     this.session = null;
     this.myReady = false;
     this.foeReady = false;
     if (notify) this.link?.send({ t: 'back' });
-    this.select.open('online', this.myChamp);
-    this.sendState();
+    this.showLobby();
   }
 
   leave(reason?: string) {
@@ -114,15 +117,11 @@ export class Lobby {
     this.foeReady = false;
     this.session = null;
     $('invite-share').classList.add('hidden');
-    $('invite').classList.remove('hidden');
 
     const link = new NetLink();
     this.link = link;
-    link.onConnect = () => {
-      $('invite').classList.add('hidden');
-      this.select.open('online', this.myChamp);
-      this.sendState();
-    };
+    link.onConnect = () => this.showLobby();
+    this.showLobby();
     link.onMessage = (msg) => this.onMessage(msg);
     link.onClose = (reason) => {
       if (this.link === link) this.leave(reason);
@@ -136,6 +135,9 @@ export class Lobby {
         this.foeReady = msg.ready;
         this.select.setEnemy(msg.ready ? 'locked' : 'waiting');
         this.maybeStart();
+        break;
+      case 'go':
+        if (!this.isHost) this.openSelect();
         break;
       case 'start':
         if (!this.isHost) this.begin(msg.champs);
@@ -171,6 +173,30 @@ export class Lobby {
     });
     this.select.close();
     this.hooks.onStart(this.session);
+  }
+
+  /** Lobby screen: both player cards, the invite link (host) and Start (host, once someone joined). */
+  private showLobby() {
+    const joined = !!this.link?.connected;
+    this.select.close();
+    $('invite').classList.remove('hidden');
+    setStatusChip($('slot-me-status'), true);
+    $('slot-me-sub').textContent = this.isHost ? 'Host' : 'Joined';
+    setStatusChip($('slot-foe-status'), joined);
+    $('slot-foe-sub').textContent = joined ? (this.isHost ? 'Joined' : 'Host') : this.isHost ? 'Waiting for a player…' : 'Connecting…';
+    const start = $('lobby-start') as HTMLButtonElement;
+    start.classList.toggle('hidden', !this.isHost);
+    start.disabled = !joined;
+    $('lobby-wait').classList.toggle('hidden', this.isHost || !joined);
+    if (joined) this.status(this.isHost ? 'Your friend is here. Press Start to pick champions.' : 'You are in. The host starts the champion pick.');
+  }
+
+  private openSelect() {
+    this.myReady = false;
+    this.foeReady = false;
+    $('invite').classList.add('hidden');
+    this.select.open('online', this.myChamp);
+    this.sendState();
   }
 
   /** Our pick and ready flag; the opponent's screen shows only the ready status (blind pick). */

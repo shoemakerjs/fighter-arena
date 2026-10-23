@@ -9,6 +9,8 @@ export type NetMsg =
   | { t: 'input'; frame: number; input: Input; adv: number }
   | { t: 'hash'; frame: number; hash: number }
   | { t: 'back' }
+  /** Host → guest: leave the lobby for champion select. */
+  | { t: 'go' }
   | { t: 'ping' };
 
 /** Silence longer than this means the other player is gone. */

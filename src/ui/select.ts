@@ -25,6 +25,14 @@ const CHECK = `<svg width="24" height="24" viewBox="-2 -2 24 24" fill="none" ari
 
 const $ = (id: string) => document.getElementById(id)!;
 
+/** Fill a status chip with the spinner (waiting) or the green check (done). */
+export function setStatusChip(chip: HTMLElement, done: boolean, title?: string) {
+  chip.classList.toggle('ok', done);
+  chip.classList.toggle('waiting', !done);
+  chip.innerHTML = done ? CHECK : SPINNER;
+  if (title) chip.title = title;
+}
+
 /** Champion select screen (Figma "Select your character"), shared by bot and online play. */
 export class ChampionSelect {
   champ = 0;
@@ -67,10 +75,7 @@ export class ChampionSelect {
   }
 
   setEnemy(state: EnemyState) {
-    const chip = $('enemy-status');
-    chip.className = `status-chip ${state === 'locked' ? 'ok' : 'waiting'}`;
-    chip.innerHTML = state === 'locked' ? CHECK : SPINNER;
-    chip.title = state === 'locked' ? 'Locked in' : 'Picking…';
+    setStatusChip($('enemy-status'), state === 'locked', state === 'locked' ? 'Locked in' : 'Picking…');
   }
 
   private lockIn() {
