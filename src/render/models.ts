@@ -924,8 +924,8 @@ function buildWarrior(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
   const bright = lighten(color, 0.45);
   const matTeam = toon(team, { side: THREE.DoubleSide });
-  const matSkin = toon('#7f9545');
-  const matSkinDark = toon('#5f7334');
+  const matSkin = toon('#909945');
+  const matSkinDark = toon('#6c7334');
   const matHair = toon('#1c1a1a');
   const matLeather = toon('#6a4428');
   const matWrap = toon('#8e3d26');
