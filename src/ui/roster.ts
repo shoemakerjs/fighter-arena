@@ -60,7 +60,7 @@ export const ROSTER: RosterEntry[] = [
     hero: 'Sozuki',
     category: 'Swordsman',
     art: './art/samurai.webp',
-    flip: false,
+    flip: true,
     portrait: '38% 12%',
     focus: 0.34,
     lore: 'A wandering swordswoman from the land in the east. She moves like the wind, cuts through her foes before they can react, and her spirit strikes twice.',
