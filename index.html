@@ -71,17 +71,34 @@
         <div class="enemy">
           <span class="body-text">Enemy team</span>
           <span class="status-chip" id="enemy-status"></span>
-          <div class="segmented" id="difficulty">
-            <button data-value="easy">Easy</button>
-            <button data-value="normal" class="active">Normal</button>
-            <button data-value="hard">Hard</button>
-          </div>
         </div>
         <div class="lock">
           <span class="display timer" id="select-timer">30s</span>
           <button class="pill pill-lg" id="lock-in">Lock in</button>
         </div>
       </footer>
+    </div>
+
+    <!-- Vs bot: settings after locking in a champion -->
+    <div id="bot-setup" class="screen hidden">
+      <div class="setup-wrap">
+        <div class="setup-card rough">
+          <div class="setup-copy">
+            <h2 class="display">Bot settings</h2>
+            <p class="body-text">Setup your bot settings and start a match</p>
+          </div>
+          <div class="field">
+            <span class="field-label">Bot champion</span>
+            <div id="bot-champ"></div>
+          </div>
+          <div class="field">
+            <span class="field-label">Bot difficulty</span>
+            <div id="bot-difficulty"></div>
+          </div>
+        </div>
+        <button class="pill pill-lg" id="start-matchup">Start matchup</button>
+        <button class="link-btn" id="setup-back">Back</button>
+      </div>
     </div>
 
     <div id="pause" class="screen dim hidden">

@@ -12,6 +12,8 @@ export interface RosterEntry {
   portrait: string;
   /** A line of flavor text for the champion select screen. */
   lore: string;
+  /** Push the select-screen art right so the figure clears the dark left side. */
+  artShift?: string;
 }
 
 export const ROSTER: RosterEntry[] = [
@@ -29,6 +31,7 @@ export const ROSTER: RosterEntry[] = [
     art: './art/warrior.webp',
     flip: false,
     portrait: '62% 3%',
+    artShift: '16vw',
     lore: 'An orc berserker from the red wastes. He hooks his prey, leaps into the fight and keeps swinging until nothing is left standing.',
   },
   {

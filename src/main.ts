@@ -12,11 +12,12 @@ import type { RollbackSession } from './net/rollback';
 import { CHAMPIONS, TICK_MS } from './sim/constants';
 import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
+import { BotSetup } from './ui/botsetup';
 import { roughenCards } from './ui/rough';
 import { ChampionSelect } from './ui/select';
 
 /** home → (select | online) → play ⇄ pause → end. Menus run a bot match in the background. */
-type Mode = 'home' | 'select' | 'online' | 'play' | 'pause' | 'end';
+type Mode = 'home' | 'select' | 'setup' | 'online' | 'play' | 'pause' | 'end';
 
 /** Which player slot this browser controls (the guest of an online match is 1). */
 let localId = 0;
@@ -89,6 +90,7 @@ function startAttract(next: Mode) {
 /** Back to the mode cards, optionally with a message (e.g. why the lobby closed). */
 function goHome(note?: string) {
   select.close();
+  botSetup.close();
   $('menu-note').textContent = note ?? '';
   $('menu-note').classList.toggle('hidden', !note);
   startAttract('home');
@@ -97,7 +99,7 @@ function goHome(note?: string) {
 const select = new ChampionSelect({
   onLock(champ) {
     myChamp = champ;
-    if (select.mode === 'bot') startMatch();
+    if (select.mode === 'bot') openBotSetup();
     else lobby.lockIn(champ);
   },
   onBack() {
@@ -109,8 +111,21 @@ const select = new ChampionSelect({
 function openBotSelect() {
   sfx.unlock();
   $('menu-note').classList.add('hidden');
+  botSetup.close();
   select.open('bot', myChamp);
   setMode('select');
+}
+
+/** Vs bot, after locking in: choose the bot's champion and difficulty. */
+const botSetup = new BotSetup({
+  onStart: () => startMatch(),
+  onBack: () => openBotSelect(),
+});
+
+function openBotSetup() {
+  select.close();
+  botSetup.open();
+  setMode('setup');
 }
 
 // ------------------------------------------------------------------ online 1v1
@@ -149,11 +164,12 @@ function openLobby(code?: string) {
 
 let endShown = false;
 
-/** Match against the bot with the last locked-in champion; the bot picks at random. */
+/** Match against the bot with the last locked-in champion and the bot settings. */
 function startMatch() {
   sfx.unlock();
   select.close();
-  newMatch([null, new Bot(1, select.difficulty, seed++)], [myChamp, randomChamp()]);
+  botSetup.close();
+  newMatch([null, new Bot(1, botSetup.difficulty, seed++)], [myChamp, botSetup.pickChampion()]);
   fx.silent = false;
   input.clear();
   setMode('play');
@@ -217,7 +233,7 @@ function tick() {
 }
 
 function inMenus() {
-  return mode === 'home' || mode === 'select' || mode === 'online';
+  return mode === 'home' || mode === 'select' || mode === 'setup' || mode === 'online';
 }
 
 let acc = 0;

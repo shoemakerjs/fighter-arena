@@ -1,4 +1,3 @@
-import type { Difficulty } from '../input/bot';
 import { CHAMPIONS } from '../sim/constants';
 import { ROSTER } from './roster';
 
@@ -30,7 +29,6 @@ export class ChampionSelect {
   champ = 0;
   mode: SelectMode = 'bot';
   locked = false;
-  difficulty: Difficulty = 'normal';
   private deadline = 0;
   private ticker = 0;
 
@@ -38,13 +36,6 @@ export class ChampionSelect {
     this.buildRoster();
     $('lock-in').addEventListener('click', () => this.lockIn());
     $('select-back').addEventListener('click', () => this.hooks.onBack());
-    const diff = document.querySelectorAll<HTMLButtonElement>('#difficulty button');
-    for (const btn of diff) {
-      btn.addEventListener('click', () => {
-        this.difficulty = btn.dataset.value as Difficulty;
-        for (const b of diff) b.classList.toggle('active', b === btn);
-      });
-    }
   }
 
   open(mode: SelectMode, champ: number) {
@@ -52,7 +43,6 @@ export class ChampionSelect {
     this.champ = champ;
     this.locked = false;
     $('select').classList.remove('hidden');
-    $('difficulty').classList.toggle('hidden', mode !== 'bot');
     $('select-timer').classList.toggle('hidden', mode !== 'online');
     this.setEnemy(mode === 'bot' ? 'locked' : 'waiting');
     clearInterval(this.ticker);
@@ -121,6 +111,7 @@ export class ChampionSelect {
     const c = CHAMPIONS[this.champ];
     const art = $('select-art');
     art.style.backgroundImage = `url(${r.art})`;
+    art.style.left = r.artShift ?? '0';
     art.classList.toggle('flip', r.flip);
     for (const tile of document.querySelectorAll<HTMLElement>('.champ-tile')) {
       tile.classList.toggle('active', Number(tile.dataset.champ) === this.champ);
@@ -133,7 +124,6 @@ export class ChampionSelect {
       <p class="lore">${r.lore}</p>
       <div class="abilities">
         ${c.abilities.map((a, i) => `<div class="ability"><span class="what"><b>${a.name}</b> — ${a.desc}</span><span class="key">${KEYS[i]}</span></div>`).join('')}
-        <div class="ability"><span class="what">move</span><span class="key">WASD</span></div>
       </div>`;
     const lock = $('lock-in') as HTMLButtonElement;
     lock.disabled = this.locked;
