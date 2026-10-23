@@ -6,14 +6,21 @@ export class Sfx {
   private master: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
   private lastPlayed = new Map<SfxName, number>();
+  private volume = 1;
   muted = false;
+
+  /** Effects volume, 0..1 (the Settings slider). */
+  setVolume(v: number) {
+    this.volume = Math.max(0, Math.min(1, v));
+    if (this.master) this.master.gain.value = 0.32 * this.volume;
+  }
 
   /** Must be called from a user gesture before the first sound. */
   unlock() {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.32;
+      this.master.gain.value = 0.32 * this.volume;
       this.master.connect(this.ctx.destination);
       const len = this.ctx.sampleRate;
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);

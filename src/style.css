@@ -222,6 +222,62 @@ button {
   text-shadow: 0 0 18px var(--accent-glow);
 }
 
+/* Home nav: links on the dark bars either side of the logo notch. */
+.nav {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.nav-left {
+  left: 64px;
+}
+
+.nav-right {
+  right: 64px;
+}
+
+.nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  font-family: var(--display);
+  font-size: 24px;
+  color: var(--muted);
+  transition: color 0.15s;
+}
+
+.nav-link:hover,
+.nav-link:focus-visible {
+  color: var(--text);
+}
+
+/* Accent brush underline that grows in on hover. */
+.nav-link::after {
+  content: '';
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  bottom: 2px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.2s;
+}
+
+.nav-link:hover::after,
+.nav-link:focus-visible::after {
+  transform: scaleX(1);
+}
+
 .toast {
   position: fixed;
   top: 100px;
@@ -502,6 +558,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* Scrolled into view clear of the faded edges, label included. */
+  scroll-margin: 40px 0;
 }
 
 .roster-label {
@@ -651,6 +709,23 @@ button {
   text-shadow: none;
 }
 
+/* Characters page (browse mode): no pick bar, the content uses its space. */
+#select.browse .select-bar {
+  display: none;
+}
+
+#select.browse .select-art {
+  bottom: 0;
+}
+
+#select.browse .select-left {
+  bottom: 32px;
+}
+
+#select.browse .champ-info {
+  bottom: 48px;
+}
+
 .select-bar {
   position: absolute;
   left: 0;
@@ -755,8 +830,90 @@ button {
   font-size: 16px;
 }
 
-#setup-back {
+#setup-back,
+#settings-back {
   margin-top: -36px;
+}
+
+#settings {
+  display: grid;
+  place-items: center;
+  padding: 96px 16px 32px;
+  background: rgba(1, 0, 0, 0.9);
+}
+
+.settings-card {
+  min-height: 0;
+  padding-bottom: 56px;
+}
+
+.field-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.field-value {
+  font-family: var(--display);
+  font-size: 22px;
+  color: var(--accent);
+}
+
+/* Range slider: filled accent part up to --fill, dark rest, round light thumb. */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 28px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--accent) var(--fill, 100%), #3a3a40 var(--fill, 100%));
+}
+
+.slider::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #3a3a40;
+}
+
+.slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  margin-top: -8px;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.slider:focus-visible {
+  outline: none;
+}
+
+.slider:focus-visible::-webkit-slider-thumb {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
 }
 
 /* Dropdown (Figma: 48px field, 12px radius, #5a5a5a border) */
@@ -902,6 +1059,16 @@ button {
 }
 
 @media (max-width: 760px) {
+  .nav-left {
+    left: 16px;
+  }
+  .nav-right {
+    right: 16px;
+  }
+  .nav-link {
+    font-size: 18px;
+    gap: 6px;
+  }
   .lobby-slots {
     flex-direction: column;
     align-items: center;

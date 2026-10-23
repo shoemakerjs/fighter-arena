@@ -4,7 +4,8 @@ import { CHAMPIONS } from '../sim/constants';
 import { ROSTER } from './roster';
 import { brushRing } from './rough';
 
-export type SelectMode = 'bot' | 'online';
+/** `browse` is the Characters page from the home nav: look around, no picking. */
+export type SelectMode = 'bot' | 'online' | 'browse';
 export type EnemyState = 'waiting' | 'locked';
 
 export interface SelectHooks {
@@ -59,6 +60,8 @@ export class ChampionSelect {
     this.champ = champ;
     this.locked = false;
     $('select').classList.remove('hidden');
+    $('select').classList.toggle('browse', mode === 'browse');
+    $('select-title').textContent = mode === 'browse' ? 'Characters' : 'Select your character';
     $('select-timer').classList.toggle('hidden', mode !== 'online');
     this.setEnemy(mode === 'bot' ? 'locked' : 'waiting');
     clearInterval(this.ticker);
@@ -133,7 +136,9 @@ export class ChampionSelect {
       tile.classList.toggle('active', Number(tile.dataset.champ) === this.champ);
       tile.classList.toggle('locked', this.locked);
     }
-    document.querySelector('.champ-tile.active')?.scrollIntoView({ block: 'nearest' });
+    // Bring the picked champion (with its category label) into view. Next frame, once
+    // SimpleBar has sized the scroll area of a screen that may have just been shown.
+    requestAnimationFrame(() => document.querySelector('.champ-tile.active')?.closest('.roster-group')?.scrollIntoView({ block: 'nearest' }));
     const role = c.role[0].toUpperCase() + c.role.slice(1);
     $('champ-info').innerHTML = `
       <p class="role">${role} · ${c.hp} HP</p>

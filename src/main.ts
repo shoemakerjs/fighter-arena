@@ -14,10 +14,11 @@ import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
 import { BotSetup } from './ui/botsetup';
 import { roughenCards } from './ui/rough';
+import { Settings } from './ui/settings';
 import { ChampionSelect } from './ui/select';
 
 /** home → (select | online) → play ⇄ pause → end. Menus run a bot match in the background. */
-type Mode = 'home' | 'select' | 'setup' | 'online' | 'play' | 'pause' | 'end';
+type Mode = 'home' | 'select' | 'setup' | 'settings' | 'online' | 'play' | 'pause' | 'end';
 
 /** Which player slot this browser controls (the guest of an online match is 1). */
 let localId = 0;
@@ -91,6 +92,7 @@ function startAttract(next: Mode) {
 function goHome(note?: string) {
   select.close();
   botSetup.close();
+  settings.close();
   $('menu-note').textContent = note ?? '';
   $('menu-note').classList.toggle('hidden', !note);
   startAttract('home');
@@ -103,10 +105,26 @@ const select = new ChampionSelect({
     else lobby.lockIn(champ);
   },
   onBack() {
-    if (lobby.active) lobby.leave();
+    if (select.mode === 'browse') goHome();
+    else if (lobby.active) lobby.leave();
     else openBotSetup();
   },
 });
+
+const settings = new Settings(sfx, { onBack: () => goHome() });
+
+/** Home nav: the roster with every kit, nothing to pick. */
+function openCharacters() {
+  $('menu-note').classList.add('hidden');
+  select.open('browse', myChamp);
+  setMode('select');
+}
+
+function openSettings() {
+  $('menu-note').classList.add('hidden');
+  settings.open();
+  setMode('settings');
+}
 
 /** Vs bot, first step: choose the bot's champion and difficulty. */
 const botSetup = new BotSetup({
@@ -234,7 +252,7 @@ function tick() {
 }
 
 function inMenus() {
-  return mode === 'home' || mode === 'select' || mode === 'setup' || mode === 'online';
+  return mode === 'home' || mode === 'select' || mode === 'setup' || mode === 'settings' || mode === 'online';
 }
 
 let acc = 0;
@@ -270,6 +288,8 @@ function draw(dt: number) {
 
 $('play').addEventListener('click', openBotSetup);
 $('play-online').addEventListener('click', () => openLobby());
+$('nav-characters').addEventListener('click', openCharacters);
+$('nav-settings').addEventListener('click', openSettings);
 $('rematch').addEventListener('click', () => {
   if (!session) return startMatch();
   lobby.backToLobby();
@@ -284,6 +304,7 @@ window.addEventListener('keydown', (e) => {
     // Online the match can't stop; the pause screen just offers a way out.
     if (mode === 'play') setMode('pause');
     else if (mode === 'pause') setMode('play');
+    else if (mode === 'settings' || (mode === 'select' && select.mode === 'browse')) goHome();
   } else if (e.code === 'KeyM') {
     sfx.muted = !sfx.muted;
     $('sound-state').textContent = sfx.muted ? 'off' : 'on';
