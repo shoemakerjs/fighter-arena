@@ -14,6 +14,8 @@ export interface RosterEntry {
   lore: string;
   /** Push the select-screen art right so the figure clears the dark left side. */
   artShift?: string;
+  /** Where the figure stands in the art, 0 (left edge) to 1 (right edge), before any flip. */
+  focus: number;
 }
 
 export const ROSTER: RosterEntry[] = [
@@ -23,6 +25,7 @@ export const ROSTER: RosterEntry[] = [
     art: './art/mage.webp',
     flip: false,
     portrait: '74% 9%',
+    focus: 0.67,
     lore: 'An elven witch of the moonlit ruins. She bends starlight into bolts and falling stars, and keeps every foe at the end of her staff.',
   },
   {
@@ -32,6 +35,7 @@ export const ROSTER: RosterEntry[] = [
     flip: false,
     portrait: '62% 3%',
     artShift: '16vw',
+    focus: 0.6,
     lore: 'An orc berserker from the red wastes. He hooks his prey, leaps into the fight and keeps swinging until nothing is left standing.',
   },
   {
@@ -40,6 +44,7 @@ export const ROSTER: RosterEntry[] = [
     art: './art/assassin.webp',
     flip: true,
     portrait: '22% 4%',
+    focus: 0.37,
     lore: 'A hooded killer from the harbor alleys. It marks its target, vanishes into smoke and returns only to finish the job.',
   },
   {
@@ -48,6 +53,7 @@ export const ROSTER: RosterEntry[] = [
     art: './art/archer.webp',
     flip: true,
     portrait: '45% 20%',
+    focus: 0.46,
     lore: 'A wood elf from the deep groves. He hunts from the treeline, pins his prey with vines and lets the sky rain arrows on whoever is still standing.',
   },
 ];

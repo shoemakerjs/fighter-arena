@@ -43,6 +43,8 @@ export class ChampionSelect {
   locked = false;
   private deadline = 0;
   private ticker = 0;
+  /** Width / height of each key art, once loaded. */
+  private aspects = new Map<string, number>();
 
   constructor(private hooks: SelectHooks) {
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7cc7ff';
@@ -53,6 +55,7 @@ export class ChampionSelect {
     for (const thumb of $('roster').querySelectorAll('.simplebar-scrollbar')) thumb.classList.add('brush');
     $('lock-in').addEventListener('click', () => this.lockIn());
     $('select-back').addEventListener('click', () => this.hooks.onBack());
+    window.addEventListener('resize', () => this.isOpen && this.frameArt());
   }
 
   open(mode: SelectMode, champ: number) {
@@ -94,6 +97,50 @@ export class ChampionSelect {
     this.hooks.onLock(this.champ);
   }
 
+  /**
+   * The art covers the screen anchored to the right. On narrow or portrait screens
+   * that crops the figure away (under the dark left side, or off the right edge for
+   * mirrored art), so slide the image just enough to bring the figure (ROSTER
+   * focus) into the visible part.
+   */
+  private frameArt() {
+    const r = ROSTER[this.champ];
+    const aspect = this.aspects.get(r.art);
+    if (aspect === undefined) {
+      const img = new Image();
+      img.onload = () => {
+        this.aspects.set(r.art, img.naturalWidth / img.naturalHeight);
+        if (ROSTER[this.champ] === r) this.frameArt();
+      };
+      img.src = r.art;
+      return;
+    }
+    const art = $('select-art');
+    const W = art.clientWidth;
+    const H = art.clientHeight;
+    if (!W || !H) return;
+    const left = art.getBoundingClientRect().left;
+    const imgW = Math.max(W, H * aspect);
+    const flip = r.flip ? -1 : 1;
+    // Screen x (inside the art box) of the figure for a given image offset.
+    const figureAt = (offset: number) => {
+      const x = offset + r.focus * imgW;
+      return r.flip ? W - x : x;
+    };
+    // Visible area starts right of the roster and the darkest part of the shade.
+    const rosterRight = $('roster').getBoundingClientRect().right - left;
+    const freeLeft = Math.max(rosterRight, window.innerWidth * 0.3 - left);
+    // Keep the figure inside this band; wide screens already are, so they don't move.
+    const free = W - freeLeft;
+    const lo = freeLeft + free * 0.35;
+    const hi = W - free * 0.15;
+    let offset = W - imgW;
+    const fx = figureAt(offset);
+    const target = Math.max(lo, Math.min(hi, fx));
+    offset = Math.min(0, Math.max(W - imgW, offset + flip * (target - fx)));
+    art.style.backgroundPosition = `${offset}px center`;
+  }
+
   private tick() {
     const left = Math.max(0, Math.ceil((this.deadline - performance.now()) / 1000));
     const timer = $('select-timer');
@@ -132,6 +179,7 @@ export class ChampionSelect {
     art.style.backgroundImage = `url(${r.art})`;
     art.style.left = r.artShift ?? '0';
     art.classList.toggle('flip', r.flip);
+    this.frameArt();
     for (const tile of document.querySelectorAll<HTMLElement>('.champ-tile')) {
       tile.classList.toggle('active', Number(tile.dataset.champ) === this.champ);
       tile.classList.toggle('locked', this.locked);
