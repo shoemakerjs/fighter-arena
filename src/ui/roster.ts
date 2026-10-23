@@ -59,11 +59,10 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Sozuki',
     category: 'Swordsman',
-    // Stand-in until the painted art arrives.
-    art: './art/placeholder.svg',
+    art: './art/samurai.webp',
     flip: false,
-    portrait: '68% 12%',
-    focus: 0.65,
-    lore: 'A wandering swordsman from the land in the east. He moves like the wind, cuts through his foes before they can react, and his spirit strikes twice.',
+    portrait: '38% 12%',
+    focus: 0.34,
+    lore: 'A wandering swordswoman from the land in the east. She moves like the wind, cuts through her foes before they can react, and her spirit strikes twice.',
   },
 ];

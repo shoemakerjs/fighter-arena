@@ -323,6 +323,7 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   if (champ === CHAMP.WARRIOR) return buildWarrior(color, glowTex);
   if (champ === CHAMP.ASSASSIN) return buildAssassin(color, glowTex);
   if (champ === CHAMP.ARCHER) return buildArcher(color, glowTex);
+  if (champ === CHAMP.SAMURAI) return buildSamurai(color, glowTex);
   // No modeled skin yet: the test mannequin.
   return buildDummy(color, glowTex);
 }
@@ -1620,4 +1621,318 @@ function buildArcher(color: string, glowTex: THREE.Texture): ChampionRig {
 
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon: bowGroup, tip, tipGlow, mats: [matTeam, matCloak, matArmor, matDark, matSkin, matHair], ...markers };
+}
+
+/** Off-white kimono cloth with blue and grey flower blots and small white blossoms. u around, v bottom→top. */
+function makeSakuraKimonoTexture(): THREE.CanvasTexture {
+  const W = 512;
+  const H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#e8e2d6';
+  g.fillRect(0, 0, W, H);
+  const r = (() => {
+    let s = 7;
+    return () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  })();
+  const flower = (x: number, y: number, size: number, color: string) => {
+    g.fillStyle = color;
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * TAU + size;
+      g.beginPath();
+      g.ellipse(x + Math.cos(a) * size * 0.55, y + Math.sin(a) * size * 0.55, size * 0.5, size * 0.32, a, 0, TAU);
+      g.fill();
+    }
+  };
+  // Ink washes and big blue flowers, denser towards the hem
+  for (let i = 0; i < 36; i++) {
+    const x = r() * W;
+    const y = H - Math.pow(r(), 1.6) * H;
+    g.globalAlpha = 0.25 + r() * 0.35;
+    flower(x, y, 10 + r() * 16, r() < 0.65 ? '#2c4a8a' : '#77808f');
+  }
+  g.globalAlpha = 1;
+  for (let i = 0; i < 40; i++) flower(r() * W, r() * H, 4 + r() * 5, '#fbf8f2');
+  // Dark wash rising from the hem
+  const grad = g.createLinearGradient(0, H, 0, H * 0.55);
+  grad.addColorStop(0, 'rgba(20,22,30,0.75)');
+  grad.addColorStop(1, 'rgba(20,22,30,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+/** Black pleated hakama with white blossoms scattered along the hem. u around, v bottom→top. */
+function makeHakamaTexture(): THREE.CanvasTexture {
+  const W = 512;
+  const H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#17171c';
+  g.fillRect(0, 0, W, H);
+  // Pleats
+  for (let x = 0; x < W; x += 32) {
+    g.fillStyle = 'rgba(255,255,255,0.05)';
+    g.fillRect(x, 0, 3, H);
+    g.fillStyle = 'rgba(0,0,0,0.35)';
+    g.fillRect(x + 14, 0, 4, H);
+  }
+  let s = 11;
+  const r = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 60; i++) {
+    const x = r() * W;
+    const y = H - Math.pow(r(), 2.2) * H * 0.55;
+    const size = 3 + r() * 6;
+    g.fillStyle = r() < 0.75 ? '#efe6d8' : '#3c5ca8';
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * TAU;
+      g.beginPath();
+      g.arc(x + Math.cos(a) * size * 0.6, y + Math.sin(a) * size * 0.6, size * 0.45, 0, TAU);
+      g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+/**
+ * Sozuki, wandering swordswoman: wide straw hat hung with blue tassels, long black
+ * hair with blue ribbons and white flowers, an off-shoulder white kimono with blue
+ * blossoms over a torn black hakama, blue obi, black gauntlets, leg wraps and
+ * sandals, and a katana in the right hand with its scabbard on the left hip.
+ */
+function buildSamurai(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team);
+  const matKimono = toon('#ffffff', { map: makeSakuraKimonoTexture(), side: THREE.DoubleSide });
+  const matHakama = toon('#ffffff', { map: makeHakamaTexture(), side: THREE.DoubleSide });
+  const matBlack = toon('#1b1b21');
+  const matLining = toon('#202436', { side: THREE.BackSide });
+  const matBlue = toon('#2c4a8a', { side: THREE.DoubleSide });
+  const matGold = toon('#c9a35c');
+  const matSkin = toonSoft('#f2cdb4');
+  const matHair = toonSoft('#26232b');
+  const matHairDark = toonSoft('#17151b');
+  const matStraw = toon('#8b6c45');
+  const matStrawDark = toon('#5e4529', { side: THREE.DoubleSide });
+  const matFlower = toonSoft('#f6f1ea');
+  const matSteel = toon('#d4d8e0');
+  const matEyeWhite = new THREE.MeshBasicMaterial({ color: '#f4f1ee' });
+  const matIris = new THREE.MeshBasicMaterial({ color: '#6b4a32' });
+  const matPupil = new THREE.MeshBasicMaterial({ color: '#1a1210' });
+  const matLips = new THREE.MeshBasicMaterial({ color: '#b5545e' });
+  const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Legs: bare, with black wraps around the shins and strappy sandals; the left one shows through the slit.
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0.5, 25, side * 3.8), v(2.2, 12, side * 4.4), 2.5, matSkin));
+    keep(limb(body, v(2.2, 12, side * 4.4), v(1.4, 3, side * 4.6), 2.1, matSkin));
+    for (const y of [5, 8, 11, 14, 19]) {
+      const wrap = add(new THREE.TorusGeometry(y > 15 ? 2.6 : 2.3, 0.45, 4, 12), matBlack, y > 15 ? 1.6 : 1.9, y, side * 4.5);
+      wrap.rotation.set(Math.PI / 2 + (y % 2 ? 0.3 : -0.3), 0, 0);
+    }
+    keep(add(new THREE.BoxGeometry(6.4, 1.6, 3.2), matBlack, 2.6, 0.8, side * 4.6));
+    add(new THREE.BoxGeometry(1.2, 2.2, 3), matBlack, 4.4, 2, side * 4.6);
+  }
+
+  // Hakama: long pleated black skirt with a torn hem, slit open over the left leg
+  const hakamaGeo = raggedLathe([[16.5, 1.5], [15, 8], [13, 16], [11, 24], [9.2, 30], [8.6, 33]], 34, 5, 31, Math.PI / 2 + 0.55, TAU - 0.9);
+  keep(add(hakamaGeo, matHakama, 0, 0, 0));
+  // White kimono skirt panels over the hakama, torn into long tails at the back and sides
+  const tailGeo = raggedLathe([[17.5, 4], [15.8, 10], [13.6, 18], [11.2, 26], [9.4, 33]], 26, 9, 37, Math.PI * 0.75, Math.PI * 1.15);
+  keep(add(tailGeo, matKimono, -0.4, 0, 0));
+
+  // Kimono top: wrapped V neck, blue obi with black cord and a gold medallion
+  keep(add(lathe([[8.6, 33], [8.9, 36], [9.6, 40], [9.6, 43], [8.6, 46], [6, 48.5], [2.8, 50]]), matKimono, 0, 0, 0));
+  for (const side of [-1, 1]) {
+    const lapel = keep(limb(body, v(9.3, 46.5, side * 4.8), v(9.4, 37, -side * 1.2), 0.75, matBlack));
+    lapel.castShadow = true;
+  }
+  const obi = keep(add(new THREE.CylinderGeometry(9.3, 9, 6.2, 28), matBlue, 0, 34.5, 0));
+  obi.castShadow = true;
+  add(new THREE.TorusGeometry(9.3, 0.55, 5, 28), matBlack, 0, 32.4, 0).rotation.x = Math.PI / 2;
+  add(new THREE.TorusGeometry(9.4, 0.55, 5, 28), matBlack, 0, 36.6, 0).rotation.x = Math.PI / 2;
+  const medal = add(new THREE.CylinderGeometry(2, 2, 0.8, 16), matGold, 9.6, 34.5, 0);
+  medal.rotation.z = Math.PI / 2;
+  add(new THREE.OctahedronGeometry(0.9, 0), matTeam, 10.2, 34.5, 0);
+  // Blue ribbons hanging from the obi
+  for (const [z, len] of [[-3.5, 14], [-1.5, 18], [6.5, 12]] as const) {
+    const ribbon = add(new THREE.PlaneGeometry(1.6, len), matBlue, 9.4, 32 - len / 2, z);
+    ribbon.rotation.y = Math.PI / 2;
+    ribbon.rotation.z = 0.06;
+  }
+
+  // Bare shoulders; the outer robe hangs off them into wide torn sleeves, white outside, dark inside.
+  for (const side of [-1, 1]) keep(add(new THREE.SphereGeometry(3.1, 14, 10), matSkin, 0, 46.4, side * 9));
+  const rElbow = v(3, 38.5, 12.6);
+  const rHand = v(9, 33, 11.5);
+  const lElbow = v(1.5, 37.5, -12);
+  const lHand = v(5, 30, -11.6);
+  keep(limb(body, v(0, 46.4, 9), rElbow, 1.8, matSkin));
+  keep(limb(body, rElbow, rHand, 1.7, matBlack));
+  keep(limb(body, v(0, 46.4, -9), lElbow, 1.8, matSkin));
+  keep(limb(body, lElbow, lHand, 1.7, matBlack));
+  for (const hand of [rHand, lHand]) keep(add(new THREE.SphereGeometry(1.9, 12, 10), matSkin, hand.x, hand.y - 0.6, hand.z));
+  for (const [elbow, hand] of [[rElbow, rHand], [lElbow, lHand]]) {
+    // Gold studs along the black gauntlet
+    for (const t of [0.35, 0.65]) {
+      const p = elbow.clone().lerp(hand, t);
+      add(new THREE.SphereGeometry(0.5, 6, 4), matGold, p.x + 1.6, p.y, p.z);
+    }
+  }
+  for (const [elbow, side] of [[rElbow, 1], [lElbow, -1]] as const) {
+    const sleeveGeo = raggedLathe([[7.4, -20], [6.4, -13], [4.6, -6], [3.2, 0]], 22, 3.5, side + 9);
+    const sleeve = keep(add(sleeveGeo, matKimono, elbow.x - 1.5, elbow.y + 2.5, elbow.z + side * 1.4));
+    sleeve.rotation.x = side * 0.2;
+    add(sleeveGeo, matLining, 0, 0, 0, sleeve).castShadow = false;
+    // The robe's dark collar band draped across the upper arm
+    const band = add(new THREE.TorusGeometry(3.6, 0.9, 5, 14), matBlack, elbow.x - 1, elbow.y + 2.6, elbow.z + side * 0.8);
+    band.rotation.x = Math.PI / 2;
+  }
+
+  // Neck and face
+  keep(add(new THREE.CylinderGeometry(2.1, 2.6, 5, 12), matSkin, 0, 50.5, 0));
+  keep(add(new THREE.SphereGeometry(6, 24, 18), matSkin, 0.7, 57.2, 0)).scale.set(1, 1.1, 0.92);
+  keep(add(new THREE.SphereGeometry(2.3, 14, 10), matSkin, 2.6, 53.8, 0)).scale.set(1, 0.85, 1.22);
+  for (const side of [-1, 1]) {
+    add(new THREE.SphereGeometry(1.2, 12, 8), matEyeWhite, 5.7, 57.4, side * 2.4).scale.set(0.45, 0.55, 1);
+    add(new THREE.SphereGeometry(0.78, 10, 8), matIris, 6.2, 57.3, side * 2.3).scale.set(0.4, 0.8, 1);
+    add(new THREE.SphereGeometry(0.37, 8, 6), matPupil, 6.55, 57.3, side * 2.3).scale.set(0.4, 1, 1);
+    const brow = add(new THREE.BoxGeometry(0.45, 0.38, 2.4), matHairDark, 5.95, 59.2, side * 2.5);
+    brow.rotation.x = side * -0.1;
+  }
+  add(new THREE.ConeGeometry(0.4, 1.3, 6), matSkin, 6.4, 56, 0).rotation.z = -Math.PI / 2 + 0.6;
+  add(new THREE.BoxGeometry(0.35, 0.45, 1.7), matLips, 6, 53.8, 0);
+
+  // Long black hair: crown, side-swept bangs, locks to the waist with blue ribbons
+  const crown = keep(add(new THREE.SphereGeometry(6.7, 24, 14, 0, TAU, 0, Math.PI * 0.62), matHair, -0.5, 58.2, 0));
+  crown.rotation.z = 0.3;
+  crown.scale.set(1.04, 1.06, 1);
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(5.6, 61.4, side * 0.6), v(5.4, 56.4, side * 5.2), 1.4, matHair));
+    keep(limb(body, v(2.6, 56.5, side * 6.1), v(3.6, 41, side * 8.4), 1.6, matHair));
+    keep(limb(body, v(0, 56, side * 6.5), v(-1.6, 36, side * 9.6), 1.8, matHairDark));
+  }
+  for (let i = 0; i < 6; i++) {
+    const z = -6 + i * 2.4;
+    const wave = i % 2 ? 1.2 : -1.2;
+    keep(limb(body, v(-4.6, 59, z * 0.85), v(-7.4 + wave * 0.3, 30 + Math.abs(z) * 0.6, z * 1.2 + wave), 2.1, i % 2 ? matHair : matHairDark));
+  }
+  // Blue ribbons and white flowers on the left side of the head, a blue tassel earring
+  for (let i = 0; i < 3; i++) {
+    const ribbon = add(new THREE.PlaneGeometry(1.4, 16 - i * 3), matBlue, -1 + i * 1.4, 52 - i, -7.2 - i * 0.4);
+    ribbon.rotation.x = -0.15;
+  }
+  for (const [x, y, z, sz] of [[3.4, 62.4, -5.4, 1.8], [1.4, 63.2, -6, 1.5], [4.6, 60.6, -6.2, 1.3]] as const) {
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * TAU;
+      add(new THREE.SphereGeometry(sz * 0.5, 8, 6), matFlower, x + Math.cos(a) * sz * 0.6, y + Math.sin(a) * sz * 0.6, z).scale.set(1, 1, 0.4);
+    }
+    add(new THREE.SphereGeometry(sz * 0.3, 6, 4), matGold, x, y, z - 0.2);
+  }
+  for (const side of [-1, 1]) {
+    add(new THREE.SphereGeometry(0.6, 6, 4), matGold, 0.4, 54.6, side * 6);
+    add(new THREE.CylinderGeometry(0.5, 0.2, 3.4, 6), matBlue, 0.4, 52.4, side * 6);
+  }
+
+  // Straw hat: wide shallow cone with a woven texture of rings, a knob on top, blue tassels on beaded strings around the rim
+  const hat = new THREE.Group();
+  hat.position.set(0.4, 62.6, 0);
+  hat.rotation.z = -0.1;
+  body.add(hat);
+  // No shadow from the brim, or it hides the face from the top-down camera.
+  const brim = keep(add(lathe([[0.01, 8.5], [2.2, 8], [9, 4.6], [17.5, 0.6], [17.8, 0]], 40), matStraw, 0, 0, 0, hat));
+  add(new THREE.ConeGeometry(17.7, 8.4, 40, 1, true), matStrawDark, 0, 4.2, 0, hat).castShadow = false;
+  for (const r of [5, 9, 13]) {
+    const ring = add(new THREE.TorusGeometry(r, 0.18, 3, 40), matStrawDark, 0, 8.5 - (r / 17.5) * 8.1 + 0.15, 0, hat);
+    ring.rotation.x = Math.PI / 2;
+  }
+  add(new THREE.SphereGeometry(1.3, 10, 8), matBlue, 0, 9.2, 0, hat);
+  // Around the rim but leaving the front open, so they don't hang over the face.
+  for (let i = 0; i < 10; i++) {
+    const a = 0.75 + (i / 9) * (TAU - 1.5);
+    const x = Math.cos(a) * 16.6;
+    const z = Math.sin(a) * 16.6;
+    const len = i % 2 ? 4 : 6.5;
+    add(new THREE.CylinderGeometry(0.12, 0.12, len, 3), matGold, x, -len / 2, z, hat);
+    add(new THREE.SphereGeometry(0.5, 6, 4), matGold, x, -len, z, hat);
+    const tassel = add(new THREE.ConeGeometry(0.8, 3.6, 6), matBlue, x, -len - 2, z, hat);
+    tassel.rotation.x = Math.PI;
+  }
+
+  // Scabbard on the left hip: black lacquer with a blue cord
+  const saya = new THREE.Group();
+  saya.position.set(-1, 31, -9.6);
+  saya.rotation.set(0.15, 0, 0.5);
+  body.add(saya);
+  keep(add(new THREE.BoxGeometry(32, 1.8, 1.2), matBlack, -6, 0, 0, saya));
+  add(new THREE.TorusGeometry(1.2, 0.35, 4, 10), matBlue, 6, 0, 0, saya).rotation.y = Math.PI / 2;
+  add(new THREE.BoxGeometry(1.4, 2, 1.4), matGold, -21.6, 0, 0, saya);
+
+  // Katana in the right hand: blue-wrapped grip, round gold guard, long curved steel blade along +X
+  const katana = new THREE.Group();
+  katana.position.copy(rHand).add(v(0.6, -0.4, 0));
+  body.add(katana);
+  const grip = add(new THREE.CylinderGeometry(0.75, 0.75, 9, 8), matBlack, -2, 0, 0, katana);
+  grip.rotation.z = Math.PI / 2;
+  for (let i = 0; i < 4; i++) add(new THREE.TorusGeometry(0.8, 0.28, 4, 8), matBlue, -5.4 + i * 2.2, 0, 0, katana).rotation.y = Math.PI / 2;
+  const tsuba = add(new THREE.CylinderGeometry(2.2, 2.2, 0.6, 16), matGold, 2.6, 0, 0, katana);
+  tsuba.rotation.z = Math.PI / 2;
+  // Blade: a thin box bent into a gentle curve
+  const bladeGeo = new THREE.BoxGeometry(32, 1.3, 0.35, 16, 1, 1);
+  const bp = bladeGeo.attributes.position;
+  for (let i = 0; i < bp.count; i++) {
+    const x = bp.getX(i);
+    const t = (x + 16) / 32;
+    bp.setY(i, bp.getY(i) + t * t * 2.4);
+    // Taper to a point at the tip
+    if (t > 0.94) bp.setY(i, bp.getY(i) * (1 - (t - 0.94) * 8) + t * t * 2.4 * (t - 0.94) * 8);
+  }
+  bladeGeo.computeVertexNormals();
+  keep(add(bladeGeo, matSteel, 19, 0, 0, katana));
+  const tip = add(new THREE.OctahedronGeometry(1, 0), matGlow, 35, 2.4, 0, katana);
+  const tipGlow = glowSprite(glowTex, team, 16);
+  tipGlow.position.set(35, 2.4, 0);
+  katana.add(tipGlow);
+  katana.rotation.z = -0.8;
+
+  shadowed(body);
+  tip.castShadow = false;
+  brim.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matLining || m === matEyeWhite || m === matIris || m === matPupil || m === matLips || m === matGlow || m === matStrawDark) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: katana, tip, tipGlow, mats: [matTeam, matKimono, matHakama, matBlack, matSkin, matHair], ...markers };
 }

@@ -613,6 +613,31 @@ export class World3D implements WorldView {
         const thrown = !pc.cast && pc.cooldowns[SLOT.M1] > 0;
         rig.weapon.rotation.z = pc.dashT > 0 && pc.dashKind === 2 ? -1.2 : thrown ? -0.7 : -0.2 + ck * 0.9;
         twist = def ? ck * 0.3 : 0;
+      } else if (pc.champ === CHAMP.SAMURAI) {
+        // Katana: raised during the windup, cut down through the swing, level for the thrust.
+        const kit = CHAMPIONS[pc.champ].abilities;
+        const cutCd = pc.cooldowns[SLOT.M1];
+        let swing = -0.8;
+        if (def?.id === 'katana') {
+          swing = -0.8 + ck * 2.2;
+          twist = ck * 0.35;
+        } else if (def?.id === 'tempest') {
+          swing = -0.8 + ck * 0.8;
+          twist = -ck * 0.3;
+        } else if (def?.id === 'fate') {
+          swing = -0.8 + ck * 1.6;
+          twist = -ck * 0.6;
+        } else if (cutCd > 0) {
+          const t = 1 - cutCd / kit[SLOT.M1].cooldown;
+          swing = 1.4 - t * 2.6;
+          twist = 0.35 - t * 0.8;
+        }
+        // Sweeping Blade: blade held back and low while dashing through.
+        if (pc.dashT > 0 && pc.dashKind === 3) {
+          swing = -1.3;
+          twist = 0.5;
+        }
+        rig.weapon.rotation.z = swing;
       } else if (pc.champ === CHAMP.ARCHER) {
         // Bow held level; it kicks up a little right after a shot.
         const kick = !pc.cast && pc.cooldowns[SLOT.M1] > 0 ? pc.cooldowns[SLOT.M1] / kitCd(pc.champ, SLOT.M1) : 0;
@@ -624,7 +649,7 @@ export class World3D implements WorldView {
       rig.body.rotation.y = twist;
       rig.tip.scale.setScalar(1 + ck * 0.9);
       (rig.tipGlow.material as THREE.SpriteMaterial).color.set(def ? abilityColor(def.id, i) : COLORS.players[i]);
-      rig.tipGlow.scale.setScalar(26 + ck * (def?.id === 'bolt' || def?.id === 'slash' ? 22 : 60));
+      rig.tipGlow.scale.setScalar(26 + ck * (def?.id === 'bolt' || def?.id === 'slash' || def?.id === 'katana' ? 22 : 60));
 
       // Squash on hit, stretch on dash
       if (pc.hitT === 7) a.squash = 1;
