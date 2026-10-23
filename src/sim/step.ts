@@ -12,6 +12,7 @@ import {
   ARENA_MIN_R,
   ARENA_R,
   ARENA_SHRINK,
+  BLADE,
   BLINK,
   BUFFER_TICKS,
   CHAMPIONS,
@@ -20,7 +21,9 @@ import {
   CRY,
   DASH,
   EXECUTE,
+  FATE,
   HASTE_MUL,
+  KATANA,
   KB_DECAY,
   LEAP,
   LONGSHOT,
@@ -46,12 +49,16 @@ import {
   SLOT_BUTTONS,
   SMOKE,
   SNARE,
+  SOUL,
   SONIC,
   SPAWNS,
   SUDDEN_DEATH_AT,
+  TEMPEST,
   VAULT,
+  WALL,
   WHIRL,
   type AbilityDef,
+  type AbilityId,
 } from './constants';
 import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
 
@@ -117,6 +124,13 @@ function createPlayer(id: number, champ: number): Player {
     rootT: 0,
     revealT: 0,
     quickT: 0,
+    stunT: 0,
+    stacks: 0,
+    stackT: 0,
+    soulT: 0,
+    soulX: 0,
+    soulY: 0,
+    soulDmg: 0,
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -241,6 +255,11 @@ export function airborne(p: Player): boolean {
 
 /** Leaping or executing: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
+  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2);
+}
+
+/** Leaping, executing or sweeping: moves through the enemy instead of bumping it. */
+function passesThrough(p: Player): boolean {
   return p.dashT > 0 && p.dashKind >= 1;
 }
 
@@ -254,6 +273,9 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.rootT > 0) p.rootT--;
   if (p.revealT > 0) p.revealT--;
   if (p.quickT > 0) p.quickT--;
+  if (p.stunT > 0) p.stunT--;
+  if (p.stackT > 0 && --p.stackT === 0) p.stacks = 0;
+  if (p.soulT > 0 && --p.soulT === 0) soulReturn(s, p, ev);
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   if (p.poisonT > 0) {
     p.poisonT--;
@@ -268,14 +290,16 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
 
   const pressed = inp.buttons & ~p.prevButtons;
   p.prevButtons = inp.buttons;
+  // Stunned: inputs are dropped, not buffered for later.
+  const stunned = p.stunT > 0;
   for (let k = 1; k < SLOT_BUTTONS.length; k++) {
-    if (pressed & SLOT_BUTTONS[k]) {
+    if (pressed & SLOT_BUTTONS[k] && !stunned) {
       p.buffer = k;
       p.bufferT = BUFFER_TICKS;
     }
   }
 
-  if (p.bufferT > 0) {
+  if (p.bufferT > 0 && !stunned) {
     if (tryStart(s, p, p.buffer, inp, ev)) {
       p.buffer = -1;
       p.bufferT = 0;
@@ -284,7 +308,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     }
   }
   // The basic attack auto-repeats while held.
-  if (inp.buttons & BTN.M1 && p.bufferT === 0) tryStart(s, p, SLOT.M1, inp, ev);
+  if (inp.buttons & BTN.M1 && p.bufferT === 0 && !stunned) tryStart(s, p, SLOT.M1, inp, ev);
 
   if (p.cast) {
     const slot = p.cast.ability;
@@ -313,9 +337,11 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
       land(s, p, ev);
     }
     if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
+    if (p.dashKind === 3 && !p.dashHit) bladeContact(s, p, ev);
   } else {
-    const mx = p.rootT > 0 ? 0 : Math.sign(inp.mx);
-    const my = p.rootT > 0 ? 0 : Math.sign(inp.my);
+    const held = p.rootT > 0 || stunned;
+    const mx = held ? 0 : Math.sign(inp.mx);
+    const my = held ? 0 : Math.sign(inp.my);
     let speed = CHAMPIONS[p.champ].speed;
     if (p.slowT > 0) speed *= p.slowMul;
     if (p.hasteT > 0) speed *= HASTE_MUL;
@@ -341,9 +367,15 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
 
 function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEvent[]): boolean {
   const def = abilityOf(p, slot);
+  // Soul Unbound recast: snap back early (works on cooldown, which started on the way out).
+  if (def.id === 'soul' && p.soulT > 0) {
+    soulReturn(s, p, ev);
+    return true;
+  }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  if (p.rootT > 0 && (def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute')) return false;
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate';
+  if (p.rootT > 0 && mobility) return false;
 
   // Blink: instant teleport, also usable mid-cast (cancels it).
   if (def.id === 'blink') {
@@ -367,7 +399,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
 
   // Mobility works mid-cast and cancels the cast.
-  if (def.id === 'dash' || def.id === 'leap' || def.id === 'vault') {
+  if (def.id === 'dash' || def.id === 'leap' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul') {
     if (p.dashT > 0) return false;
     p.cast = null;
     p.counterT = 0;
@@ -379,6 +411,23 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       p.dashX = p.fx * DASH.speed;
       p.dashY = p.fy * DASH.speed;
       ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+    } else if (def.id === 'blade') {
+      p.dashKind = 3;
+      p.dashHit = 0;
+      p.dashT = BLADE.ticks;
+      p.dashX = p.fx * BLADE.speed;
+      p.dashY = p.fy * BLADE.speed;
+      ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+    } else if (def.id === 'soul') {
+      p.soulX = p.x;
+      p.soulY = p.y;
+      p.soulT = SOUL.ticks;
+      p.soulDmg = 0;
+      p.dashKind = 0;
+      p.dashT = SOUL.dashTicks;
+      p.dashX = p.fx * SOUL.speed;
+      p.dashY = p.fy * SOUL.speed;
+      ev.push({ type: 'soul', player: p.id, x: p.x, y: p.y });
     } else if (def.id === 'vault') {
       p.dashKind = 0;
       p.dashT = VAULT.ticks;
@@ -417,6 +466,14 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     p.counterT = COUNTER.ticks;
     p.cooldowns[slot] = def.cooldown;
     ev.push({ type: 'counter', player: p.id });
+    return true;
+  }
+  if (def.id === 'wall') {
+    const x = p.x + p.fx * WALL.dist;
+    const y = p.y + p.fy * WALL.dist;
+    s.zones.push({ id: s.nextId++, owner: p.id, kind: 'wall', x, y, fx: p.fx, fy: p.fy, t: WALL.ticks });
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'wall', player: p.id, x, y });
     return true;
   }
   if (def.id === 'whirl') {
@@ -475,18 +532,73 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         tx = (tx / d) * RAIN.range;
         ty = (ty / d) * RAIN.range;
       }
-      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks });
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, fx: 0, fy: 0, t: RAIN.delay + RAIN.ticks });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
       return;
     }
 
     case 'slash': {
-      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: SLASH.reach });
       const reach = 2 * PLAYER_R + SLASH.reach;
-      if (inCone(p, foe.x, foe.y, reach)) {
+      if (inCone(p, foe.x, foe.y, reach, SLASH.minDot)) {
         hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       }
-      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + SLASH.reach)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
+      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + SLASH.reach, SLASH.minDot)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'katana': {
+      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: KATANA.reach });
+      if (inCone(p, foe.x, foe.y, 2 * PLAYER_R + KATANA.reach, KATANA.minDot)) {
+        hit(p, foe, KATANA.dmg, KATANA.energy, 'katana', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+      }
+      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + KATANA.reach, KATANA.minDot)) damageOrb(s, p.id, KATANA.dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'tempest': {
+      // Full stacks: the thrust becomes a gale that flies and stuns.
+      if (p.stacks >= TEMPEST.max) {
+        p.stacks = 0;
+        p.stackT = 0;
+        fireProjectile(s, p, 'gale', 1, ev, def.id);
+        return;
+      }
+      ev.push({ type: 'thrust', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      const x0 = p.x + p.fx * PLAYER_R;
+      const y0 = p.y + p.fy * PLAYER_R;
+      const x1 = x0 + p.fx * TEMPEST.len;
+      const y1 = y0 + p.fy * TEMPEST.len;
+      const reach = TEMPEST.half + PLAYER_R;
+      if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, TEMPEST.dmg, TEMPEST.energy, 'tempest', foe.x, foe.y, ev)) {
+        p.stacks = Math.min(TEMPEST.max, p.stacks + 1);
+        p.stackT = TEMPEST.window;
+      }
+      if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (TEMPEST.half + ORB_R) * (TEMPEST.half + ORB_R)) damageOrb(s, p.id, TEMPEST.dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'fate': {
+      const x0 = p.x;
+      const y0 = p.y;
+      const x1 = x0 + p.fx * FATE.range;
+      const y1 = y0 + p.fy * FATE.range;
+      const reach = FATE.half + PLAYER_R;
+      const caught = segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, FATE.dmg, 0, 'fate', foe.x, foe.y, ev);
+      if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (FATE.half + ORB_R) * (FATE.half + ORB_R)) damageOrb(s, p.id, FATE.dmg, 0, 0, ev);
+      p.x = x1;
+      p.y = y1;
+      collideWorld(s, p);
+      if (caught) {
+        // Dragged along to the end of the line, right in front of the samurai.
+        foe.x = p.x + p.fx * (2 * PLAYER_R + 2);
+        foe.y = p.y + p.fy * (2 * PLAYER_R + 2);
+        foe.vx = 0;
+        foe.vy = 0;
+        collideWorld(s, foe);
+        stun(foe, FATE.stun, ev);
+      }
+      ev.push({ type: 'fate', player: p.id, x0, y0, x: p.x, y: p.y });
       return;
     }
 
@@ -519,42 +631,45 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       return;
     }
 
-    default: {
-      const kind = def.id as ProjKind;
-      const pd = PROJ[kind];
-      let speed = pd.speed;
-      let range = pd.range;
-      let dmg = pd.dmg;
-      let kb = pd.kb;
-      if (kind === 'longshot') {
-        speed += LONGSHOT.speed * draw;
-        range += LONGSHOT.range * draw;
-        dmg = Math.round(dmg + LONGSHOT.dmg * draw);
-        if (draw >= 1) kb = LONGSHOT.kb;
-      } else if (kind === 'arrow' && p.quickT > 0) {
-        p.quickT = 0;
-        dmg += VAULT.bonus;
-      }
-      const off = PLAYER_R + pd.r * 0.5;
-      const x = p.x + p.fx * off;
-      const y = p.y + p.fy * off;
-      s.projectiles.push({
-        id: s.nextId++,
-        owner: p.id,
-        kind,
-        x,
-        y,
-        vx: p.fx * speed,
-        vy: p.fy * speed,
-        r: pd.r,
-        life: Math.floor(range / speed),
-        age: 0,
-        dmg,
-        kb,
-      });
-      ev.push({ type: 'release', player: p.id, ability: def.id, x, y });
-    }
+    default:
+      fireProjectile(s, p, def.id as ProjKind, draw, ev, def.id);
   }
+}
+
+/** Launch a projectile along the aim; `draw` only matters for a longshot. */
+function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, ev: GameEvent[], ability: AbilityId) {
+  const pd = PROJ[kind];
+  let speed = pd.speed;
+  let range = pd.range;
+  let dmg = pd.dmg;
+  let kb = pd.kb;
+  if (kind === 'longshot') {
+    speed += LONGSHOT.speed * draw;
+    range += LONGSHOT.range * draw;
+    dmg = Math.round(dmg + LONGSHOT.dmg * draw);
+    if (draw >= 1) kb = LONGSHOT.kb;
+  } else if (kind === 'arrow' && p.quickT > 0) {
+    p.quickT = 0;
+    dmg += VAULT.bonus;
+  }
+  const off = PLAYER_R + pd.r * 0.5;
+  const x = p.x + p.fx * off;
+  const y = p.y + p.fy * off;
+  s.projectiles.push({
+    id: s.nextId++,
+    owner: p.id,
+    kind,
+    x,
+    y,
+    vx: p.fx * speed,
+    vy: p.fy * speed,
+    r: pd.r,
+    life: Math.floor(range / speed),
+    age: 0,
+    dmg,
+    kb,
+  });
+  ev.push({ type: 'release', player: p.id, ability, x, y });
 }
 
 function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
@@ -569,6 +684,33 @@ function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
   hit(p, foe, lethal ? EXECUTE.dmg * 2 : EXECUTE.dmg, 0, 'execute', foe.x, foe.y, ev);
 }
 
+function bladeContact(s: GameState, p: Player, ev: GameEvent[]) {
+  const foe = s.players[1 - p.id];
+  const dx = foe.x - p.x;
+  const dy = foe.y - p.y;
+  const reach = 2 * PLAYER_R + 6;
+  if (dx * dx + dy * dy > reach * reach || foe.hp <= 0) return;
+  p.dashHit = 1;
+  hit(p, foe, BLADE.dmg, BLADE.energy, 'blade', foe.x, foe.y, ev);
+}
+
+/** End Soul Unbound: back to where it started, echoing part of the damage dealt as a spirit. */
+function soulReturn(s: GameState, p: Player, ev: GameEvent[]) {
+  const x0 = p.x;
+  const y0 = p.y;
+  const echo = Math.round(p.soulDmg * SOUL.echo);
+  p.soulT = 0;
+  p.soulDmg = 0;
+  p.cast = null;
+  p.dashT = 0;
+  p.x = p.soulX;
+  p.y = p.soulY;
+  collideWorld(s, p);
+  ev.push({ type: 'soulReturn', player: p.id, x0, y0, x: p.x, y: p.y });
+  const foe = s.players[1 - p.id];
+  if (echo > 0) hit(p, foe, echo, 0, 'soul', foe.x, foe.y, ev);
+}
+
 function whirlPulse(s: GameState, p: Player, ev: GameEvent[]) {
   ev.push({ type: 'whirl', player: p.id, x: p.x, y: p.y });
   areaHit(s, p, p.x, p.y, WHIRL.r, WHIRL.dmg, WHIRL.energy, 0, 'whirl', ev);
@@ -579,14 +721,14 @@ function land(s: GameState, p: Player, ev: GameEvent[]) {
   areaHit(s, p, p.x, p.y, LEAP.r, LEAP.dmg, LEAP.energy, LEAP.kb, 'leap', ev);
 }
 
-/** Target center within `reach` and in front of the attacker. */
-function inCone(p: Player, x: number, y: number, reach: number): boolean {
+/** Target center within `reach` and in front of the attacker (cos of the half-angle >= minDot). */
+function inCone(p: Player, x: number, y: number, reach: number, minDot: number): boolean {
   const dx = x - p.x;
   const dy = y - p.y;
   const d = Math.sqrt(dx * dx + dy * dy);
   if (d > reach) return false;
   if (d < PLAYER_R) return true;
-  return (dx * p.fx + dy * p.fy) / d >= SLASH.minDot;
+  return (dx * p.fx + dy * p.fy) / d >= minDot;
 }
 
 function segDist2(px: number, py: number, x0: number, y0: number, x1: number, y1: number): number {
@@ -648,7 +790,7 @@ function clampToArena(s: GameState, p: Player) {
 
 function separatePlayers(s: GameState) {
   const [a, b] = s.players;
-  if (untargetable(a) || untargetable(b)) return;
+  if (passesThrough(a) || passesThrough(b)) return;
   let dx = b.x - a.x;
   let dy = b.y - a.y;
   const min = PLAYER_R * 2;
@@ -686,6 +828,8 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
   }
   target.hp = Math.max(0, target.hp - dmg);
   target.hitT = 8;
+  // A samurai out of body remembers what it dealt, to echo it on the way back.
+  if (attacker.soulT > 0 && kind !== 'soul') attacker.soulDmg += dmg;
   attacker.energy = Math.min(MAX_ENERGY, attacker.energy + energy);
   ev.push({ type: 'hit', target: target.id, source: attacker.id, dmg, x, y, kind });
   return true;
@@ -696,6 +840,17 @@ function block(target: Player, x: number, y: number, ev: GameEvent[]) {
   target.energy = Math.min(MAX_ENERGY, target.energy + COUNTER.energy);
   target.hasteT = COUNTER.haste;
   ev.push({ type: 'block', player: target.id, x, y });
+}
+
+function stun(target: Player, ticks: number, ev: GameEvent[]) {
+  target.stunT = Math.max(target.stunT, ticks);
+  target.cast = null;
+  target.whirlT = 0;
+  target.counterT = 0;
+  if (!untargetable(target)) target.dashT = 0;
+  target.buffer = -1;
+  target.bufferT = 0;
+  ev.push({ type: 'stun', player: target.id, x: target.x, y: target.y });
 }
 
 function knockback(target: Player, nx: number, ny: number, force: number) {
@@ -746,6 +901,11 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
       fizzle(s, pr, ev);
       continue;
     }
+    if (hitsWall(s, pr)) {
+      ev.push({ type: 'wallBlock', x: pr.x, y: pr.y });
+      fizzle(s, pr, ev, false);
+      continue;
+    }
 
     const target = s.players[1 - pr.owner];
     const tdx = target.x - pr.x;
@@ -766,6 +926,7 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         if (pr.kind === 'mark') target.markT = MARK.ticks;
         if (pr.kind === 'poison') target.poisonT = POISON.ticks;
         if (pr.kind === 'sonic') target.revealT = SONIC.reveal;
+        if (pr.kind === 'gale') stun(target, TEMPEST.stun, ev);
         if (pr.kind === 'snare') {
           target.rootT = SNARE.root;
           ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });
@@ -788,11 +949,24 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
   s.projectiles = alive;
 }
 
+/** Does this projectile touch a wind wall raised by the other player? */
+function hitsWall(s: GameState, pr: Projectile): boolean {
+  for (const z of s.zones) {
+    if (z.kind !== 'wall' || z.owner === pr.owner) continue;
+    // The wall runs across its facing direction.
+    const ux = -z.fy * WALL.half;
+    const uy = z.fx * WALL.half;
+    const reach = pr.r + 6;
+    if (segDist2(pr.x, pr.y, z.x - ux, z.y - uy, z.x + ux, z.y + uy) < reach * reach) return true;
+  }
+  return false;
+}
+
 /** A projectile that ends without hitting the enemy; a sonic arrow leaves a sensor where it stops. */
 function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
   if (impact) ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
   if (pr.kind === 'sonic') {
-    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks });
+    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, fx: 0, fy: 0, t: SONIC.ticks });
     ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });
   }
 }

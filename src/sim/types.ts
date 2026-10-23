@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'gale';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -61,9 +61,12 @@ export interface Player {
   dashT: number;
   dashX: number;
   dashY: number;
-  /** 0 = ground dash, 1 = leap (airborne: can't be hit, damages on landing), 2 = execute (can't be hit, passes through). */
+  /**
+   * 0 = ground dash, 1 = leap (airborne: can't be hit, damages on landing),
+   * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once).
+   */
   dashKind: number;
-  /** Execute already connected during this dash (0/1). */
+  /** Execute / sweeping blade already connected during this dash (0/1). */
   dashHit: number;
   whirlT: number;
   /** Marked by the enemy assassin: the next hit pops it for bonus damage. */
@@ -76,6 +79,16 @@ export interface Player {
   revealT: number;
   /** After a vault: the next Arrow is instant and hits harder. */
   quickT: number;
+  /** Stunned: can't move, cast or use anything. */
+  stunT: number;
+  /** Samurai: Steel Tempest stacks and the ticks until they expire. */
+  stacks: number;
+  stackT: number;
+  /** Samurai: Soul Unbound active (ticks left), where the body waits, and damage dealt meanwhile. */
+  soulT: number;
+  soulX: number;
+  soulY: number;
+  soulDmg: number;
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -99,13 +112,16 @@ export interface Projectile {
   kb: number;
 }
 
-/** Lingering area on the floor: an archer's arrow rain or a sonic sensor. */
+/** Lingering area on the floor: an archer's arrow rain or sonic sensor, or a samurai's wind wall. */
 export interface Zone {
   id: number;
   owner: number;
-  kind: 'rain' | 'sonic';
+  kind: 'rain' | 'sonic' | 'wall';
   x: number;
   y: number;
+  /** Wall only: the direction it faces (it runs across this, WALL.half each way). */
+  fx: number;
+  fy: number;
   /** Ticks left. Rain is still falling while t > RAIN.ticks. */
   t: number;
 }
@@ -161,7 +177,7 @@ export type GameEvent =
   | { type: 'dash'; player: number; x: number; y: number }
   | { type: 'leap'; player: number; x: number; y: number }
   | { type: 'land'; player: number; x: number; y: number }
-  | { type: 'swing'; player: number; x: number; y: number; fx: number; fy: number }
+  | { type: 'swing'; player: number; x: number; y: number; fx: number; fy: number; reach: number }
   | { type: 'nova'; player: number; x: number; y: number }
   | { type: 'whirl'; player: number; x: number; y: number }
   | { type: 'rift'; player: number; x: number; y: number; fx: number; fy: number }
@@ -176,6 +192,13 @@ export type GameEvent =
   | { type: 'rain'; owner: number; x: number; y: number; first: boolean }
   | { type: 'sensor'; owner: number; x: number; y: number }
   | { type: 'root'; player: number; x: number; y: number }
+  | { type: 'stun'; player: number; x: number; y: number }
+  | { type: 'thrust'; player: number; x: number; y: number; fx: number; fy: number }
+  | { type: 'wall'; player: number; x: number; y: number }
+  | { type: 'wallBlock'; x: number; y: number }
+  | { type: 'soul'; player: number; x: number; y: number }
+  | { type: 'soulReturn'; player: number; x0: number; y0: number; x: number; y: number }
+  | { type: 'fate'; player: number; x0: number; y0: number; x: number; y: number }
   | { type: 'ko'; player: number; x: number; y: number }
   | { type: 'fight' }
   | { type: 'roundStart'; round: number }

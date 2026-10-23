@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, WALL } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, pointVisible } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -86,6 +86,8 @@ export class World3D implements WorldView {
   private projViews = new Map<number, ProjView>();
   private meteorViews = new Map<number, MeteorView>();
   private zoneViews = new Map<number, ZoneView>();
+  /** Where each samurai's body waits during Soul Unbound. */
+  private soulMarks: THREE.Group[] = [];
   private lights: THREE.PointLight[] = [];
   private rings: THREE.Mesh[] = [];
   private particles: THREE.Points;
@@ -432,6 +434,7 @@ export class World3D implements WorldView {
     this.updateProjectiles(prev, cur, alpha, opts.localId);
     this.updateMeteors(cur);
     this.updateZones(cur, opts.localId);
+    this.updateSouls(cur, opts.localId);
     this.updateAim(cur, opts);
     this.updateFx(fx);
 
@@ -520,11 +523,12 @@ export class World3D implements WorldView {
       rig.root.position.set(p.x, 0, p.y);
 
       // Stealth: an enemy disappears completely; you (or anyone in attract mode) see a ghost.
-      const stealthed = pc.stealthT > 0;
+      // A samurai out of body is a ghost for everyone.
+      const ghosted = pc.stealthT > 0 || pc.soulT > 0;
       rig.root.visible = localId === null || i === localId || canSee(cur, localId, i);
-      if (stealthed !== a.ghost) {
-        a.ghost = stealthed;
-        setGhost(rig.root, stealthed);
+      if (ghosted !== a.ghost) {
+        a.ghost = ghosted;
+        setGhost(rig.root, ghosted);
       }
 
       // Movement estimate for bob and lean
@@ -657,6 +661,8 @@ export class World3D implements WorldView {
         rig.revealEye.position.y = 96 + Math.sin(this.time * 3) * 2;
         rig.revealEye.quaternion.copy(this.camera.quaternion);
       }
+      rig.stunStars.visible = pc.stunT > 0 && !dead;
+      if (rig.stunStars.visible) rig.stunStars.rotation.y += dt * 6;
       rig.slowRing.visible = slowed;
       if (slowed) rig.slowRing.rotation.z += dt * 1.5;
       const ringMat = rig.ring.material as THREE.MeshBasicMaterial;
@@ -676,7 +682,7 @@ export class World3D implements WorldView {
       ? arrowGeometry(size)
       : kind === 'blast'
         ? new THREE.IcosahedronGeometry(size * 0.75, 0)
-        : kind === 'frost' || kind === 'hook'
+        : kind === 'frost' || kind === 'hook' || kind === 'gale'
           ? new THREE.OctahedronGeometry(size * 0.85, 0)
           : new THREE.SphereGeometry(size * 0.6, 12, 8);
     const sprite = (opacity: number) =>
@@ -837,8 +843,25 @@ export class World3D implements WorldView {
   // ---------------------------------------------------------------- zones
 
   private createZoneView(z: Zone): ZoneView {
-    const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
     const color = abilityColor(z.kind, z.owner);
+    if (z.kind === 'wall') {
+      // A shimmering sheet of wind standing across the facing direction, with its line on the floor.
+      const sheet = new THREE.Mesh(
+        new THREE.BoxGeometry(5, 64, WALL.half * 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+      );
+      sheet.position.set(z.x, 32, z.y);
+      sheet.rotation.y = Math.atan2(-z.fy, z.fx);
+      const line = new THREE.Mesh(
+        new THREE.PlaneGeometry(10, WALL.half * 2),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }),
+      );
+      line.rotation.set(-Math.PI / 2, 0, Math.atan2(-z.fy, z.fx));
+      line.position.set(z.x, 1.4, z.y);
+      this.scene.add(sheet, line);
+      return { fill: sheet, ring: line, sweep: null };
+    }
+    const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
     const fill = new THREE.Mesh(
       new THREE.CircleGeometry(r, 48),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
@@ -879,7 +902,12 @@ export class World3D implements WorldView {
       v.fill.visible = v.ring.visible = seen;
       const fillMat = v.fill.material as THREE.MeshBasicMaterial;
       const ringMat = v.ring.material as THREE.MeshBasicMaterial;
-      if (z.kind === 'rain') {
+      if (z.kind === 'wall') {
+        const fade = Math.min(1, z.t / 25);
+        fillMat.opacity = (0.22 + 0.1 * Math.sin(this.time * 18 + z.id)) * fade;
+        ringMat.opacity = 0.75 * fade;
+        v.fill.scale.y = 0.9 + 0.1 * Math.sin(this.time * 9);
+      } else if (z.kind === 'rain') {
         const falling = z.t > RAIN.ticks;
         // While the volley is in the air the fill grows like a meteor warning.
         const k = falling ? 1 - (z.t - RAIN.ticks) / RAIN.delay : 1;
@@ -906,6 +934,34 @@ export class World3D implements WorldView {
     }
   }
 
+  // ---------------------------------------------------------------- soul unbound
+
+  private updateSouls(cur: GameState, localId: number | null) {
+    for (let i = 0; i < 2; i++) {
+      const p = cur.players[i];
+      let mark = this.soulMarks[i];
+      if (!mark) {
+        mark = new THREE.Group();
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(PLAYER_R - 2, PLAYER_R + 3, 40),
+          new THREE.MeshBasicMaterial({ color: COLORS.spirit, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 1.5;
+        mark.add(ring, glowSprite(this.glowTex, COLORS.spirit, 60, 0.6));
+        mark.children[1].position.y = 30;
+        this.scene.add(mark);
+        this.soulMarks[i] = mark;
+      }
+      const seen = localId === null || i === localId || pointVisible(cur.players[localId], p.soulX, p.soulY);
+      mark.visible = p.soulT > 0 && seen;
+      if (mark.visible) {
+        mark.position.set(p.soulX, 0, p.soulY);
+        mark.children[0].scale.setScalar(1 + 0.08 * Math.sin(this.time * 8));
+      }
+    }
+  }
+
   // ---------------------------------------------------------------- aim
 
   private updateAim(s: GameState, opts: DrawOptions) {
@@ -915,11 +971,20 @@ export class World3D implements WorldView {
     const p = s.players[opts.localId];
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    if (id === 'blast' || id === 'frost' || id === 'hook' || id === 'rift' || id === 'longshot' || id === 'snare' || id === 'sonic') {
-      // A longshot's lane grows as the bow is drawn.
-      const draw = id === 'longshot' && p.cast && def ? (def.cast - p.cast.t) / def.cast : 1;
-      const len = id === 'rift' ? RIFT.len : PROJ[id].range + (id === 'longshot' ? LONGSHOT.range * draw : 0);
-      const half = id === 'rift' ? RIFT.half : PROJ[id].r;
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate'];
+    if (id && lanes.includes(id)) {
+      let len: number;
+      let half: number;
+      if (id === 'rift') [len, half] = [RIFT.len, RIFT.half];
+      else if (id === 'fate') [len, half] = [FATE.range, FATE.half];
+      else if (id === 'tempest') [len, half] = p.stacks >= TEMPEST.max ? [PROJ.gale.range, PROJ.gale.r] : [TEMPEST.len, TEMPEST.half];
+      else {
+        const kind = id as ProjKind;
+        // A longshot's lane grows as the bow is drawn.
+        const draw = kind === 'longshot' && p.cast && def ? (def.cast - p.cast.t) / def.cast : 1;
+        len = PROJ[kind].range + (kind === 'longshot' ? LONGSHOT.range * draw : 0);
+        half = PROJ[kind].r;
+      }
       this.aimLane.visible = true;
       this.aimLane.position.set(p.x, 1.2, p.y);
       this.aimLane.rotation.y = Math.atan2(-p.fy, p.fx);

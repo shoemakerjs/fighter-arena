@@ -56,4 +56,14 @@ export const ROSTER: RosterEntry[] = [
     focus: 0.46,
     lore: 'A wood elf from the deep groves. He hunts from the treeline, pins his prey with vines and lets the sky rain arrows on whoever is still standing.',
   },
+  {
+    hero: 'Sozuki',
+    category: 'Swordsman',
+    // Stand-in until the painted art arrives.
+    art: './art/placeholder.svg',
+    flip: false,
+    portrait: '68% 12%',
+    focus: 0.65,
+    lore: 'A wandering swordsman from the land in the east. He moves like the wind, cuts through his foes before they can react, and his spirit strikes twice.',
+  },
 ];

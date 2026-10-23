@@ -60,7 +60,8 @@ export type AbilityId =
   | 'bolt' | 'blast' | 'dash' | 'counter' | 'frost' | 'meteor'
   | 'slash' | 'hook' | 'leap' | 'cry' | 'whirl' | 'rift'
   | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute'
-  | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain';
+  | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain'
+  | 'katana' | 'tempest' | 'blade' | 'wall' | 'soul' | 'fate';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -82,7 +83,7 @@ export interface ChampionDef {
   abilities: AbilityDef[];
 }
 
-export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3 } as const;
+export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4 } as const;
 
 export const CHAMPIONS: ChampionDef[] = [
   {
@@ -142,6 +143,20 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'rain', name: 'Arrow Rain', desc: 'volley on an area that keeps hurting and slowing, 100 energy', cooldown: 60, cast: 20, castSlow: 0.3, energyCost: 100 },
     ],
   },
+  {
+    name: 'Samurai',
+    role: 'mobile duelist',
+    hp: 150,
+    speed: 3.4,
+    abilities: [
+      { id: 'katana', name: 'Katana', desc: 'quick wide-reaching slash, hold to keep slashing', cooldown: 5, cast: 10, castSlow: 0.55, energyCost: 0 },
+      { id: 'tempest', name: 'Steel Tempest', desc: 'thrust in a line; two hits charge the next one into a stunning gale', cooldown: 150, cast: 10, castSlow: 0.5, energyCost: 0 },
+      { id: 'blade', name: 'Sweeping Blade', desc: 'dash toward the cursor, cutting through the enemy', cooldown: 300, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'wall', name: 'Wind Wall', desc: 'wall of wind in front of you that stops enemy projectiles', cooldown: 600, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'soul', name: 'Soul Unbound', desc: 'dash out as a spirit; snap back after 2.5 s (or press again), echoing part of your damage', cooldown: 600, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'fate', name: 'Fate Sealed', desc: 'blink forward in a line, pulling the enemy along and stunning it, 100 energy', cooldown: 60, cast: 24, castSlow: 0.2, energyCost: 100 },
+    ],
+  },
 ];
 
 export interface ProjDef {
@@ -170,6 +185,8 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   longshot: { speed: 15, r: 8, range: 460, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
   sonic: { speed: 16, r: 8, range: 640, dmg: 5, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
   snare: { speed: 13, r: 11, range: 480, dmg: 8, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
+  // Steel Tempest with two stacks becomes a gale.
+  gale: { speed: 12, r: 22, range: 440, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
 };
 
 // Mage
@@ -206,3 +223,17 @@ export const SONIC = { reveal: 240, r: 240, ticks: 300 };
 export const SNARE = { root: 75 };
 /** Lands `delay` after release for `dmg`, then lingers `ticks`, pulsing every `every` and slowing. */
 export const RAIN = { range: 520, delay: 36, r: 120, dmg: 12, ticks: 120, every: 20, pulse: 3, slow: 0.55 };
+
+// Samurai
+/** Like SLASH but reaching further and narrower. */
+export const KATANA = { reach: 64, minDot: 0.55, dmg: 7, energy: 9 };
+/** Line thrust; a hit adds a stack (max `max`) that lasts `window` ticks; full stacks fire a gale that stuns. */
+export const TEMPEST = { len: 165, half: 20, dmg: 9, energy: 10, max: 2, window: 360, stun: 40 };
+/** Dash toward the aim that passes through the enemy, cutting it once. */
+export const BLADE = { ticks: 12, speed: 15, dmg: 7, energy: 8 };
+/** Wall `dist` in front, `half` long either side, for `ticks`: enemy projectiles that touch it break. */
+export const WALL = { dist: 60, half: 72, ticks: 150 };
+/** Spirit dash; after `ticks` (or a recast) snap back to the start and echo `echo` of the damage dealt meanwhile. */
+export const SOUL = { ticks: 150, dashTicks: 10, speed: 16, echo: 0.3 };
+/** Blink up to `range` along the aim; an enemy in the line is pulled to the end and stunned. */
+export const FATE = { range: 320, half: 40, dmg: 18, stun: 45 };

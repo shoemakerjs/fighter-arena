@@ -314,6 +314,8 @@ export interface ChampionRig {
   rootRing: THREE.Group;
   /** Eye above the head while revealed by a sonic arrow. */
   revealEye: THREE.Group;
+  /** Little stars circling the head while stunned. */
+  stunStars: THREE.Group;
 }
 
 export function buildChampion(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
@@ -773,7 +775,19 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
   revealEye.visible = false;
   root.add(revealEye);
 
-  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye };
+  const stunStars = new THREE.Group();
+  const starMat = new THREE.MeshBasicMaterial({ color: '#ffe88a', toneMapped: false });
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU;
+    const star = new THREE.Mesh(new THREE.OctahedronGeometry(2.6, 0), starMat);
+    star.position.set(Math.cos(a) * 12, 0, Math.sin(a) * 12);
+    stunStars.add(star);
+  }
+  stunStars.position.y = 80;
+  stunStars.visible = false;
+  root.add(stunStars);
+
+  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars };
 }
 
 /**

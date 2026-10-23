@@ -1,4 +1,4 @@
-import { ARENA_R, BLINK, CHAMP, CHAMPIONS, CRY, EXECUTE, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, TEMPEST, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type ProjKind } from '../sim/types';
 import { canSee, pointVisible } from '../sim/vision';
 
@@ -110,7 +110,10 @@ export class Bot {
     const assassin = me.champ === CHAMP.ASSASSIN;
     const archer = me.champ === CHAMP.ARCHER;
     const mage = me.champ === CHAMP.MAGE;
-    const foeMelee = foe.champ === CHAMP.WARRIOR;
+    const samurai = me.champ === CHAMP.SAMURAI;
+    // Champions that fight up close and walk in rather than kite.
+    const melee = warrior || samurai;
+    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI;
     const foeLow = foe.hp <= CHAMPIONS[foe.champ].hp * EXECUTE.threshold;
     const kit = CHAMPIONS[me.champ].abilities;
     const ready = (slot: number) => me.cooldowns[slot] === 0 && me.energy >= kit[slot].energyCost;
@@ -120,15 +123,15 @@ export class Bot {
     let wx = 0;
     let wy = 0;
     const pref = assassin ? (foeMelee ? 300 : 230) : archer ? (foeMelee ? 420 : 380) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
-    const radial = warrior ? (dist > 60 ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
-    wx += nx * radial * (warrior ? 1.4 : 1);
-    wy += ny * radial * (warrior ? 1.4 : 1);
+    const radial = melee ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
+    wx += nx * radial * (melee ? 1.4 : 1);
+    wy += ny * radial * (melee ? 1.4 : 1);
 
     if (--this.strafeT <= 0) {
       this.strafe = r() < 0.5 ? -1 : 1;
       this.strafeT = 40 + Math.floor(r() * 90);
     }
-    const strafe = warrior ? (dist > 160 ? 0.8 : 0.3) : 0.9;
+    const strafe = melee ? (dist > 160 ? 0.8 : samurai ? 0.6 : 0.3) : 0.9;
     wx += -ny * this.strafe * strafe;
     wy += nx * this.strafe * strafe;
 
@@ -182,6 +185,8 @@ export class Bot {
 
     let threatT = Infinity;
     let threatKind: ProjKind = 'bolt';
+    let threatX = 0;
+    let threatY = 0;
     for (const pr of s.projectiles) {
       if (pr.owner === this.id || pr.age < this.p.reaction || !pointVisible(me, pr.x, pr.y)) continue;
       const sp = Math.hypot(pr.vx, pr.vy);
@@ -199,16 +204,23 @@ export class Bot {
       if (t < threatT) {
         threatT = t;
         threatKind = pr.kind;
+        threatX = pr.x;
+        threatY = pr.y;
         const side = perp >= 0 ? 1 : -1;
         dodgeX = -uy * side;
         dodgeY = ux * side;
       }
     }
+    let walling = false;
     if (threatT < Infinity) {
       dodging = true;
       wx = dodgeX * 2;
       wy = dodgeY * 2;
-      if (!warrior && threatT < 10 && ready(SLOT.SPACE) && r() < 0.3) {
+      if (samurai && threatT < 18 && threatKind !== 'bolt' && threatKind !== 'arrow' && threatKind !== 'dagger' && ready(SLOT.Q) && r() < 0.5) {
+        // Wind Wall towards the incoming projectile.
+        buttons |= BTN.Q;
+        walling = true;
+      } else if (!warrior && threatT < 10 && ready(SLOT.SPACE) && r() < 0.3) {
         buttons |= BTN.SPACE;
       } else if (mage && threatT < 12 && threatKind !== 'bolt' && ready(SLOT.Q) && r() < 0.5) {
         buttons |= BTN.Q;
@@ -219,7 +231,7 @@ export class Bot {
     // Archers have nothing for close range, so they bail out earlier.
     const close = archer ? 50 : 0;
     const foeThreatening = foeMelee && (dist < 90 + close || (dist < 120 + close && (foe.cast !== null || foe.whirlT > 0)));
-    if (!warrior && foeThreatening && !buttons && this.decide(-s.frame)) {
+    if (!melee && foeThreatening && !buttons && this.decide(-s.frame)) {
       if (archer && ready(SLOT.E) && me.cast === null && r() < 0.5) buttons |= BTN.E;
       else if (!archer && ready(SLOT.Q) && r() < 0.5) buttons |= BTN.Q;
       else if (ready(SLOT.SPACE)) {
@@ -243,8 +255,22 @@ export class Bot {
       if (drawn < this.drawFor && !hidden) buttons |= BTN.M2;
     }
 
+    let engage = false;
+    // Out of body: snap back when hurt, after landing a good amount, or when it went badly.
+    if (samurai && me.soulT > 0 && (me.hp < CHAMPIONS[me.champ].hp * 0.3 || me.soulDmg >= 20 || dist > 360) && r() < 0.1) buttons |= BTN.E;
+
     if (!busy && !(buttons & (BTN.SPACE | BTN.Q | BTN.E))) {
-      if (archer) {
+      if (samurai) {
+        const pinned = foeLow || foe.rootT > 0 || foe.stunT > 0 || foe.cast !== null;
+        const gale = me.stacks >= TEMPEST.max;
+        if (ready(SLOT.R) && !hidden && los && dist < FATE.range - 20 && r() < (pinned ? 0.3 : 0.03)) press(SLOT.R);
+        else if (ready(SLOT.E) && me.soulT === 0 && !hidden && dist > 120 && dist < 320 && r() < 0.03 * a) press(SLOT.E);
+        else if (ready(SLOT.SPACE) && !hidden && dist > 140 && dist < BLADE.ticks * BLADE.speed + 80 && r() < 0.06 * a) {
+          press(SLOT.SPACE);
+          engage = true;
+        } else if (ready(SLOT.M2) && los && dist < (gale ? PROJ.gale.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
+        else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
+      } else if (archer) {
         const pinned = foe.rootT > 0 || foe.slowT > 0 || foe.cast !== null;
         if (ready(SLOT.R) && !hidden && dist < RAIN.range + 40 && (pinned ? r() < 0.2 : r() < 0.005)) press(SLOT.R);
         else if (ready(SLOT.Q) && hidden && r() < 0.015) press(SLOT.Q);
@@ -267,13 +293,13 @@ export class Bot {
         else if (ready(SLOT.E) && los && dist < PROJ.poison.range - 30 && r() < 0.03 * a) press(SLOT.E);
         else if (los && dist < PROJ.dagger.range - 10 && (!dodging || r() < 0.5) && r() < 0.9 * a) press(SLOT.M1);
       } else if (warrior) {
-        const melee = 2 * PLAYER_R + SLASH.reach;
+        const reach = 2 * PLAYER_R + SLASH.reach;
         if (ready(SLOT.R) && los && dist < RIFT.len && r() < 0.1) press(SLOT.R);
         else if (ready(SLOT.Q) && dist < CRY.r && (foe.cast !== null || r() < 0.03 * a)) press(SLOT.Q);
         else if (ready(SLOT.SPACE) && dist > 150 && dist < LEAP.range + 40 && r() < 0.07 * a) press(SLOT.SPACE);
         else if (ready(SLOT.M2) && los && dist > 140 && dist < PROJ.hook.range - 30 && r() < 0.06 * a) press(SLOT.M2);
         else if (ready(SLOT.E) && dist < WHIRL.r + 10 && me.whirlT === 0 && r() < 0.03 * a) press(SLOT.E);
-        else if (dist < melee && me.whirlT === 0 && r() < 0.95 * a) press(SLOT.M1);
+        else if (dist < reach && me.whirlT === 0 && r() < 0.95 * a) press(SLOT.M1);
       } else if (los && dist < PROJ.bolt.range) {
         const foeCastingBlast = foe.cast !== null && CHAMPIONS[foe.champ].abilities[foe.cast.ability].id === 'blast';
         if (ready(SLOT.R) && dist < METEOR.range + 40 && (foe.slowT > 0 || foe.cast) && r() < 0.1) press(SLOT.R);
@@ -294,7 +320,19 @@ export class Bot {
     }
     let ax: number;
     let ay: number;
-    if (aimId === 'blink' && !escape && threatT === Infinity) {
+    if (walling) {
+      // Put the wall between us and the projectile.
+      ax = threatX;
+      ay = threatY;
+    } else if (engage || aimId === 'soul' || aimId === 'fate') {
+      // Samurai engages: dash, spirit or blink straight at the target, leading a little.
+      ax = tx + this.tvx * 12 * this.p.lead;
+      ay = ty + this.tvy * 12 * this.p.lead;
+    } else if (aimId === 'tempest' && me.stacks >= TEMPEST.max) {
+      const t = dist / PROJ.gale.speed;
+      ax = tx + this.tvx * t * this.p.lead + this.errX;
+      ay = ty + this.tvy * t * this.p.lead + this.errY;
+    } else if (aimId === 'blink' && !escape && threatT === Infinity) {
       // Blink in for the kill.
       ax = tx;
       ay = ty;

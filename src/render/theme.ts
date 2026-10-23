@@ -20,6 +20,8 @@ export const COLORS = {
   vine: '#78c84a',
   sonic: '#e6a8ff',
   longshot: '#f2e6a0',
+  wind: '#bfefff',
+  spirit: '#8f8cff',
   blood: '#ff2d55',
   energy: '#ffd54a',
   orb: '#ffd166',
@@ -45,5 +47,7 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'snare' || id === 'rain' || id === 'vault') return COLORS.vine;
   if (id === 'sonic') return COLORS.sonic;
   if (id === 'longshot') return COLORS.longshot;
+  if (id === 'tempest' || id === 'gale' || id === 'blade' || id === 'wall') return COLORS.wind;
+  if (id === 'soul' || id === 'fate') return COLORS.spirit;
   return COLORS.players[owner];
 }

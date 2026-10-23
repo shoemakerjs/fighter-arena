@@ -1,4 +1,4 @@
-import { CHAMPIONS, MAX_ENERGY, ROUNDS_TO_WIN, SLOT_KEYS, SUDDEN_DEATH_AT, TICK_RATE, type AbilityId } from '../sim/constants';
+import { CHAMPIONS, MAX_ENERGY, ROUNDS_TO_WIN, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, type AbilityId } from '../sim/constants';
 import { abilityOf, maxHp } from '../sim/step';
 import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
@@ -231,8 +231,10 @@ export class Hud {
       const active =
         p.cast?.ability === i ||
         (def.id === 'counter' && p.counterT > 0) ||
-        ((def.id === 'dash' || def.id === 'leap' || def.id === 'vault') && p.dashT > 0) ||
+        ((def.id === 'dash' || def.id === 'leap' || def.id === 'vault' || def.id === 'blade') && p.dashT > 0) ||
         (def.id === 'arrow' && p.quickT > 0) ||
+        (def.id === 'soul' && p.soulT > 0) ||
+        (def.id === 'tempest' && p.stacks >= TEMPEST.max) ||
         (def.id === 'whirl' && p.whirlT > 0) ||
         (def.id === 'smoke' && p.stealthT > 0);
 
@@ -245,8 +247,18 @@ export class Hud {
 
       ctx.save();
       ctx.globalAlpha = cd > 0 || noEnergy ? 0.35 : 1;
-      drawIcon(ctx, def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
+      drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'gale' : def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
       ctx.restore();
+
+      // Steel Tempest stacks
+      if (def.id === 'tempest') {
+        for (let k = 0; k < TEMPEST.max; k++) {
+          ctx.beginPath();
+          ctx.arc(x + slot / 2 + (k - (TEMPEST.max - 1) / 2) * 10, y0 + slot - 7, 3, 0, TAU);
+          ctx.fillStyle = k < p.stacks ? COLORS.wind : 'rgba(255,255,255,0.15)';
+          ctx.fill();
+        }
+      }
 
       if (cd > 0 && def.cooldown > 30) {
         const k = cd / def.cooldown;
@@ -359,7 +371,7 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.roundRect(x, y, Math.max(0, w), h, Math.min(r, Math.max(0, w) / 2, h / 2));
 }
 
-function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId, x: number, y: number, color: string) {
+function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'gale', x: number, y: number, color: string) {
   ctx.save();
   ctx.translate(x, y);
   ctx.lineCap = 'round';
@@ -679,6 +691,117 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId, x: number, 
         ctx.lineTo(x + 3, y + 3);
         ctx.stroke();
       }
+      break;
+    case 'katana':
+      // Curved blade with a small guard
+      ctx.strokeStyle = COLORS.steel;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-8, 10);
+      ctx.quadraticCurveTo(4, 0, 14, -14);
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-8, 10);
+      ctx.lineTo(-14, 16);
+      ctx.stroke();
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-12, 6);
+      ctx.lineTo(-4, 14);
+      ctx.stroke();
+      break;
+    case 'tempest':
+      ctx.strokeStyle = COLORS.wind;
+      ctx.fillStyle = COLORS.wind;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-15, 0);
+      ctx.lineTo(9, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(16, 0);
+      ctx.lineTo(8, -5);
+      ctx.lineTo(8, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      for (const o of [-6, 6]) {
+        ctx.beginPath();
+        ctx.moveTo(-12, o);
+        ctx.lineTo(2, o);
+        ctx.stroke();
+      }
+      break;
+    case 'gale':
+      // Tornado: stacked arcs narrowing downwards
+      ctx.strokeStyle = COLORS.wind;
+      ctx.lineWidth = 2.5;
+      for (let i = 0; i < 4; i++) {
+        const w = 14 - i * 3.2;
+        ctx.beginPath();
+        ctx.ellipse(i * 1.2 - 2, -10 + i * 6.5, w, 2.6, 0, 0, TAU);
+        ctx.stroke();
+      }
+      break;
+    case 'blade':
+      ctx.strokeStyle = COLORS.wind;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-14, 10);
+      ctx.quadraticCurveTo(0, -12, 14, -4);
+      ctx.stroke();
+      ctx.strokeStyle = COLORS.steel;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(4, -10);
+      ctx.lineTo(16, -14);
+      ctx.stroke();
+      break;
+    case 'wall':
+      ctx.strokeStyle = COLORS.wind;
+      ctx.lineWidth = 2.5;
+      for (const o of [-8, 0, 8]) {
+        ctx.beginPath();
+        ctx.moveTo(o - 3, -14);
+        ctx.bezierCurveTo(o + 5, -6, o - 5, 6, o + 3, 14);
+        ctx.stroke();
+      }
+      break;
+    case 'soul':
+      // Body and the spirit stepping out of it
+      ctx.fillStyle = COLORS.spirit;
+      ctx.globalAlpha *= 0.45;
+      ctx.beginPath();
+      ctx.arc(6, -2, 7, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha /= 0.45;
+      ctx.beginPath();
+      ctx.arc(-6, 2, 7, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.spirit;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(-6, 2);
+      ctx.lineTo(6, -2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      break;
+    case 'fate':
+      ctx.strokeStyle = COLORS.spirit;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-16, 8);
+      ctx.lineTo(16, -8);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-10, -10);
+      ctx.lineTo(10, 10);
+      ctx.stroke();
       break;
     case 'rift':
       ctx.strokeStyle = COLORS.earth;

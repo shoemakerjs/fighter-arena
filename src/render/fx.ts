@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SLASH, SONIC, PLAYER_R, WHIRL } from '../sim/constants';
+import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, WALL, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { pointVisible } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -88,7 +88,7 @@ export class Fx {
       if (viewer && at && at.player !== localId && !pointVisible(viewer, at.x, at.y)) continue;
       switch (e.type) {
         case 'cast':
-          if (e.ability === 'meteor' || e.ability === 'rift' || e.ability === 'rain') this.sound('meteorCast');
+          if (e.ability === 'meteor' || e.ability === 'rift' || e.ability === 'rain' || e.ability === 'fate') this.sound('meteorCast');
           break;
 
         case 'release': {
@@ -118,6 +118,10 @@ export class Fx {
           } else if (e.ability === 'longshot' || e.ability === 'sonic' || e.ability === 'snare') {
             this.burst(e.x, e.y, 9, abilityColor(e.ability, e.player), 180, 2.8, 0.3);
             this.sound(e.ability === 'longshot' ? 'blast' : 'hook');
+          } else if (e.ability === 'tempest') {
+            // Released as a gale (the plain thrust has its own event).
+            this.burst(e.x, e.y, 16, COLORS.wind, 220, 3, 0.35);
+            this.sound('whirl');
           } else if (e.ability === 'rain') {
             // Volley loosed into the sky.
             for (let i = 0; i < 12; i++) this.particles.push(spark(e.x, e.y, COLORS.vine, 900));
@@ -135,7 +139,15 @@ export class Fx {
             break;
           }
           const big =
-            e.kind === 'blast' || e.kind === 'meteor' || e.kind === 'rift' || e.kind === 'leap' || e.kind === 'execute' || (e.kind === 'longshot' && e.dmg >= 20) || (e.kind === 'rain' && e.dmg >= RAIN.dmg);
+            e.kind === 'blast' ||
+            e.kind === 'meteor' ||
+            e.kind === 'rift' ||
+            e.kind === 'leap' ||
+            e.kind === 'execute' ||
+            e.kind === 'fate' ||
+            e.kind === 'gale' ||
+            (e.kind === 'longshot' && e.dmg >= 20) ||
+            (e.kind === 'rain' && e.dmg >= RAIN.dmg);
           const color = abilityColor(e.kind, e.source);
           this.burst(e.x, e.y, big ? 26 : 10, color, big ? 340 : 220, big ? 4.5 : 3, big ? 0.5 : 0.32);
           this.burst(e.x, e.y, 4, '#ffffff', 160, 2, 0.15);
@@ -210,6 +222,64 @@ export class Fx {
           this.sound('counter');
           break;
 
+        case 'thrust': {
+          // A line of wind sparks along the thrust.
+          for (let d = 20; d <= TEMPEST.len; d += 18) {
+            const x = e.x + e.fx * (PLAYER_R + d);
+            const y = e.y + e.fy * (PLAYER_R + d);
+            this.burst(x, y, 2, d % 36 < 18 ? '#ffffff' : COLORS.wind, 80, 2.4, 0.2, 28);
+          }
+          this.sound('slash');
+          break;
+        }
+
+        case 'wall': {
+          const p = s.players[e.player];
+          for (let k = -1; k <= 1; k += 0.25) {
+            this.burst(e.x - p.fy * WALL.half * k, e.y + p.fx * WALL.half * k, 3, COLORS.wind, 120, 3, 0.4, 20);
+          }
+          this.sound('whirl');
+          break;
+        }
+
+        case 'wallBlock':
+          this.burst(e.x, e.y, 10, COLORS.wind, 200, 2.6, 0.3);
+          this.sound('block');
+          break;
+
+        case 'soul':
+          this.burst(e.x, e.y, 18, COLORS.spirit, 160, 3.5, 0.45, 20);
+          this.sound('dash');
+          break;
+
+        case 'soulReturn':
+          this.burst(e.x0, e.y0, 16, COLORS.spirit, 200, 3, 0.4, 25);
+          this.burst(e.x, e.y, 16, COLORS.spirit, 140, 3, 0.4, 25);
+          this.rings.push({ x: e.x, y: e.y, r0: 50, r1: 14, life: 0.3, max: 0.3, color: COLORS.spirit, width: 4 });
+          this.sound('counter');
+          break;
+
+        case 'fate': {
+          // A slash of spirit light along the whole path.
+          const dx = e.x - e.x0;
+          const dy = e.y - e.y0;
+          const len = Math.hypot(dx, dy) || 1;
+          for (let d = 0; d <= len; d += 22) {
+            this.burst(e.x0 + (dx * d) / len, e.y0 + (dy * d) / len, 4, d % 44 < 22 ? '#ffffff' : COLORS.spirit, 160, 3.2, 0.45, 24);
+          }
+          this.rings.push({ x: e.x, y: e.y, r0: 20, r1: FATE.half + 40, life: 0.35, max: 0.35, color: COLORS.spirit, width: 6 });
+          this.shake += 8;
+          this.flash = 0.12;
+          this.flashColor = COLORS.spirit;
+          this.sound('boom');
+          break;
+        }
+
+        case 'stun':
+          this.rings.push({ x: e.x, y: e.y, r0: 16, r1: 46, life: 0.3, max: 0.3, color: '#ffe88a', width: 4 });
+          this.texts.push({ x: e.x, y: e.y - 50, text: 'STUNNED', color: '#ffe88a', life: 0.9, max: 0.9, size: 17 });
+          break;
+
         case 'vault':
           this.burst(e.x, e.y, 14, COLORS.vine, 140, 3, 0.35, 6);
           this.sound('dash');
@@ -249,7 +319,7 @@ export class Fx {
           // Arc of sparks along the axe's path.
           const color = COLORS.players[e.player];
           const base = Math.atan2(e.fy, e.fx);
-          const reach = PLAYER_R + SLASH.reach * 0.8;
+          const reach = PLAYER_R + e.reach * 0.8;
           for (let i = 0; i <= 8; i++) {
             const a = base - 0.95 + (i / 8) * 1.9;
             this.burst(e.x + Math.cos(a) * reach, e.y + Math.sin(a) * reach, 2, i % 3 === 0 ? '#ffffff' : color, 70, 2.6, 0.22, 26);
@@ -473,6 +543,11 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'stealth':
     case 'reveal':
     case 'vault':
+    case 'thrust':
+    case 'wall':
+    case 'soul':
+    case 'soulReturn':
+    case 'fate':
       return { x: e.x, y: e.y, player: e.player };
     case 'impact':
       return { x: e.x, y: e.y, player: e.owner };
