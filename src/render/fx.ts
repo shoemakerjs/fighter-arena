@@ -48,7 +48,7 @@ export interface Banner {
   max: number;
 }
 
-export const PLAYER_NAMES = ['TY', 'BOT'];
+export const PLAYER_NAMES = ['YOU', 'BOT'];
 
 /** Cosmetic effects driven by simulation events. Lives outside the deterministic sim. */
 export class Fx {
@@ -149,7 +149,7 @@ export class Fx {
           const p = s.players[e.player];
           this.rings.push({ x: p.x, y: p.y, r0: 24, r1: 80, life: 0.35, max: 0.35, color: '#ffffff', width: 4 });
           this.burst(e.x, e.y, 16, color, 260, 3, 0.35);
-          this.texts.push({ x: p.x, y: p.y - 46, text: 'KONTRA!', color, life: 1, max: 1, size: 20 });
+          this.texts.push({ x: p.x, y: p.y - 46, text: 'COUNTER!', color, life: 1, max: 1, size: 20 });
           this.shake += 3;
           this.sound('block');
           break;
@@ -242,7 +242,7 @@ export class Fx {
           if (e.lethal) {
             this.flash = 0.2;
             this.flashColor = COLORS.blood;
-            this.texts.push({ x: e.x, y: e.y - 60, text: 'EGZEKUCJA', color: COLORS.blood, life: 1.1, max: 1.1, size: 22 });
+            this.texts.push({ x: e.x, y: e.y - 60, text: 'EXECUTED', color: COLORS.blood, life: 1.1, max: 1.1, size: 22 });
           }
           this.shake += e.lethal ? 12 : 6;
           this.sound('slash');
@@ -312,24 +312,24 @@ export class Fx {
         }
 
         case 'fight':
-          this.banner = { text: 'WALCZ!', sub: '', color: COLORS.text, life: 0.9, max: 0.9 };
+          this.banner = { text: 'FIGHT!', sub: '', color: COLORS.text, life: 0.9, max: 0.9 };
           this.sound('fight');
           break;
 
         case 'roundEnd': {
-          let text = 'REMIS';
+          let text = 'DRAW';
           let color = COLORS.text;
           if (e.winner >= 0) {
             color = COLORS.players[e.winner];
-            if (localId === null) text = `RUNDA: ${PLAYER_NAMES[e.winner]}`;
-            else text = e.winner === localId ? 'RUNDA WYGRANA' : 'RUNDA PRZEGRANA';
+            if (localId === null) text = `ROUND: ${PLAYER_NAMES[e.winner]}`;
+            else text = e.winner === localId ? 'ROUND WON' : 'ROUND LOST';
           }
           this.banner = { text, sub: `${s.score[0]} : ${s.score[1]}`, color, life: 2.2, max: 2.2 };
           break;
         }
 
         case 'suddenDeath':
-          this.banner = { text: 'NAGŁA ŚMIERĆ', sub: 'arena się zamyka', color: COLORS.danger, life: 2, max: 2 };
+          this.banner = { text: 'SUDDEN DEATH', sub: 'the arena is closing', color: COLORS.danger, life: 2, max: 2 };
           this.flash = 0.2;
           this.flashColor = COLORS.danger;
           this.sound('fight');

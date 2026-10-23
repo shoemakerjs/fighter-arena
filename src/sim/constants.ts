@@ -53,7 +53,7 @@ export const SLOT = {
   E: 4,
   R: 5,
 } as const;
-export const SLOT_KEYS = ['LPM', 'PPM', 'SPACJA', 'Q', 'E', 'R'];
+export const SLOT_KEYS = ['LMB', 'RMB', 'SPACE', 'Q', 'E', 'R'];
 export const SLOT_BUTTONS = [BTN.M1, BTN.M2, BTN.SPACE, BTN.Q, BTN.E, BTN.R];
 
 export type AbilityId =
@@ -85,45 +85,45 @@ export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2 } as const;
 
 export const CHAMPIONS: ChampionDef[] = [
   {
-    name: 'Mag',
-    role: 'dystans i kontrola',
+    name: 'Mage',
+    role: 'ranged control',
     hp: 150,
     speed: 3.1,
     abilities: [
-      { id: 'bolt', name: 'Iskra', desc: 'podstawowy pocisk, przytrzymaj', cooldown: 4, cast: 14, castSlow: 0.6, energyCost: 0 },
-      { id: 'blast', name: 'Wybuch', desc: 'odrzuca i przerywa rzucanie', cooldown: 300, cast: 32, castSlow: 0.35, energyCost: 0 },
-      { id: 'dash', name: 'Zryw', desc: 'doskok do kursora, anuluje rzucanie', cooldown: 360, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'counter', name: 'Kontra', desc: 'blokuje trafienie, daje energię i przyspieszenie', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'frost', name: 'Szron', desc: 'spowalnia przeciwnika', cooldown: 420, cast: 18, castSlow: 0.5, energyCost: 0 },
-      { id: 'meteor', name: 'Meteor', desc: 'obszar z opóźnieniem, 100 energii', cooldown: 60, cast: 20, castSlow: 0.3, energyCost: 100 },
+      { id: 'bolt', name: 'Spark', desc: 'basic bolt, hold to keep firing', cooldown: 4, cast: 14, castSlow: 0.6, energyCost: 0 },
+      { id: 'blast', name: 'Blast', desc: 'knocks back and interrupts casts', cooldown: 300, cast: 32, castSlow: 0.35, energyCost: 0 },
+      { id: 'dash', name: 'Dash', desc: 'dash toward the cursor, cancels your cast', cooldown: 360, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'counter', name: 'Counter', desc: 'blocks a hit, grants energy and haste', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'frost', name: 'Frost', desc: 'slows the enemy', cooldown: 420, cast: 18, castSlow: 0.5, energyCost: 0 },
+      { id: 'meteor', name: 'Meteor', desc: 'delayed area strike, 100 energy', cooldown: 60, cast: 20, castSlow: 0.3, energyCost: 100 },
     ],
   },
   {
-    name: 'Wojownik',
-    role: 'walka wręcz i inicjacja',
+    name: 'Warrior',
+    role: 'melee and engage',
     hp: 175,
     speed: 3.4,
     abilities: [
-      { id: 'slash', name: 'Cięcie', desc: 'cios toporem przed sobą, przytrzymaj', cooldown: 6, cast: 12, castSlow: 0.5, energyCost: 0 },
-      { id: 'hook', name: 'Łańcuch', desc: 'przyciąga trafionego przeciwnika', cooldown: 360, cast: 20, castSlow: 0.4, energyCost: 0 },
-      { id: 'leap', name: 'Skok', desc: 'skok do kursora; w powietrzu nietrafialny', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'cry', name: 'Okrzyk', desc: 'odpycha wszystko wokół, przerywa rzucanie', cooldown: 480, cast: 6, castSlow: 0.2, energyCost: 0 },
-      { id: 'whirl', name: 'Wir', desc: 'wirujesz, raniąc wszystko obok', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'rift', name: 'Rozłam', desc: 'fala uderzeniowa w linii, 100 energii', cooldown: 60, cast: 24, castSlow: 0.2, energyCost: 100 },
+      { id: 'slash', name: 'Cleave', desc: 'axe swing in front of you, hold to keep swinging', cooldown: 6, cast: 12, castSlow: 0.5, energyCost: 0 },
+      { id: 'hook', name: 'Chain', desc: 'hook that pulls the enemy in', cooldown: 360, cast: 20, castSlow: 0.4, energyCost: 0 },
+      { id: 'leap', name: 'Leap', desc: 'jump to the cursor; untargetable in the air', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'cry', name: 'War Cry', desc: 'pushes everything away, interrupts casts', cooldown: 480, cast: 6, castSlow: 0.2, energyCost: 0 },
+      { id: 'whirl', name: 'Whirl', desc: 'spin, hitting everything around you', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'rift', name: 'Rift', desc: 'shockwave in a line, 100 energy', cooldown: 60, cast: 24, castSlow: 0.2, energyCost: 100 },
     ],
   },
   {
-    name: 'Cień',
-    role: 'zabójca: znaki, niewidzialność, egzekucja',
+    name: 'Assassin',
+    role: 'marks, stealth and executes',
     hp: 125,
     speed: 3.4,
     abilities: [
-      { id: 'dagger', name: 'Sztylet', desc: 'szybkie rzuty na krótki dystans, przytrzymaj', cooldown: 8, cast: 8, castSlow: 0.7, energyCost: 0 },
-      { id: 'mark', name: 'Znak', desc: 'naznacza wroga; następne trafienie zadaje +10', cooldown: 300, cast: 16, castSlow: 0.5, energyCost: 0 },
-      { id: 'blink', name: 'Krok cienia', desc: 'natychmiastowa teleportacja do kursora', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'smoke', name: 'Zasłona', desc: 'niewidzialność i przyspieszenie na 2 s; atak ją zdejmuje', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'poison', name: 'Jad', desc: 'zatruty sztylet: obrażenia przez 2 s', cooldown: 420, cast: 12, castSlow: 0.6, energyCost: 0 },
-      { id: 'execute', name: 'Egzekucja', desc: 'przenika przez wroga; x2 obrażeń poniżej 25% HP, 100 energii', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
+      { id: 'dagger', name: 'Dagger', desc: 'quick short-range throws, hold to keep throwing', cooldown: 8, cast: 8, castSlow: 0.7, energyCost: 0 },
+      { id: 'mark', name: 'Mark', desc: 'marks the enemy; your next hit deals +10', cooldown: 300, cast: 16, castSlow: 0.5, energyCost: 0 },
+      { id: 'blink', name: 'Shadow Step', desc: 'instant teleport to the cursor', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'smoke', name: 'Veil', desc: 'stealth and haste for 2 s; attacking reveals you', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'poison', name: 'Venom', desc: 'poisoned dagger: damage over 2 s', cooldown: 420, cast: 12, castSlow: 0.6, energyCost: 0 },
+      { id: 'execute', name: 'Execute', desc: 'dash through the enemy; double damage under 25% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
     ],
   },
 ];

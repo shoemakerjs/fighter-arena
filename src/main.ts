@@ -1,5 +1,5 @@
 import './style.css';
-import { Bot, type Difficulty } from './input/bot';
+import { Bot } from './input/bot';
 import { LocalInput } from './input/local';
 import { Sfx } from './render/audio';
 import { Fx, PLAYER_NAMES } from './render/fx';
@@ -12,8 +12,10 @@ import type { RollbackSession } from './net/rollback';
 import { CHAMPIONS, TICK_MS } from './sim/constants';
 import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
+import { ChampionSelect } from './ui/select';
 
-type Mode = 'menu' | 'lobby' | 'play' | 'pause' | 'end';
+/** home → (select | online) → play ⇄ pause → end. Menus run a bot match in the background. */
+type Mode = 'home' | 'select' | 'online' | 'play' | 'pause' | 'end';
 
 /** Which player slot this browser controls (the guest of an online match is 1). */
 let localId = 0;
@@ -47,13 +49,10 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 resize();
-const ui = { menu: $('menu'), pause: $('pause'), end: $('end'), hint: $('hint-bar') };
+const ui = { home: $('home'), pause: $('pause'), end: $('end'), hint: $('hint-bar') };
 
-let mode: Mode = 'menu';
-let difficulty: Difficulty = 'normal';
+let mode: Mode = 'home';
 let myChamp = 0;
-/** -1 = random. */
-let botChamp = -1;
 let state: GameState = createMatch();
 let prev: GameState = cloneState(state);
 /** Who controls each player slot: a bot, or null for the local human. */
@@ -69,7 +68,7 @@ function newMatch(ctrl: (Bot | null)[], champs: number[]) {
   controllers = ctrl;
   session = null;
   localId = 0;
-  setNames('TY', 'BOT');
+  setNames('YOU', 'BOT');
   fx.reset();
   clearTimeout(endTimer);
 }
@@ -79,22 +78,49 @@ function setNames(a: string, b: string) {
   PLAYER_NAMES[1] = b;
 }
 
-function startAttract() {
+/** Bots fight behind the menus. */
+function startAttract(next: Mode) {
   newMatch([new Bot(0, 'hard', seed++), new Bot(1, 'hard', seed++)], [randomChamp(), randomChamp()]);
   fx.silent = true;
-  setMode(lobbyOpen ? 'lobby' : 'menu');
+  setMode(next);
+}
+
+/** Back to the mode cards, optionally with a message (e.g. why the lobby closed). */
+function goHome(note?: string) {
+  select.close();
+  $('menu-note').textContent = note ?? '';
+  $('menu-note').classList.toggle('hidden', !note);
+  startAttract('home');
+}
+
+const select = new ChampionSelect({
+  onLock(champ) {
+    myChamp = champ;
+    if (select.mode === 'bot') startMatch();
+    else lobby.lockIn(champ);
+  },
+  onBack() {
+    if (lobby.active) lobby.leave();
+    else goHome();
+  },
+});
+
+function openBotSelect() {
+  sfx.unlock();
+  $('menu-note').classList.add('hidden');
+  select.open('bot', myChamp);
+  setMode('select');
 }
 
 // ------------------------------------------------------------------ online 1v1
 
-let lobbyOpen = false;
-const lobby = new Lobby({
+const lobby = new Lobby(select, {
   onStart(s) {
     sfx.unlock();
     session = s;
     controllers = [];
     localId = s.localId;
-    setNames(localId === 0 ? 'TY' : 'RYWAL', localId === 0 ? 'RYWAL' : 'TY');
+    setNames(localId === 0 ? 'YOU' : 'RIVAL', localId === 0 ? 'RIVAL' : 'YOU');
     state = s.state;
     prev = s.prev;
     fx.reset();
@@ -105,30 +131,28 @@ const lobby = new Lobby({
     setMode('play');
   },
   onBack() {
-    startAttract();
+    startAttract('online');
   },
   onExit(reason) {
-    lobbyOpen = false;
-    $('menu-note').textContent = reason ?? '';
-    $('menu-note').classList.toggle('hidden', !reason);
-    startAttract();
+    goHome(reason);
   },
 });
 
 function openLobby(code?: string) {
   sfx.unlock();
-  lobbyOpen = true;
+  $('menu-note').classList.add('hidden');
   if (code) void lobby.join(code, myChamp);
   else void lobby.host(myChamp);
-  $('menu-note').classList.add('hidden');
-  startAttract();
+  startAttract('online');
 }
 
 let endShown = false;
 
+/** Match against the bot with the last locked-in champion; the bot picks at random. */
 function startMatch() {
   sfx.unlock();
-  newMatch([null, new Bot(1, difficulty, seed++)], [myChamp, botChamp < 0 ? randomChamp() : botChamp]);
+  select.close();
+  newMatch([null, new Bot(1, select.difficulty, seed++)], [myChamp, randomChamp()]);
   fx.silent = false;
   input.clear();
   setMode('play');
@@ -138,20 +162,9 @@ function randomChamp() {
   return Math.floor(Math.random() * CHAMPIONS.length);
 }
 
-/** Menu controls list for the picked champion. */
-function renderControls() {
-  const c = CHAMPIONS[myChamp];
-  $('role').innerHTML = `<b>${c.name}</b> · ${c.role} · ${c.hp} HP`;
-  const keys = ['LPM', 'PPM / F', 'Spacja', 'Q', 'E', 'R'];
-  $('controls').innerHTML =
-    '<div><dt>WASD</dt><dd>ruch</dd></div>' +
-    c.abilities.map((a, i) => `<div><dt>${keys[i]}</dt><dd><b>${a.name}</b> — ${a.desc}</dd></div>`).join('');
-}
-
 function setMode(m: Mode) {
   mode = m;
-  ui.menu.classList.toggle('hidden', m !== 'menu');
-  if (m === 'lobby') lobby.show();
+  ui.home.classList.toggle('hidden', m !== 'home');
   ui.pause.classList.toggle('hidden', m !== 'pause');
   ui.end.classList.toggle('hidden', m !== 'end');
   ui.hint.classList.toggle('hidden', m !== 'play');
@@ -162,10 +175,10 @@ function setMode(m: Mode) {
 
 function showEnd(winner: number) {
   const title = $('end-title');
-  title.textContent = winner === localId ? 'Zwycięstwo' : 'Porażka';
+  title.textContent = winner === localId ? 'Victory' : 'Defeat';
   title.className = winner === localId ? 'win' : 'lose';
   $('end-score').textContent = localId === 0 ? `${state.score[0]} : ${state.score[1]}` : `${state.score[1]} : ${state.score[0]}`;
-  $('rematch').textContent = session ? 'Wróć do lobby' : 'Rewanż';
+  $('rematch').textContent = session ? 'Back to lobby' : 'Rematch';
   setMode('end');
 }
 
@@ -188,18 +201,22 @@ function tick() {
   const inputs: Input[] = controllers.map((c) => (c ? c.think(state) : input.read()));
   prev = cloneState(state);
   const events = step(state, inputs);
-  fx.handle(events, state, mode === 'menu' || mode === 'lobby' ? null : localId);
+  fx.handle(events, state, inMenus() ? null : localId);
 
   for (const e of events) {
     if (e.type !== 'matchEnd') continue;
-    if (mode === 'menu' || mode === 'lobby') {
-      startAttract();
+    if (inMenus()) {
+      startAttract(mode);
     } else {
       endTimer = window.setTimeout(() => {
         if (mode === 'play') showEnd(e.winner);
       }, 700);
     }
   }
+}
+
+function inMenus() {
+  return mode === 'home' || mode === 'select' || mode === 'online';
 }
 
 let acc = 0;
@@ -224,7 +241,7 @@ function frame(now: number) {
 function draw(dt: number) {
   const alpha = mode === 'pause' && !session ? 1 : acc / TICK_MS;
   const opts = {
-    localId: mode === 'menu' || mode === 'lobby' ? null : localId,
+    localId: inMenus() ? null : localId,
     cursor: mode === 'play' && input.hasPointer ? { x: input.screenX, y: input.screenY } : null,
   };
   view.render(prev, state, alpha, fx, dt, opts);
@@ -233,32 +250,16 @@ function draw(dt: number) {
 
 // ------------------------------------------------------------------ UI wiring
 
-function segmented(id: string, onPick: (value: string) => void) {
-  const buttons = document.querySelectorAll<HTMLButtonElement>(`#${id} button`);
-  for (const btn of buttons) {
-    btn.addEventListener('click', () => {
-      onPick(btn.dataset.value!);
-      for (const b of buttons) b.classList.toggle('active', b === btn);
-    });
-  }
-}
-segmented('difficulty', (v) => (difficulty = v as Difficulty));
-segmented('champ', (v) => {
-  myChamp = Number(v);
-  renderControls();
-});
-segmented('bot-champ', (v) => (botChamp = Number(v)));
-renderControls();
-$('play').addEventListener('click', startMatch);
+$('play').addEventListener('click', openBotSelect);
 $('play-online').addEventListener('click', () => openLobby());
 $('rematch').addEventListener('click', () => {
   if (!session) return startMatch();
   lobby.backToLobby();
-  startAttract();
+  startAttract('online');
 });
 $('resume').addEventListener('click', () => setMode('play'));
-$('quit').addEventListener('click', () => (session ? lobby.leave() : startAttract()));
-$('to-menu').addEventListener('click', () => (session ? lobby.leave() : startAttract()));
+$('quit').addEventListener('click', () => (session ? lobby.leave() : goHome()));
+$('to-menu').addEventListener('click', () => (session ? lobby.leave() : goHome()));
 
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') {
@@ -267,8 +268,8 @@ window.addEventListener('keydown', (e) => {
     else if (mode === 'pause') setMode('play');
   } else if (e.code === 'KeyM') {
     sfx.muted = !sfx.muted;
-    $('sound-state').textContent = sfx.muted ? 'wył.' : 'wł.';
-  } else if (e.code === 'Enter' && (mode === 'menu' || (mode === 'end' && !session))) {
+    $('sound-state').textContent = sfx.muted ? 'off' : 'on';
+  } else if (e.code === 'Enter' && mode === 'end' && !session) {
     startMatch();
   }
 });
@@ -295,5 +296,5 @@ if (import.meta.env.DEV) {
 
 const joinCode = new URLSearchParams(location.search).get('lobby');
 if (joinCode) openLobby(joinCode);
-else startAttract();
+else startAttract('home');
 requestAnimationFrame(frame);

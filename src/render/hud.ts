@@ -3,7 +3,8 @@ import { abilityOf, maxHp } from '../sim/step';
 import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
 import { PLAYER_NAMES, type Fx } from './fx';
-import { COLORS, FONT } from './theme';
+import { ROSTER } from '../ui/roster';
+import { COLORS, DISPLAY, FONT } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
 const TAU = Math.PI * 2;
@@ -99,7 +100,7 @@ export class Hud {
       ctx.fill();
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(at.x - 29, by + 1, 58 * k, 4);
-      ctx.font = `600 11px ${FONT}`;
+      ctx.font = `500 11px ${FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'bottom';
       ctx.fillStyle = 'rgba(238, 242, 251, 0.85)';
@@ -118,7 +119,7 @@ export class Hud {
       const at = view.worldToScreen(t.x, t.y, 70);
       const y = at.y - (1 - k) * 40;
       ctx.globalAlpha = Math.min(1, k * 2.5);
-      ctx.font = `700 ${t.size * pop}px ${FONT}`;
+      ctx.font = `${t.size * 1.15 * pop}px ${DISPLAY}`;
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(5,7,12,0.85)';
       ctx.strokeText(t.text, at.x, y);
@@ -152,14 +153,14 @@ export class Hud {
     ctx.strokeStyle = sudden ? COLORS.danger : 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.font = `700 20px ${FONT}`;
+    ctx.font = `26px ${DISPLAY}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = sudden ? COLORS.danger : COLORS.text;
     ctx.fillText(label, cx, y + 1);
-    ctx.font = `600 11px ${FONT}`;
+    ctx.font = `500 11px ${FONT}`;
     ctx.fillStyle = COLORS.muted;
-    ctx.fillText(`RUNDA ${s.round}`, cx, y + 30);
+    ctx.fillText(`ROUND ${s.round}`, cx, y + 30);
 
     // Names, score pips, HP
     for (let i = 0; i < 2; i++) {
@@ -168,9 +169,9 @@ export class Hud {
       const p = s.players[i];
       const nameX = cx + dir * 70;
       ctx.textAlign = i === 0 ? 'right' : 'left';
-      ctx.font = `700 16px ${FONT}`;
+      ctx.font = `22px ${DISPLAY}`;
       ctx.fillStyle = color;
-      const name = `${PLAYER_NAMES[i]} · ${CHAMPIONS[p.champ].name.toUpperCase()}`;
+      const name = `${PLAYER_NAMES[i]} · ${ROSTER[p.champ].hero}`;
       ctx.fillText(name, nameX, y - 6);
 
       const barW = Math.min(260, this.w / 2 - 110);
@@ -258,14 +259,14 @@ export class Hud {
         ctx.closePath();
         ctx.fill();
         ctx.restore();
-        ctx.font = `700 17px ${FONT}`;
+        ctx.font = `600 17px ${FONT}`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillStyle = COLORS.text;
         ctx.fillText(String(Math.ceil(cd / TICK_RATE)), x + slot / 2, y0 + slot / 2 + 1);
       }
 
-      ctx.font = `700 10px ${FONT}`;
+      ctx.font = `600 10px ${FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       ctx.fillStyle = COLORS.muted;
@@ -283,14 +284,14 @@ export class Hud {
       const n = Math.ceil(s.phaseT / 50);
       const k = (s.phaseT % 50) / 50;
       ctx.save();
-      ctx.font = `600 18px ${FONT}`;
+      ctx.font = `24px ${DISPLAY}`;
       ctx.fillStyle = COLORS.muted;
       ctx.lineWidth = 4;
       ctx.strokeStyle = 'rgba(5,7,12,0.7)';
-      ctx.strokeText(`RUNDA ${s.round}`, this.w / 2, cy - 70);
-      ctx.fillText(`RUNDA ${s.round}`, this.w / 2, cy - 70);
+      ctx.strokeText(`Round ${s.round}`, this.w / 2, cy - 70);
+      ctx.fillText(`Round ${s.round}`, this.w / 2, cy - 70);
       ctx.globalAlpha = 0.4 + 0.6 * k;
-      ctx.font = `700 ${72 + 30 * k}px ${FONT}`;
+      ctx.font = `${84 + 34 * k}px ${DISPLAY}`;
       ctx.lineWidth = 8;
       ctx.strokeText(String(n), this.w / 2, cy);
       ctx.fillStyle = COLORS.text;
@@ -307,14 +308,14 @@ export class Hud {
       const scale = 1 + (1 - appear) * 0.4;
       ctx.translate(this.w / 2, cy - 10);
       ctx.scale(scale, scale);
-      ctx.font = `700 58px ${FONT}`;
+      ctx.font = `68px ${DISPLAY}`;
       ctx.lineWidth = 8;
       ctx.strokeStyle = 'rgba(5,7,12,0.8)';
       ctx.strokeText(b.text, 0, 0);
       ctx.fillStyle = b.color;
       ctx.fillText(b.text, 0, 0);
       if (b.sub) {
-        ctx.font = `600 22px ${FONT}`;
+        ctx.font = `500 20px ${FONT}`;
         ctx.fillStyle = COLORS.text;
         ctx.lineWidth = 5;
         ctx.strokeText(b.sub, 0, 48);

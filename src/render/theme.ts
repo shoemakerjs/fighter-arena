@@ -25,7 +25,9 @@ export const COLORS = {
   danger: '#ff3b4f',
 };
 
-export const FONT = '"Chakra Petch", system-ui, sans-serif';
+export const FONT = '"Prompt", system-ui, sans-serif';
+/** Display face for big HUD text (names, timer, banners), as in the menus. */
+export const DISPLAY = '"Pirata One", serif';
 
 /** Signature color of an ability or hit; basic attacks use the owner's team color. */
 export function abilityColor(id: AbilityId | HitKind, owner: number): string {

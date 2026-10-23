@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -7,101 +7,110 @@
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%2311151f' stroke='%233be8c8' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='5' fill='%23ff4f6d'/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Pirata+One&family=Prompt:wght@400;500;600&display=swap" rel="stylesheet" />
   </head>
   <body>
     <canvas id="world"></canvas>
     <canvas id="hud"></canvas>
 
-    <div id="menu" class="overlay">
-      <div class="panel">
-        <p class="eyebrow">Prototyp · 1v1</p>
-        <h1>ARENA</h1>
-        <p class="lead">Zręcznościowa arena w stylu Battlerite. Celuj myszką, unikaj pocisków, wygraj 3 rundy.</p>
-        <p class="note hidden" id="menu-note"></p>
-        <div class="field">
-          <span class="label">Twoja postać</span>
-          <div class="segmented" id="champ">
-            <button data-value="0" class="active">Mag</button>
-            <button data-value="1">Wojownik</button>
-            <button data-value="2">Cień</button>
-          </div>
+    <!-- Rough, torn edges for cards (used via filter: url(#rough)) -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="7" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="9" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
+
+    <!-- Home: pick a mode -->
+    <div id="home" class="screen">
+      <header class="topbar">
+        <svg class="topbar-shape" viewBox="0 0 1440 80" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M622.998 0C614.83 11.045 610 24.7083 610 39.5C610 54.7413 615.128 68.7847 623.752 80H0V0H622.998ZM1440 80H817.248C825.872 68.7847 831 54.7413 831 39.5C831 24.7083 826.17 11.045 818.002 0H1440V80Z" />
+        </svg>
+        <span class="logo">Arena</span>
+      </header>
+      <p class="toast hidden" id="menu-note"></p>
+      <div class="modes">
+        <button class="mode-card" id="play-online">
+          <span class="mode-art" style="background-image: url(./art/warrior.webp)"></span>
+          <span class="mode-copy">
+            <span class="mode-title">Play vs Players</span>
+            <span class="mode-desc">Invite your friends, face each other in deadly battle</span>
+          </span>
+          <span class="tag">1v1</span>
+        </button>
+        <button class="mode-card" id="play">
+          <span class="mode-art" style="background-image: url(./art/mage.webp)"></span>
+          <span class="mode-copy">
+            <span class="mode-title">Play vs Bot</span>
+            <span class="mode-desc">Test champions and train your abilities with AI</span>
+          </span>
+          <span class="tag">1v1</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Online: invite a friend -->
+    <div id="invite" class="screen hidden">
+      <div class="invite-card">
+        <p class="kicker">Play vs Players</p>
+        <h2 class="display" id="invite-title">Invite a friend</h2>
+        <p class="body-text" id="invite-status"></p>
+        <div class="share hidden" id="invite-share">
+          <input id="invite-link" readonly />
+          <button class="pill" id="invite-copy">Copy</button>
         </div>
-        <div class="field">
-          <span class="label">Bot gra</span>
-          <div class="segmented" id="bot-champ">
-            <button data-value="0">Mag</button>
-            <button data-value="1">Wojownik</button>
-            <button data-value="2">Cień</button>
-            <button data-value="-1" class="active">Losowo</button>
-          </div>
-        </div>
-        <div class="field">
-          <span class="label">Poziom bota</span>
+        <button class="link-btn" id="invite-leave">Back</button>
+      </div>
+    </div>
+
+    <!-- Champion select (vs bot and online) -->
+    <div id="select" class="screen hidden">
+      <div class="select-art" id="select-art"></div>
+      <div class="select-shade"></div>
+      <div class="select-grunge"></div>
+      <button class="link-btn select-back" id="select-back">Back</button>
+      <div class="select-left">
+        <h1 class="display select-title">Select your character</h1>
+        <div class="roster" id="roster"></div>
+      </div>
+      <section class="champ-info" id="champ-info"></section>
+      <footer class="select-bar">
+        <div class="enemy">
+          <span class="body-text">Enemy team</span>
+          <span class="status-chip" id="enemy-status"></span>
           <div class="segmented" id="difficulty">
-            <button data-value="easy">Łatwy</button>
-            <button data-value="normal" class="active">Normalny</button>
-            <button data-value="hard">Trudny</button>
+            <button data-value="easy">Easy</button>
+            <button data-value="normal" class="active">Normal</button>
+            <button data-value="hard">Hard</button>
           </div>
         </div>
-        <div class="play-row">
-          <button id="play" class="primary">Graj z botem</button>
-          <button id="play-online" class="secondary">Graj 1v1 online</button>
+        <div class="lock">
+          <span class="display timer" id="select-timer">30s</span>
+          <button class="pill pill-lg" id="lock-in">Lock in</button>
         </div>
-        <p class="role" id="role"></p>
-        <dl class="controls" id="controls"></dl>
-        <p class="hint">Rozbij złotą kulę na środku: +HP i energia. Po 60 s arena zaczyna się zamykać.</p>
+      </footer>
+    </div>
+
+    <div id="pause" class="screen dim hidden">
+      <div class="dialog">
+        <h2 class="display">Paused</h2>
+        <button class="pill pill-lg" id="resume">Resume</button>
+        <button class="link-btn" id="quit">Leave match</button>
       </div>
     </div>
 
-    <div id="lobby" class="overlay hidden">
-      <div class="panel">
-        <p class="eyebrow">1v1 online</p>
-        <h2 id="lobby-title">Twoje lobby</h2>
-        <p class="lead" id="lobby-status"></p>
-        <div id="lobby-share" class="share hidden">
-          <input id="lobby-link" readonly />
-          <button id="lobby-copy" class="secondary">Kopiuj</button>
-        </div>
-        <div class="slots">
-          <div class="slot">
-            <div class="slot-head"><span class="who me">Ty</span><span class="state" id="lobby-me-state">Wybiera…</span></div>
-            <div class="segmented" id="lobby-champ">
-              <button data-value="0">Mag</button>
-              <button data-value="1">Wojownik</button>
-              <button data-value="2">Cień</button>
-            </div>
-            <p class="slot-role" id="lobby-me-role"></p>
-          </div>
-          <div class="slot">
-            <div class="slot-head"><span class="who foe">Przeciwnik</span><span class="state" id="lobby-foe-state">Nie dołączył</span></div>
-            <p class="slot-champ" id="lobby-foe-champ">—</p>
-          </div>
-        </div>
-        <button id="lobby-ready" class="primary" disabled>Gotowy</button>
-        <button id="lobby-leave" class="ghost">Wyjdź</button>
+    <div id="end" class="screen dim hidden">
+      <div class="dialog">
+        <p class="kicker">Match over</p>
+        <h2 class="display" id="end-title">Victory</h2>
+        <p class="display score" id="end-score">3 : 1</p>
+        <button class="pill pill-lg" id="rematch">Rematch</button>
+        <button class="link-btn" id="to-menu">Menu</button>
       </div>
     </div>
 
-    <div id="pause" class="overlay hidden">
-      <div class="panel small">
-        <h2>Pauza</h2>
-        <button id="resume" class="primary">Wznów</button>
-        <button id="quit" class="ghost">Wyjdź do menu</button>
-      </div>
-    </div>
-
-    <div id="end" class="overlay hidden">
-      <div class="panel small">
-        <p class="eyebrow">Koniec meczu</p>
-        <h2 id="end-title">Zwycięstwo</h2>
-        <p class="score" id="end-score">3 : 1</p>
-        <button id="rematch" class="primary">Rewanż</button>
-        <button id="to-menu" class="ghost">Menu</button>
-      </div>
-    </div>
-
-    <div id="hint-bar" class="hidden">Esc — pauza · M — dźwięk: <span id="sound-state">wł.</span></div>
+    <div id="hint-bar" class="hidden">Esc — pause · M — sound: <span id="sound-state">on</span></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

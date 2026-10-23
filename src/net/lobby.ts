@@ -1,11 +1,11 @@
-import { CHAMPIONS } from '../sim/constants';
+import type { ChampionSelect } from '../ui/select';
 import { NetLink, type NetMsg } from './link';
 import { RollbackSession } from './rollback';
 
 export interface LobbyHooks {
-  /** Both players are ready: start playing this session. */
+  /** Both players locked in: start playing this session. */
   onStart(session: RollbackSession): void;
-  /** The other player went back to the lobby after a match. */
+  /** The other player went back to champion select after a match. */
   onBack(): void;
   /** The lobby is gone (left, or the connection dropped); `reason` is shown to the player. */
   onExit(reason?: string): void;
@@ -14,8 +14,9 @@ export interface LobbyHooks {
 const $ = (id: string) => document.getElementById(id)!;
 
 /**
- * Online 1v1: the host opens a lobby and shares a link, the guest opens it, both
- * pick a champion and press ready. The host is always player 0.
+ * Online 1v1: the host opens a lobby and shares a link, the guest opens it, then
+ * both pick on the champion select screen and lock in. The host is always player 0
+ * and decides when the match starts, so both sides agree on the champions.
  */
 export class Lobby {
   private link: NetLink | null = null;
@@ -26,79 +27,82 @@ export class Lobby {
   private foeReady = false;
   session: RollbackSession | null = null;
 
-  constructor(private hooks: LobbyHooks) {
-    for (const btn of document.querySelectorAll<HTMLButtonElement>('#lobby-champ button')) {
-      btn.addEventListener('click', () => {
-        if (this.myReady) return;
-        this.myChamp = Number(btn.dataset.value);
-        this.sync();
-      });
-    }
-    $('lobby-ready').addEventListener('click', () => {
-      this.myReady = !this.myReady;
-      this.sync();
-      this.maybeStart();
-    });
-    $('lobby-copy').addEventListener('click', () => {
-      const input = $('lobby-link') as HTMLInputElement;
+  constructor(
+    private select: ChampionSelect,
+    private hooks: LobbyHooks,
+  ) {
+    $('invite-copy').addEventListener('click', () => {
+      const input = $('invite-link') as HTMLInputElement;
       void navigator.clipboard?.writeText(input.value);
-      $('lobby-copy').textContent = 'Skopiowano';
-      setTimeout(() => ($('lobby-copy').textContent = 'Kopiuj'), 1500);
+      input.select();
+      $('invite-copy').textContent = 'Copied';
+      setTimeout(() => ($('invite-copy').textContent = 'Copy'), 1500);
     });
-    $('lobby-leave').addEventListener('click', () => this.leave());
+    $('invite-leave').addEventListener('click', () => this.leave());
   }
 
   get localId() {
     return this.isHost ? 0 : 1;
   }
 
+  get active() {
+    return this.link !== null;
+  }
+
   async host(champ: number) {
     this.reset(true, champ);
-    this.status('Tworzę lobby…');
+    $('invite-title').textContent = 'Invite a friend';
+    this.status('Creating a lobby…');
     try {
       const code = await this.link!.host();
       const url = `${location.origin}${location.pathname}?lobby=${code}`;
-      ($('lobby-link') as HTMLInputElement).value = url;
-      $('lobby-share').classList.remove('hidden');
-      this.status('Wyślij link znajomemu i poczekaj, aż dołączy.');
+      ($('invite-link') as HTMLInputElement).value = url;
+      $('invite-share').classList.remove('hidden');
+      this.status('Send this link to a friend. The match setup opens as soon as they join.');
     } catch (err) {
-      this.fail((err as Error).message);
+      this.status((err as Error).message);
     }
   }
 
   async join(code: string, champ: number) {
     this.reset(false, champ);
-    this.status('Łączę z lobby…');
+    $('invite-title').textContent = 'Joining a lobby';
+    this.status('Connecting…');
     try {
       await this.link!.join(code);
     } catch (err) {
-      this.fail((err as Error).message);
+      this.status((err as Error).message);
     }
   }
 
-  /** After a match: both go back to picking champions. */
+  /** Called when the local player locks in on the champion select screen. */
+  lockIn(champ: number) {
+    this.myChamp = champ;
+    this.myReady = true;
+    this.sendState();
+    this.maybeStart();
+  }
+
+  /** After a match: both go back to champion select. */
   backToLobby(notify = true) {
     this.session = null;
     this.myReady = false;
     this.foeReady = false;
     if (notify) this.link?.send({ t: 'back' });
-    this.show();
-    this.sync();
+    this.select.open('online', this.myChamp);
+    this.sendState();
   }
 
   leave(reason?: string) {
     this.link?.close();
     this.link = null;
     this.session = null;
-    $('lobby').classList.add('hidden');
+    $('invite').classList.add('hidden');
+    this.select.close();
     const url = new URL(location.href);
     url.searchParams.delete('lobby');
     history.replaceState(null, '', url);
     this.hooks.onExit(reason);
-  }
-
-  show() {
-    $('lobby').classList.remove('hidden');
   }
 
   private reset(host: boolean, champ: number) {
@@ -109,22 +113,20 @@ export class Lobby {
     this.foeChamp = -1;
     this.foeReady = false;
     this.session = null;
-    $('lobby-share').classList.add('hidden');
-    $('lobby-title').textContent = host ? 'Twoje lobby' : 'Dołączasz do lobby';
+    $('invite-share').classList.add('hidden');
+    $('invite').classList.remove('hidden');
 
     const link = new NetLink();
     this.link = link;
     link.onConnect = () => {
-      this.status('Połączono! Wybierzcie postacie i kliknijcie „Gotowy”.');
-      $('lobby-share').classList.add('hidden');
-      this.sync();
+      $('invite').classList.add('hidden');
+      this.select.open('online', this.myChamp);
+      this.sendState();
     };
     link.onMessage = (msg) => this.onMessage(msg);
     link.onClose = (reason) => {
       if (this.link === link) this.leave(reason);
     };
-    this.show();
-    this.sync();
   }
 
   private onMessage(msg: NetMsg) {
@@ -132,7 +134,7 @@ export class Lobby {
       case 'lobby':
         this.foeChamp = msg.champ;
         this.foeReady = msg.ready;
-        this.sync(false);
+        this.select.setEnemy(msg.ready ? 'locked' : 'waiting');
         this.maybeStart();
         break;
       case 'start':
@@ -153,7 +155,6 @@ export class Lobby {
     }
   }
 
-  /** Only the host starts the match, so both sides agree on the champions. */
   private maybeStart() {
     if (!this.isHost || !this.myReady || !this.foeReady || this.foeChamp < 0 || this.session) return;
     const champs = [this.myChamp, this.foeChamp];
@@ -168,38 +169,16 @@ export class Lobby {
       sendHash: (frame, hash) => link.send({ t: 'hash', frame, hash }),
       onDesync: (frame) => console.error(`Desync at frame ${frame}`),
     });
-    $('lobby').classList.add('hidden');
+    this.select.close();
     this.hooks.onStart(this.session);
   }
 
-  /** Refresh the lobby UI and (optionally) tell the other player our pick. */
-  private sync(send = true) {
-    const connected = !!this.link?.connected;
-    for (const btn of document.querySelectorAll<HTMLButtonElement>('#lobby-champ button')) {
-      btn.classList.toggle('active', Number(btn.dataset.value) === this.myChamp);
-      btn.disabled = this.myReady;
-    }
-    const me = CHAMPIONS[this.myChamp];
-    $('lobby-me-role').textContent = `${me.role} · ${me.hp} HP`;
-    $('lobby-me-state').textContent = this.myReady ? 'Gotowy' : 'Wybiera…';
-    $('lobby-me-state').classList.toggle('ready', this.myReady);
-
-    $('lobby-foe-champ').textContent = connected && this.foeChamp >= 0 ? CHAMPIONS[this.foeChamp].name : '—';
-    $('lobby-foe-state').textContent = !connected ? 'Nie dołączył' : this.foeReady ? 'Gotowy' : 'Wybiera…';
-    $('lobby-foe-state').classList.toggle('ready', connected && this.foeReady);
-
-    const ready = $('lobby-ready') as HTMLButtonElement;
-    ready.disabled = !connected;
-    ready.textContent = this.myReady ? 'Anuluj gotowość' : 'Gotowy';
-    if (send && connected) this.link!.send({ t: 'lobby', champ: this.myChamp, ready: this.myReady });
+  /** Our pick and ready flag; the opponent's screen shows only the ready status (blind pick). */
+  private sendState() {
+    this.link?.send({ t: 'lobby', champ: this.myChamp, ready: this.myReady });
   }
 
   private status(text: string) {
-    $('lobby-status').textContent = text;
-  }
-
-  private fail(reason: string) {
-    this.status(reason);
-    $('lobby-share').classList.add('hidden');
+    $('invite-status').textContent = text;
   }
 }

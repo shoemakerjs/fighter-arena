@@ -92,7 +92,7 @@ export class NetLink {
         this.send({ t: 'ping' });
         if (performance.now() - this.lastHeard > TIMEOUT_MS && this.conn === conn) {
           this.conn = null;
-          this.onClose('Przeciwnik przestał odpowiadać.');
+          this.onClose('Your opponent stopped responding.');
         }
       }, 1000);
       this.onConnect();
@@ -105,10 +105,10 @@ export class NetLink {
     conn.on('close', () => {
       if (this.conn === conn) {
         this.conn = null;
-        this.onClose('Przeciwnik się rozłączył.');
+        this.onClose('Your opponent disconnected.');
       }
     });
-    conn.on('error', () => this.onClose('Połączenie zerwane.'));
+    conn.on('error', () => this.onClose('The connection dropped.'));
   }
 
   private whenOpen(peer: Peer): Promise<void> {
@@ -118,16 +118,16 @@ export class NetLink {
         const type = (err as { type?: string }).type;
         const reason =
           type === 'peer-unavailable'
-            ? 'Nie ma takiego lobby (albo host je zamknął).'
+            ? 'This lobby does not exist (or the host closed it).'
             : type === 'network' || type === 'server-error' || type === 'socket-error'
-              ? 'Brak połączenia z serwerem lobby.'
-              : `Błąd połączenia (${type ?? 'nieznany'}).`;
+              ? 'Cannot reach the lobby server.'
+              : `Connection error (${type ?? 'unknown'}).`;
         if (this.conn) this.onClose(reason);
         reject(new Error(reason));
       });
       peer.on('disconnected', () => {
         // Lost the signaling server; an established game keeps running peer-to-peer.
-        if (!this.conn) this.onClose('Utracono połączenie z serwerem lobby.');
+        if (!this.conn) this.onClose('Lost connection to the lobby server.');
       });
     });
   }
