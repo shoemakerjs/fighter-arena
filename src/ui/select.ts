@@ -150,19 +150,30 @@ export class ChampionSelect {
   }
 
   private buildRoster() {
-    $('roster').innerHTML = ROSTER.map(
-      (r, i) => `
+    // One group per category, in roster order; its champions share a row.
+    const groups = new Map<string, number[]>();
+    ROSTER.forEach((r, i) => groups.set(r.category, [...(groups.get(r.category) ?? []), i]));
+    const tile = (i: number) => {
+      const r = ROSTER[i];
+      return `
+          <button class="champ-tile" data-champ="${i}">
+            <span class="portrait-wrap">
+              <span class="portrait${r.flip ? ' flip' : ''}" style="background-image: url(${r.art}); background-position: ${r.portrait}"></span>
+              <span class="ring"></span>
+            </span>
+            <span class="champ-name">${r.hero}</span>
+          </button>`;
+    };
+    $('roster').innerHTML = [...groups]
+      .map(
+        ([category, champs]) => `
       <div class="roster-group">
-        <span class="roster-label">${r.category}</span>
-        <button class="champ-tile" data-champ="${i}">
-          <span class="portrait-wrap">
-            <span class="portrait${r.flip ? ' flip' : ''}" style="background-image: url(${r.art}); background-position: ${r.portrait}"></span>
-            <span class="ring"></span>
-          </span>
-          <span class="champ-name">${r.hero}</span>
-        </button>
+        <span class="roster-label">${category}</span>
+        <div class="roster-row">${champs.map(tile).join('')}
+        </div>
       </div>`,
-    ).join('');
+      )
+      .join('');
     for (const tile of document.querySelectorAll<HTMLButtonElement>('.champ-tile')) {
       tile.addEventListener('click', () => {
         if (this.locked) return;

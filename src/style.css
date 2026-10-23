@@ -482,7 +482,7 @@ button {
   left: 64px;
   top: 28px;
   bottom: 112px;
-  width: 362px;
+  width: 440px;
   pointer-events: none;
   display: flex;
   flex-direction: column;
@@ -499,7 +499,8 @@ button {
   align-self: flex-start;
   flex: 0 1 auto;
   min-height: 0;
-  width: 190px;
+  /* Three portraits a row, plus the ring's room on the left and the scrollbar on the right. */
+  width: min(420px, calc(100vw - 40px));
   /* Room for the selection ring, which reaches 12px past each portrait. */
   margin: -14px 0 0 -14px;
 }
@@ -565,6 +566,12 @@ button {
 .roster-label {
   font-size: 18px;
   white-space: nowrap;
+}
+
+.roster-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
 }
 
 .champ-tile {

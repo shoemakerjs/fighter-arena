@@ -2,7 +2,7 @@
 export interface RosterEntry {
   /** Hero name shown in menus and the HUD. */
   hero: string;
-  /** Roster group on the champion select screen. */
+  /** Roster group on the champion select screen; champions sharing one sit in the same row. */
   category: string;
   /** Key art, relative to the page (./art/placeholder.svg until a painting exists). */
   art: string;
@@ -58,7 +58,7 @@ export const ROSTER: RosterEntry[] = [
   },
   {
     hero: 'Sozuki',
-    category: 'Swordsman',
+    category: 'Close combat',
     art: './art/samurai.webp',
     flip: true,
     portrait: '38% 12%',
