@@ -131,6 +131,10 @@ export class World3D implements WorldView {
     const rimLight = new THREE.DirectionalLight('#6f8dff', 1.1);
     rimLight.position.set(300, 420, -800);
     scene.add(rimLight);
+    // Warm fill from the camera's side so faces turned away from the key light stay readable.
+    const fill = new THREE.DirectionalLight('#ffe0c8', 0.9);
+    fill.position.set(-150, 500, 900);
+    scene.add(fill);
 
     this.arena = buildArena(scene, this.glowTex);
     for (const pl of PILLARS) {

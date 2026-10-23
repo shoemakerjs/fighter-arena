@@ -339,6 +339,21 @@ function toon(color: THREE.ColorRepresentation, extra: THREE.MeshToonMaterialPar
   return new THREE.MeshToonMaterial({ color, gradientMap: toonGradient(), ...extra });
 }
 
+let softRamp: THREE.DataTexture | null = null;
+
+/** Toon material with a lighter shadow band, for faces and hair that face away from the key light. */
+function toonSoft(color: THREE.ColorRepresentation) {
+  if (!softRamp) {
+    const steps = [175, 205, 232, 255];
+    const data = new Uint8Array(steps.length * 4);
+    steps.forEach((v, i) => data.set([v, v, v, 255], i * 4));
+    softRamp = new THREE.DataTexture(data, steps.length, 1);
+    softRamp.minFilter = softRamp.magFilter = THREE.NearestFilter;
+    softRamp.needsUpdate = true;
+  }
+  return new THREE.MeshToonMaterial({ color, gradientMap: softRamp });
+}
+
 let outlineMaterial: THREE.MeshBasicMaterial | null = null;
 
 /** Inverted hull: the back faces pushed out along their normals by a fixed width. */
@@ -377,11 +392,37 @@ function lathe(profile: [number, number][], segments = 28): THREE.LatheGeometry 
   );
 }
 
+/** Simple seeded noise in [0, 1) for a ring index, so lathe seams match. */
+function ringNoise(i: number, seed: number): number {
+  const x = Math.sin(i * 12.9898 + seed * 78.233) * 43758.5453;
+  return x - Math.floor(x);
+}
+
 /**
- * Gown fabric: navy with soft fold stripes, a gold hem band, stars, and a big
- * crescent on the back. u runs around the skirt (back is u = 0.75), v bottom→top.
+ * Lathe whose bottom edge is torn: the lowest profile point of each segment drops
+ * by up to `tear`. Optional phi range makes partial shells (cloaks, capes).
  */
-function makeGownTexture(): THREE.CanvasTexture {
+function raggedLathe(profile: [number, number][], segments: number, tear: number, seed: number, phiStart = 0, phiLength = TAU): THREE.LatheGeometry {
+  const geo = new THREE.LatheGeometry(
+    profile.map(([r, y]) => new THREE.Vector2(r, y)),
+    segments,
+    phiStart,
+    phiLength,
+  );
+  const pos = geo.attributes.position;
+  const n = profile.length;
+  const full = phiLength >= TAU - 1e-6;
+  for (let i = 0; i <= segments; i++) {
+    const k = full ? i % segments : i;
+    const drop = (i % 2 ? 0.25 : 0.75) * tear + ringNoise(k, seed) * tear * 0.6;
+    pos.setY(i * n, pos.getY(i * n) - drop);
+  }
+  geo.computeVertexNormals();
+  return geo;
+}
+
+/** Witch gown: deep purple with gold filigree hem, vines and a scattered pattern. u around, v bottom→top. */
+function makeWitchGownTexture(): THREE.CanvasTexture {
   const W = 1024;
   const H = 512;
   const c = document.createElement('canvas');
@@ -389,67 +430,56 @@ function makeGownTexture(): THREE.CanvasTexture {
   c.height = H;
   const g = c.getContext('2d')!;
   const grad = g.createLinearGradient(0, 0, 0, H);
-  grad.addColorStop(0, '#2b2f6e');
-  grad.addColorStop(1, '#1b1d47');
+  grad.addColorStop(0, '#3e2759');
+  grad.addColorStop(1, '#25163a');
   g.fillStyle = grad;
   g.fillRect(0, 0, W, H);
-
-  // Folds
-  for (let i = 0; i < 24; i++) {
-    const x = (i / 24) * W;
-    const fold = g.createLinearGradient(x, 0, x + W / 24, 0);
-    fold.addColorStop(0, 'rgba(0,0,0,0.18)');
-    fold.addColorStop(0.5, 'rgba(255,255,255,0.05)');
-    fold.addColorStop(1, 'rgba(0,0,0,0.18)');
+  for (let i = 0; i < 20; i++) {
+    const x = (i / 20) * W;
+    const fold = g.createLinearGradient(x, 0, x + W / 20, 0);
+    fold.addColorStop(0, 'rgba(0,0,0,0.2)');
+    fold.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+    fold.addColorStop(1, 'rgba(0,0,0,0.2)');
     g.fillStyle = fold;
-    g.fillRect(x, 0, W / 24, H);
+    g.fillRect(x, 0, W / 20, H);
   }
-
-  // Gold hem: a band and a thin line above it, with diamond studs
-  g.fillStyle = '#d4ad62';
-  g.fillRect(0, H - 34, W, 14);
-  g.fillRect(0, H - 52, W, 3);
-  for (let x = 16; x < W; x += 42) {
+  g.strokeStyle = '#d9b260';
+  g.fillStyle = '#d9b260';
+  // Hem band with scrolls
+  g.lineWidth = 6;
+  g.beginPath();
+  g.moveTo(0, H - 30);
+  g.lineTo(W, H - 30);
+  g.stroke();
+  g.lineWidth = 3;
+  for (let x = 0; x < W; x += 64) {
     g.beginPath();
-    g.moveTo(x, H - 62);
-    g.lineTo(x + 5, H - 56);
-    g.lineTo(x, H - 50);
-    g.lineTo(x - 5, H - 56);
-    g.closePath();
-    g.fill();
+    g.moveTo(x, H - 36);
+    g.bezierCurveTo(x + 10, H - 90, x + 50, H - 90, x + 32, H - 60);
+    g.bezierCurveTo(x + 22, H - 46, x + 12, H - 60, x + 22, H - 66);
+    g.stroke();
   }
-
-  // Stars
-  let seed = 11;
+  // Rising vines
+  for (let x = 32; x < W; x += 128) {
+    g.beginPath();
+    g.moveTo(x, H - 90);
+    for (let y = H - 90; y > 140; y -= 30) g.quadraticCurveTo(x + (y % 60 ? 14 : -14), y - 15, x, y - 30);
+    g.stroke();
+  }
+  // Tiny diamonds
+  let seed = 5;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  g.fillStyle = 'rgba(232, 205, 140, 0.85)';
-  for (let i = 0; i < 70; i++) {
+  g.fillStyle = 'rgba(217, 178, 96, 0.55)';
+  for (let i = 0; i < 90; i++) {
     const x = rnd() * W;
-    const y = 40 + rnd() * (H - 140);
-    const r = 1.5 + rnd() * 3;
+    const y = 30 + rnd() * (H - 150);
     g.beginPath();
-    for (let k = 0; k < 8; k++) {
-      const a = (k / 8) * TAU;
-      const rr = k % 2 ? r * 0.35 : r;
-      g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-    }
+    g.moveTo(x, y - 4);
+    g.lineTo(x + 3, y);
+    g.lineTo(x, y + 4);
+    g.lineTo(x - 3, y);
     g.fill();
   }
-
-  // Crescent on the back
-  const cx = W * 0.75;
-  const cy = H * 0.62;
-  g.fillStyle = '#d4ad62';
-  g.beginPath();
-  g.arc(cx, cy, 46, 0, TAU);
-  g.fill();
-  g.globalCompositeOperation = 'destination-out';
-  g.beginPath();
-  g.arc(cx + 20, cy - 12, 42, 0, TAU);
-  g.fill();
-  g.globalCompositeOperation = 'source-over';
-  g.fillStyle = grad;
-
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.anisotropy = 4;
@@ -459,28 +489,32 @@ function makeGownTexture(): THREE.CanvasTexture {
 // ---------------------------------------------------------------- mage
 
 /**
- * Mage — moon elf sorceress (from the concept sheet), in a toon style: smooth
- * lathed gown with a star-and-crescent pattern, a face, silver hair in locks and
- * a braid, elf ears, gold circlet, sheer bell sleeves and a ringed orb staff.
- * Team color: sash, gems and the orb.
+ * Mage — witch (from the concept sheet), toon style: crooked purple hat with a
+ * skull and gold chain band, purple gown with gold filigree and a wine-red lining
+ * (high-low hem showing white stockings and gold heels), bell sleeves, platinum
+ * hair, gold choker and bracers, a slim gold staff with a red gem.
+ * Team color: the hat skull's eyes, the pendant gem and the staff glow.
  */
 function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
   const bright = lighten(color, 0.45);
   const matTeam = toon(team);
-  const matGown = toon('#ffffff', { map: makeGownTexture() });
-  const matBodice = toon('#1a1c40');
-  const matSheer = toon('#6a6fb8', { transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false });
-  const matSkin = toon('#efc0a0');
-  const matHair = toon('#d6cec4');
-  const matHairDark = toon('#a89f95');
-  const matGold = toon('#e0b866');
-  const matStaff = toon('#241f3d');
+  const matGown = toon('#ffffff', { map: makeWitchGownTexture() });
+  const matPurple = toon('#3a2454');
+  const matPurpleDark = toon('#24152f');
+  const matLining = toon('#6e1f2c', { side: THREE.BackSide });
+  const matSkin = toonSoft('#f3c3a6');
+  const matStocking = toon('#ece6df');
+  const matHair = toonSoft('#e6dccd');
+  const matHairDark = toonSoft('#bfb3a3');
+  const matGold = toon('#dcb465');
+  const matBone = toon('#d8ccb0');
+  const matRuby = new THREE.MeshBasicMaterial({ color: '#d42a3c', toneMapped: false });
   const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
   const matEyeWhite = new THREE.MeshBasicMaterial({ color: '#f4f1ee' });
-  const matIris = new THREE.MeshBasicMaterial({ color: '#8a6fd1' });
+  const matIris = new THREE.MeshBasicMaterial({ color: '#7d6cc4' });
   const matPupil = new THREE.MeshBasicMaterial({ color: '#1a1026' });
-  const matLips = new THREE.MeshBasicMaterial({ color: '#b5596a' });
+  const matLips = new THREE.MeshBasicMaterial({ color: '#b04a5c' });
 
   const root = new THREE.Group();
   const lean = new THREE.Group();
@@ -500,145 +534,155 @@ function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
   const outlined: THREE.Mesh[] = [];
   const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
 
-  // Gown: flared, slightly wavy skirt with a sheer overskirt
-  // Lathe u = 0.75 already faces local -X (the back), where the crescent is painted.
-  keep(add(lathe([[19.5, 0], [18.6, 3], [16.8, 8], [14.6, 14], [12.2, 20.5], [10, 26.5], [8.6, 31], [8.1, 33]]), matGown, 0, 0, 0));
-  add(lathe([[22, 1], [20, 6], [15.5, 15], [11, 25], [9, 31]], 24), matSheer, -0.6, 0, 0);
-
-  // Torso: hips → waist → chest → shoulders → neck
-  keep(add(lathe([[8.1, 33], [8.7, 36], [9.6, 40], [9.8, 43], [9, 46], [6.4, 48.6], [2.8, 50.2]]), matBodice, 0, 0, 0));
+  // Legs in white stockings with gold heels (seen through the high-low hem)
   for (const side of [-1, 1]) {
-    const vline = limb(body, v(9.3, 46.5, side * 4.2), v(8.6, 37.5, 0), 0.5, matGold);
-    vline.castShadow = true;
+    keep(limb(body, v(0.5, 25, side * 3.8), v(2.2, 12, side * 4.4), 2.5, matStocking));
+    keep(limb(body, v(2.2, 12, side * 4.4), v(1.4, 3, side * 4.6), 2.1, matStocking));
+    for (const y of [9, 16]) add(new THREE.TorusGeometry(2.4, 0.3, 4, 12), matGold, 2, y, side * 4.4).rotation.x = Math.PI / 2;
+    keep(add(new THREE.BoxGeometry(5, 1.6, 2.6), matGold, 3.2, 1.6, side * 4.6));
+    keep(add(new THREE.ConeGeometry(0.5, 3, 5), matGold, -0.2, 1.5, side * 4.6));
   }
-  add(new THREE.OctahedronGeometry(1.6, 0), matGlow, 8.9, 37.8, 0);
-  const sash = keep(add(new THREE.TorusGeometry(8.4, 1.4, 8, 28), matTeam, 0, 33, 0));
-  sash.rotation.x = Math.PI / 2;
-  keep(limb(body, v(7.6, 32, -3.5), v(9.4, 21, -4.8), 1, matTeam));
-  keep(limb(body, v(7.6, 32, -2), v(8.8, 23.5, -1.6), 0.9, matTeam));
 
-  // Shoulders, arms, hands; the right hand holds the staff
+  // Gown: high-low skirt (front hem lifted), gold-patterned outside, wine lining inside
+  const skirt = lathe([[18, 0], [17.2, 4], [15.4, 10], [13, 17], [10.6, 24], [8.9, 30], [8.2, 33]], 32);
+  const sp = skirt.attributes.position;
+  for (let i = 0; i < sp.count; i++) {
+    const x = sp.getX(i);
+    const z = sp.getZ(i);
+    const y = sp.getY(i);
+    const front = Math.max(0, x / Math.hypot(x, z || 1e-6));
+    if (y < 24) sp.setY(i, y + front * front * (24 - y) * 0.68);
+  }
+  skirt.computeVertexNormals();
+  keep(add(skirt, matGown, 0, 0, 0));
+  add(skirt, matLining, 0, 0, 0);
+
+  // Bodice with gold trim and a team pendant
+  keep(add(lathe([[8.2, 33], [8.7, 36], [9.5, 40], [9.6, 43], [8.8, 46], [6.2, 48.6], [2.8, 50.2]]), matPurpleDark, 0, 0, 0));
+  for (const y of [33.5, 46.2]) add(new THREE.TorusGeometry(y > 40 ? 8.8 : 8.3, 0.5, 6, 28), matGold, 0, y, 0).rotation.x = Math.PI / 2;
+  for (const side of [-1, 1]) limb(body, v(9.2, 46.3, side * 4.6), v(8.7, 37.8, 0), 0.45, matGold);
+  limb(body, v(8.8, 37.8, 0), v(8.6, 34, 0), 0.45, matGold);
+  add(new THREE.OctahedronGeometry(1.5, 0), matTeam, 9.1, 41.5, 0).scale.set(0.6, 1.3, 1);
+  add(new THREE.OctahedronGeometry(0.9, 0), matGlow, 9.6, 41.5, 0);
+
+  // Bare shoulders, arms inside long bell sleeves (purple outside, wine inside), gold bracers
   for (const side of [-1, 1]) keep(add(new THREE.SphereGeometry(3, 14, 10), matSkin, 0, 46.4, side * 8.8));
   const rElbow = v(2.5, 38, 12.4);
   const rHand = v(5, 30.5, 15.2);
-  const lElbow = v(1, 37.5, -11.6);
-  const lHand = v(4.2, 29.5, -10.6);
-  keep(limb(body, v(0, 46.4, 8.8), rElbow, 1.75, matSkin));
-  keep(limb(body, rElbow, rHand, 1.5, matSkin));
-  keep(limb(body, v(0, 46.4, -8.8), lElbow, 1.75, matSkin));
-  keep(limb(body, lElbow, lHand, 1.5, matSkin));
-  for (const hand of [rHand, lHand]) keep(add(new THREE.SphereGeometry(1.9, 12, 10), matSkin, hand.x, hand.y - 1, hand.z));
-  for (const [elbow, side] of [[rElbow, 1], [lElbow, -1]] as const) {
-    add(new THREE.TorusGeometry(1.95, 0.45, 6, 12), matGold, elbow.x + 0.6, elbow.y - 3, elbow.z + side * 0.4).rotation.x = Math.PI / 2;
-    const sleeve = add(lathe([[2.2, 0], [3.4, -4], [5.4, -10], [7.2, -17], [7.8, -20]], 18), matSheer, elbow.x, elbow.y + 2, elbow.z + side * 0.6);
+  const lElbow = v(1.5, 37.5, -11.8);
+  const lHand = v(5, 30, -11.2);
+  keep(limb(body, v(0, 46.4, 8.8), rElbow, 1.7, matSkin));
+  keep(limb(body, rElbow, rHand, 1.45, matSkin));
+  keep(limb(body, v(0, 46.4, -8.8), lElbow, 1.7, matSkin));
+  keep(limb(body, lElbow, lHand, 1.45, matSkin));
+  for (const hand of [rHand, lHand]) keep(add(new THREE.SphereGeometry(1.8, 12, 10), matSkin, hand.x, hand.y - 1, hand.z));
+  for (const [elbow, hand, side] of [[rElbow, rHand, 1], [lElbow, lHand, -1]] as const) {
+    const sleeveGeo = raggedLathe([[6.2, -19], [5.2, -13], [3.5, -6], [2.4, 0]], 20, 2.2, side + 3);
+    const sleeve = keep(add(sleeveGeo, matPurple, elbow.x - 0.5, elbow.y + 5.5, elbow.z + side * 0.8));
     sleeve.rotation.x = side * 0.12;
+    const lining = add(sleeveGeo, matLining, 0, 0, 0, sleeve);
+    lining.castShadow = false;
+    const bracer = add(new THREE.CylinderGeometry(1.9, 1.7, 2.6, 10), matGold, hand.x - 0.8, hand.y + 2, hand.z);
+    bracer.rotation.x = side * 0.15;
+    add(new THREE.OctahedronGeometry(0.7, 0), matRuby, hand.x + 0.9, hand.y + 2, hand.z);
   }
 
-  // Neck, choker, head
+  // Neck, gold choker, head and face
   keep(add(new THREE.CylinderGeometry(2.2, 2.7, 5, 12), matSkin, 0, 50.5, 0));
-  const choker = add(new THREE.TorusGeometry(2.6, 0.55, 6, 16), matGold, 0, 51, 0);
-  choker.rotation.x = Math.PI / 2;
-  const head = keep(add(new THREE.SphereGeometry(6.1, 24, 18), matSkin, 0.7, 57.4, 0));
-  head.scale.set(1, 1.1, 0.92);
-  keep(add(new THREE.SphereGeometry(2.3, 14, 10), matSkin, 2.6, 53.9, 0)).scale.set(1, 0.85, 1.25); // jaw
-
-  // Face (on +X)
+  add(new THREE.TorusGeometry(2.6, 0.6, 6, 16), matGold, 0, 51, 0).rotation.x = Math.PI / 2;
+  add(new THREE.OctahedronGeometry(0.8, 0), matRuby, 2.9, 50.6, 0);
+  keep(add(new THREE.SphereGeometry(6.1, 24, 18), matSkin, 0.7, 57.4, 0)).scale.set(1, 1.1, 0.92);
+  keep(add(new THREE.SphereGeometry(2.3, 14, 10), matSkin, 2.6, 53.9, 0)).scale.set(1, 0.85, 1.25);
   for (const side of [-1, 1]) {
-    const white = add(new THREE.SphereGeometry(1.3, 12, 8), matEyeWhite, 5.75, 57.8, side * 2.4);
-    white.scale.set(0.45, 0.75, 1);
-    const iris = add(new THREE.SphereGeometry(0.85, 10, 8), matIris, 6.25, 57.7, side * 2.3);
-    iris.scale.set(0.4, 1, 1);
-    add(new THREE.SphereGeometry(0.4, 8, 6), matPupil, 6.6, 57.7, side * 2.3).scale.set(0.4, 1, 1);
-    const brow = add(new THREE.BoxGeometry(0.5, 0.45, 2.6), matHairDark, 6, 59.9, side * 2.5);
-    brow.rotation.x = side * 0.18;
-  }
-  const nose = add(new THREE.ConeGeometry(0.42, 1.3, 6), matSkin, 6.45, 56.3, 0);
-  nose.rotation.z = -Math.PI / 2 + 0.6;
-  add(new THREE.BoxGeometry(0.35, 0.4, 1.7), matLips, 6.05, 53.9, 0);
-
-  // Elf ears
-  for (const side of [-1, 1]) {
-    const ear = keep(add(new THREE.ConeGeometry(1.5, 11, 8), matSkin, -0.6, 58.6, side * 6.6));
+    add(new THREE.SphereGeometry(1.25, 12, 8), matEyeWhite, 5.75, 57.8, side * 2.4).scale.set(0.45, 0.65, 1);
+    add(new THREE.SphereGeometry(0.8, 10, 8), matIris, 6.25, 57.7, side * 2.3).scale.set(0.4, 0.9, 1);
+    add(new THREE.SphereGeometry(0.38, 8, 6), matPupil, 6.6, 57.7, side * 2.3).scale.set(0.4, 1, 1);
+    const brow = add(new THREE.BoxGeometry(0.5, 0.4, 2.5), matHairDark, 6, 59.7, side * 2.5);
+    brow.rotation.x = side * -0.12;
+    const ear = keep(add(new THREE.ConeGeometry(1.2, 5.5, 8), matSkin, -0.4, 58, side * 6.2));
     ear.scale.set(0.55, 1, 1);
-    ear.rotation.x = side * (Math.PI / 2 - 0.5);
+    ear.rotation.x = side * (Math.PI / 2 - 0.55);
     ear.rotation.z = 0.35;
   }
+  add(new THREE.ConeGeometry(0.42, 1.3, 6), matSkin, 6.45, 56.3, 0).rotation.z = -Math.PI / 2 + 0.6;
+  add(new THREE.BoxGeometry(0.35, 0.42, 1.8), matLips, 6.05, 53.9, 0);
 
-  // Hair: crown, swept bangs, long locks down the back, side locks, braid
+  // Long platinum hair: crown, bangs, locks to the waist at the back and sides
   const crown = keep(add(new THREE.SphereGeometry(6.8, 24, 14, 0, TAU, 0, Math.PI * 0.6), matHair, -0.5, 58.4, 0));
   crown.rotation.z = 0.32;
   crown.scale.set(1.04, 1.06, 0.98);
-  for (const side of [-1, 1]) keep(limb(body, v(5.4, 62.2, side * 0.6), v(4.4, 59, side * 5.2), 1.5, matHair));
-  for (let i = 0; i < 5; i++) {
-    const z = -5.4 + i * 2.7;
-    keep(limb(body, v(-4.4, 59, z * 0.8), v(-7.2 - Math.abs(z) * 0.1, 29 + Math.abs(z) * 0.8, z * 1.15), 2.3, i % 2 ? matHair : matHairDark));
+  for (const side of [-1, 1]) keep(limb(body, v(5.6, 61.6, side * 0.8), v(5.2, 57.4, side * 5.2), 1.4, matHair));
+  for (let i = 0; i < 6; i++) {
+    const z = -6 + i * 2.4;
+    const wave = i % 2 ? 1.2 : -1.2;
+    keep(limb(body, v(-4.6, 59, z * 0.85), v(-7.6 + wave * 0.3, 33 + Math.abs(z) * 0.6, z * 1.2 + wave), 2.2, i % 2 ? matHair : matHairDark));
   }
-  for (const side of [-1, 1]) keep(limb(body, v(2.2, 56.5, side * 6.1), v(3.4, 42.5, side * 7.1), 1.4, matHair));
-  for (let i = 0; i < 8; i++) {
-    keep(add(new THREE.SphereGeometry(1.75 - i * 0.1, 10, 8), i % 2 ? matHair : matHairDark, -9.3 + i * 0.08, 54 - i * 3.1, 0)).scale.set(0.8, 1.15, 1);
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(2.4, 56.5, side * 6.2), v(3.4, 40, side * 8.2), 1.6, matHair));
+    keep(limb(body, v(0, 56, side * 6.6), v(-2, 38, side * 9.2), 1.8, matHairDark));
   }
 
-  // Gold circlet with a team gem
-  const circlet = add(new THREE.TorusGeometry(6.55, 0.42, 6, 28), matGold, 0.4, 60.1, 0);
-  circlet.rotation.x = Math.PI / 2;
-  circlet.rotation.y = 0.16;
-  add(new THREE.OctahedronGeometry(1.25, 0), matGlow, 6.85, 60.9, 0);
-
-  // Witch hat: solid brim, a cone whose tip bends back, gold band with a crescent pin
+  // Witch hat: wide brim (wine underside), crooked purple crown, gold chain band, skull
   const hat = new THREE.Group();
-  hat.position.set(0, 61.6, 0);
-  hat.rotation.z = 0.14;
+  hat.position.set(0, 61.4, 0);
+  hat.rotation.z = 0.12;
   body.add(hat);
-  const matHat = toon('#262a63');
-  const brim = keep(add(lathe([[5.6, 0], [13.6, -0.4], [14.2, 0.5], [12.8, 1], [9, 0.9], [5.6, 1.4]], 32), matHat, 0, 0, 0, hat));
-  const coneGeo = lathe([[7, 0.8], [6.4, 3.5], [5.2, 7.5], [3.9, 11.5], [2.5, 15.5], [1.3, 19.5], [0, 23.5]], 28);
-  const pos = coneGeo.attributes.position;
-  for (let i = 0; i < pos.count; i++) {
-    const y = pos.getY(i);
-    if (y > 8) pos.setX(i, pos.getX(i) - 0.032 * (y - 8) * (y - 8));
+  const brim = keep(add(lathe([[5.6, 0], [15, -0.6], [16.2, 0.3], [15, 0.9], [10, 1], [5.6, 1.6]], 36), matPurple, 0, 0, 0, hat));
+  const under = add(new THREE.RingGeometry(6, 15.2, 36), toon('#5a1a26', { side: THREE.DoubleSide }), 0, -0.55, 0, hat);
+  under.rotation.x = Math.PI / 2;
+  const crownGeo = lathe([[7, 0.8], [6.5, 4], [5.4, 8], [4.2, 12], [3, 16], [1.9, 20], [0.9, 24], [0, 28]], 28);
+  const hp = crownGeo.attributes.position;
+  for (let i = 0; i < hp.count; i++) {
+    const y = hp.getY(i);
+    // Two kinks: slump back, then the tip flops to the side
+    if (y > 10) hp.setX(i, hp.getX(i) - 0.03 * (y - 10) * (y - 10));
+    if (y > 20) hp.setZ(i, hp.getZ(i) + 0.12 * (y - 20) * (y - 20));
+    hp.setX(i, hp.getX(i) + Math.sin(y * 0.9) * 0.25);
   }
-  coneGeo.computeVertexNormals();
-  keep(add(coneGeo, matHat, 0, 0, 0, hat));
-  const band = keep(add(new THREE.TorusGeometry(6.75, 0.85, 8, 28), matGold, 0, 2.2, 0, hat));
-  band.rotation.x = Math.PI / 2;
-  const pin = add(new THREE.TorusGeometry(2.3, 0.45, 6, 16, Math.PI * 1.25), matGold, 6.9, 3.4, 0, hat);
-  pin.rotation.set(0, Math.PI / 2, 0.9);
-  add(new THREE.OctahedronGeometry(0.9, 0), matGlow, 7.3, 3.2, 0.8, hat);
+  crownGeo.computeVertexNormals();
+  keep(add(crownGeo, matPurple, 0, 0, 0, hat));
+  const linkGeo = new THREE.TorusGeometry(0.75, 0.3, 5, 10);
+  for (let i = 0; i < 22; i++) {
+    const a = (i / 22) * TAU;
+    const link = add(linkGeo, matGold, Math.cos(a) * 6.9, 2.4, Math.sin(a) * 6.9, hat);
+    link.rotation.set(0, -a + Math.PI / 2, i % 2 ? Math.PI / 2 : 0);
+  }
+  const skullHead = keep(add(new THREE.SphereGeometry(2.2, 12, 10), matBone, 6.8, 3.6, 0, hat));
+  skullHead.scale.set(0.8, 1, 0.9);
+  add(new THREE.BoxGeometry(1.4, 1.2, 2.2), matBone, 7.1, 1.9, 0, hat);
+  for (const side of [-1, 1]) add(new THREE.SphereGeometry(0.55, 8, 6), matGlow, 8.4, 3.8, side * 0.8, hat);
 
-  // Staff: dark shaft with gold bands, ring head holding the orb, crescent, spikes
+  // Staff: slim gold rod with ornate prongs holding a red gem
   const staff = new THREE.Group();
   staff.position.set(5, 30, 16);
   body.add(staff);
-  keep(add(new THREE.CylinderGeometry(1.05, 1.35, 64, 10), matStaff, 0, 16, 0, staff));
-  for (const y of [-12, 8, 30, 42]) add(new THREE.CylinderGeometry(1.55, 1.55, 1.4, 10), matGold, 0, y, 0, staff);
-  keep(add(lathe([[0, -18], [1.6, -16.5], [1.2, -14]], 10), matGold, 0, 0, 0, staff));
-  const ring = keep(add(new THREE.TorusGeometry(6.2, 0.95, 8, 32), matGold, 0, 54, 0, staff));
-  ring.rotation.y = Math.PI / 2;
-  const crescent = keep(add(new THREE.TorusGeometry(8.3, 0.85, 6, 24, Math.PI * 1.1), matGold, 0, 54, 0, staff));
-  crescent.rotation.set(0, Math.PI / 2, -Math.PI * 0.05);
-  for (const side of [-1, 1]) {
-    const spike = add(new THREE.ConeGeometry(0.9, 6, 6), matGold, 0, 54 + side * 0.5, side * 9.5, staff);
-    spike.rotation.x = side * (Math.PI / 2);
+  keep(add(new THREE.CylinderGeometry(0.75, 0.9, 62, 8), matGold, 0, 15, 0, staff));
+  for (const y of [-10, 10, 32]) add(new THREE.SphereGeometry(1.3, 8, 6), matGold, 0, y, 0, staff);
+  keep(add(new THREE.ConeGeometry(1.2, 6, 6), matGold, 0, -18.5, 0, staff)).rotation.x = Math.PI;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * TAU + Math.PI / 4;
+    const prong = keep(limb(staff, v(0, 45, 0), v(Math.cos(a) * 3.4, 53, Math.sin(a) * 3.4), 0.45, matGold));
+    prong.castShadow = true;
   }
-  add(new THREE.ConeGeometry(1, 7, 6), matGold, 0, 64, 0, staff);
-  const tip = add(new THREE.SphereGeometry(3.7, 16, 12), matGlow, 0, 54, 0, staff); // the orb
+  const gem = keep(add(new THREE.OctahedronGeometry(3, 0), matRuby, 0, 52, 0, staff));
+  gem.scale.set(0.8, 1.6, 0.8);
+  add(new THREE.ConeGeometry(0.8, 5, 6), matGold, 0, 59, 0, staff);
+  const tip = add(new THREE.OctahedronGeometry(1.4, 0), matGlow, 0, 52, 0, staff);
   const tipGlow = glowSprite(glowTex, team, 30);
-  tipGlow.position.set(0, 54, 0);
+  tipGlow.position.set(0, 52, 0);
   staff.add(tipGlow);
 
   shadowed(body);
   tip.castShadow = false;
-  // Sheer fabric and the face details shouldn't throw solid shadows.
+  brim.castShadow = false;
   body.traverse((o) => {
     const m = (o as THREE.Mesh).material;
-    if (m === matSheer || m === matEyeWhite || m === matIris || m === matPupil || m === matLips) o.castShadow = false;
+    if (m === matLining || m === matEyeWhite || m === matIris || m === matPupil || m === matLips || m === matGlow) o.castShadow = false;
   });
-  // The brim would put the whole face in shadow; keep it readable.
-  brim.castShadow = false;
   for (const m of outlined) outline(m);
 
-  const m = addMarkers(root, team, bright);
-  return { root, lean, yaw, body, weapon: staff, tip, tipGlow, mats: [matTeam, matGown, matBodice, matSkin, matHair, matHat], ...m };
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: staff, tip, tipGlow, mats: [matTeam, matGown, matPurple, matPurpleDark, matSkin, matHair], ...markers };
 }
 
 /** Team ring + facing arrow on the floor, counter shield, slow ring. Don't tilt with the body. */
@@ -988,17 +1032,70 @@ function buildWarrior(color: string, glowTex: THREE.Texture): ChampionRig {
   return { root, lean, yaw, body, weapon: axe, tip, tipGlow, mats: [matTeam, matSkin, matWrap, matLeather, matCloth], ...markers };
 }
 
+/** Quilted black leather: diamond stitching. */
+function makeQuiltTexture(): THREE.CanvasTexture {
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#26232b';
+  g.fillRect(0, 0, S, S);
+  const step = 32;
+  for (let y = -step; y < S + step; y += step) {
+    for (let x = -step; x < S + step; x += step) {
+      const grad = g.createRadialGradient(x + step / 2, y + step / 2, 2, x + step / 2, y + step / 2, step * 0.6);
+      grad.addColorStop(0, '#3a3640');
+      grad.addColorStop(1, '#1d1b22');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.moveTo(x + step / 2, y);
+      g.lineTo(x + step, y + step / 2);
+      g.lineTo(x + step / 2, y + step);
+      g.lineTo(x, y + step / 2);
+      g.closePath();
+      g.fill();
+    }
+  }
+  g.strokeStyle = 'rgba(170, 140, 90, 0.35)';
+  g.lineWidth = 1.5;
+  for (let k = -S; k < S * 2; k += step) {
+    g.beginPath();
+    g.moveTo(k, 0);
+    g.lineTo(k + S, S);
+    g.moveTo(k, S);
+    g.lineTo(k + S, 0);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(4, 2);
+  return t;
+}
+
+/**
+ * Assassin — hooded shade (from the concept sheet), toon style: a pointed hood
+ * over a black void with burning red eyes, a torn navy cloak and capelet with a
+ * pale lining, quilted black leather, crossing belts with pouches, boots, gloves,
+ * and two ornate daggers with red-lit blades.
+ * Team color: the brooch gem and the dagger gems (the eyes stay red — it's the
+ * class's signature).
+ */
 function buildAssassin(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
   const bright = lighten(color, 0.45);
-  // Class palette: black-violet leathers; the team color on the scarf and eyes.
-  const matTeam = new THREE.MeshStandardMaterial({ color: team, roughness: 0.6, metalness: 0.1, flatShading: true });
-  const matDark = new THREE.MeshStandardMaterial({ color: '#1d1a26', roughness: 0.9, flatShading: true });
-  const matCloth = new THREE.MeshStandardMaterial({ color: '#2e2546', roughness: 0.85, flatShading: true });
-  const matVest = new THREE.MeshStandardMaterial({ color: '#4a3d6e', roughness: 0.6, metalness: 0.15, flatShading: true });
-  const matSteel = new THREE.MeshStandardMaterial({ color: '#d5dbe6', roughness: 0.25, metalness: 0.9, flatShading: true });
+  const matTeam = toon(team);
+  const matCloak = toon('#2b3150', { side: THREE.FrontSide });
+  const matLining = toon('#a9a4a2', { side: THREE.BackSide });
+  const matQuilt = toon('#ffffff', { map: makeQuiltTexture() });
+  const matBlack = toon('#1c1a20');
+  const matLeather = toon('#4a3324');
+  const matBoot = toon('#2e2622');
+  const matGold = toon('#c9a35c');
+  const matSteel = toon('#c9ccd4');
+  const matVoid = new THREE.MeshBasicMaterial({ color: '#030305' });
+  const matRedGlow = new THREE.MeshBasicMaterial({ color: '#ff2a3d', toneMapped: false });
   const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
-  const matFace = new THREE.MeshBasicMaterial({ color: '#07060a' });
 
   const root = new THREE.Group();
   const lean = new THREE.Group();
@@ -1014,46 +1111,127 @@ function buildAssassin(color: string, glowTex: THREE.Texture): ChampionRig {
     parent.add(mesh);
     return mesh;
   };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
 
-  for (const side of [-1, 1]) add(new THREE.BoxGeometry(6, 20, 6), matDark, 0, 10, side * 5); // legs
-  add(new THREE.CylinderGeometry(9, 14, 20, 7), matCloth, -1, 19, 0); // coat tails
-  add(new THREE.CylinderGeometry(11, 9, 18, 7), matVest, 0, 35, 0); // torso
-  add(new THREE.CylinderGeometry(9.6, 9.6, 3, 7), matDark, 0, 27, 0); // sash
-  for (const side of [-1, 1]) add(new THREE.IcosahedronGeometry(5, 0), matCloth, 0, 42, side * 11); // shoulders
-  const scarf = add(new THREE.TorusGeometry(8, 3, 5, 10), matTeam, 0, 45, 0);
-  scarf.rotation.x = Math.PI / 2;
-  const tail = add(new THREE.BoxGeometry(2, 20, 6), matTeam, -10, 40, 4);
-  tail.rotation.z = -0.5;
-  add(new THREE.SphereGeometry(7, 10, 8), matFace, 1, 52, 0); // face in shadow
-  const hood = add(new THREE.ConeGeometry(10.5, 22, 7), matCloth, -1.5, 57, 0);
-  hood.rotation.z = 0.12;
-  for (const side of [-1, 1]) add(new THREE.BoxGeometry(1.5, 1.6, 2.6), matGlow, 7.2, 53, side * 2.6); // eyes
-  yaw.scale.setScalar(0.95);
+  // Legs: dark trousers, tall boots with straps
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0, 26, side * 4.6), v(1.8, 13, side * 5.2), 2.8, matBlack));
+    keep(limb(body, v(1.8, 14, side * 5.2), v(0.6, 3.2, side * 5.4), 2.7, matBoot));
+    keep(add(new THREE.BoxGeometry(7, 2.8, 4), matBoot, 2, 1.4, side * 5.4));
+    for (const y of [7, 11]) add(new THREE.TorusGeometry(2.85, 0.35, 4, 12), matLeather, 1.2, y, side * 5.3).rotation.x = Math.PI / 2;
+  }
 
-  // Daggers: the right one is the animated "weapon", the left one rides along with the body.
-  const dagger = (parent: THREE.Object3D) => {
-    add(new THREE.CylinderGeometry(1.3, 1.3, 7, 5), matDark, 0, 0, 0, parent);
-    const blade = add(new THREE.ConeGeometry(2.4, 17, 4), matSteel, 11, 0, 0, parent);
+  // Torso: quilted leather, crossing belts, waist belt with pouches
+  keep(add(lathe([[7.4, 24], [8, 30], [8.8, 37], [9.2, 42], [8.4, 46], [5.5, 48.5], [2.6, 50]]), matQuilt, 0, 0, 0));
+  for (const side of [-1, 1]) {
+    const strap = keep(limb(body, v(7.6, 46, side * 6), v(8.4, 30, -side * 6.6), 0.75, matLeather));
+    strap.castShadow = true;
+  }
+  const belt = keep(add(new THREE.TorusGeometry(8.1, 1.1, 6, 24), matLeather, 0, 29, 0));
+  belt.rotation.x = Math.PI / 2;
+  for (const [z, x] of [[-6.5, 4.5], [6.8, 3.5], [-2, -7.6]]) keep(add(new THREE.BoxGeometry(3, 3.6, 2.6), matLeather, x, 27, z));
+  add(new THREE.BoxGeometry(1.2, 2.2, 2.6), matGold, 8.6, 29, 0);
+
+  // Arms: leather sleeves, gloves, gold-trimmed bracers
+  const rElbow = v(2, 37, 11.4);
+  const rHand = v(6, 29.5, 13);
+  const lElbow = v(1.5, 37, -11);
+  const lHand = v(5.5, 29, -11.5);
+  keep(limb(body, v(0, 45, 8.4), rElbow, 2.2, matBlack));
+  keep(limb(body, rElbow, rHand, 2, matQuilt));
+  keep(limb(body, v(0, 45, -8.4), lElbow, 2.2, matBlack));
+  keep(limb(body, lElbow, lHand, 2, matQuilt));
+  for (const hand of [rHand, lHand]) {
+    keep(add(new THREE.SphereGeometry(2.1, 12, 10), matBlack, hand.x, hand.y - 1, hand.z));
+    add(new THREE.CylinderGeometry(2.3, 2.2, 2.4, 10), matGold, hand.x - 1.2, hand.y + 2.2, hand.z);
+  }
+
+  // Cloak: long torn back panel and a torn capelet, navy outside, pale lining inside
+  const cloakGeo = raggedLathe([[19, 2], [15, 14], [12, 28], [10.2, 40], [9, 46.5]], 24, 9, 4, Math.PI * 0.85, Math.PI * 1.3);
+  keep(add(cloakGeo, matCloak, -1, 0, 0));
+  add(cloakGeo, matLining, -1, 0, 0);
+  // Capelet: to the upper arms, split open at the front (lathe phi = PI/2 faces local +X).
+  const capeGeo = raggedLathe([[12.6, 39], [11, 44], [8, 48.5], [4.6, 51.5]], 28, 4, 9, Math.PI / 2 + 0.45, TAU - 0.9);
+  keep(add(capeGeo, matCloak, 0, 0, 0));
+  add(capeGeo, matLining, 0, 0, 0);
+
+  // Brooch: gold star with a team gem
+  for (let i = 0; i < 4; i++) {
+    const ray = add(new THREE.ConeGeometry(0.6, 3.2, 4), matGold, 10.6, 46, -5.2, body);
+    ray.rotation.set(0, 0, (i / 4) * TAU);
+  }
+  add(new THREE.OctahedronGeometry(1, 0), matTeam, 11, 46, -5.2);
+  add(new THREE.OctahedronGeometry(0.55, 0), matGlow, 11.5, 46, -5.2);
+
+  // Hood: shell open at the front, pointed tip; inside a black void with red eyes
+  const hood = new THREE.Group();
+  hood.position.set(0.4, 56.6, 0);
+  body.add(hood);
+  const gap = Math.PI * 0.62;
+  const shell = keep(add(new THREE.SphereGeometry(8.4, 24, 16, Math.PI + gap / 2, TAU - gap, 0, Math.PI * 0.8), toon('#2b3150', { side: THREE.DoubleSide }), 0, 0, 0, hood));
+  shell.scale.set(1.05, 1.12, 1);
+  const tipGeo = lathe([[6.4, 0], [4.8, 4], [3, 8], [1.4, 12], [0, 15]], 20);
+  const tp = tipGeo.attributes.position;
+  for (let i = 0; i < tp.count; i++) {
+    const y = tp.getY(i);
+    tp.setX(i, tp.getX(i) - 0.035 * y * y);
+  }
+  tipGeo.computeVertexNormals();
+  keep(add(tipGeo, matCloak, -1.5, 5, 0, hood));
+  add(new THREE.SphereGeometry(6.6, 16, 12), matVoid, 1, -0.6, 0, hood);
+  for (const side of [-1, 1]) {
+    const eye = add(new THREE.BoxGeometry(0.8, 0.7, 2), matRedGlow, 6.9, 0.2, side * 2.3, hood);
+    eye.rotation.x = side * -0.25;
+    const glow = glowSprite(glowTex, '#ff2236', 7, 0.9);
+    glow.position.set(7.4, 0.2, side * 2.3);
+    hood.add(glow);
+  }
+  // Red wisps trailing from the eyes
+  for (let i = 1; i <= 4; i++) {
+    const wisp = glowSprite(glowTex, '#ff2236', 6 - i, 0.55 - i * 0.1);
+    wisp.position.set(6.5 - i * 1.6, 0.6 + i * 0.4, 3.4 + i * 1.8);
+    hood.add(wisp);
+  }
+
+  // Daggers: steel blade with a red-lit core, gold crossguard, team gem
+  const dagger = (parent: THREE.Object3D, withTip: boolean) => {
+    add(new THREE.CylinderGeometry(0.8, 0.8, 5, 8), matLeather, 0, 0, 0, parent).rotation.z = Math.PI / 2;
+    const guard = keep(add(new THREE.BoxGeometry(1.2, 1, 6), matGold, 3, 0, 0, parent));
+    guard.castShadow = true;
+    for (const side of [-1, 1]) add(new THREE.ConeGeometry(0.5, 2.4, 4), matGold, 3, 0, side * 3.6, parent).rotation.x = side * (Math.PI / 2);
+    const blade = keep(add(new THREE.ConeGeometry(1.5, 17, 4), matSteel, 12, 0, 0, parent));
     blade.rotation.z = -Math.PI / 2;
+    blade.scale.set(1, 1, 0.35);
+    const core = add(new THREE.BoxGeometry(12, 0.5, 0.7), matRedGlow, 10.5, 0, 0, parent);
+    core.castShadow = false;
+    add(new THREE.OctahedronGeometry(0.9, 0), withTip ? matGlow : matTeam, -3, 0, 0, parent);
   };
   const right = new THREE.Group();
-  right.position.set(6, 30, 13);
+  right.position.copy(rHand).add(v(0.5, -1, 0));
   body.add(right);
-  dagger(right);
+  dagger(right, true);
   const left = new THREE.Group();
-  left.position.set(4, 30, -13);
-  left.rotation.z = 0.5;
+  left.position.copy(lHand).add(v(0.5, -1, 0));
+  left.rotation.z = -1.1;
   body.add(left);
-  dagger(left);
+  dagger(left, false);
 
-  const tip = add(new THREE.OctahedronGeometry(2.2, 0), matGlow, 19, 0, 0, right);
-  const tipGlow = glowSprite(glowTex, team, 18);
-  tipGlow.position.set(19, 0, 0);
+  const tip = add(new THREE.OctahedronGeometry(1.1, 0), matGlow, 18, 0, 0, right);
+  const tipGlow = glowSprite(glowTex, team, 16);
+  tipGlow.position.set(18, 0, 0);
   right.add(tipGlow);
 
+  yaw.scale.setScalar(0.97);
   shadowed(body);
   tip.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matLining || m === matVoid || m === matRedGlow || m === matGlow) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
 
-  const m = addMarkers(root, team, bright);
-  return { root, lean, yaw, body, weapon: right, tip, tipGlow, mats: [matTeam, matCloth, matVest, matDark], ...m };
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: right, tip, tipGlow, mats: [matTeam, matCloak, matQuilt, matBlack, matBoot], ...markers };
 }
