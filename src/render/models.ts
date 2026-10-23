@@ -702,18 +702,91 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
   return { ring, pointer, shield, slowRing, markSigil };
 }
 
+/** Overlapping scales for the orc's pauldron. */
+function makeScaleTexture(): THREE.CanvasTexture {
+  const S = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = S;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#4d5743';
+  g.fillRect(0, 0, S, S);
+  const r = 16;
+  for (let row = 0; row * r * 0.75 < S + r; row++) {
+    for (let col = -1; col * r * 2 < S + r * 2; col++) {
+      const x = col * r * 2 + (row % 2 ? r : 0);
+      const y = row * r * 0.75;
+      const grad = g.createRadialGradient(x, y - r * 0.3, 2, x, y, r);
+      grad.addColorStop(0, '#9aa585');
+      grad.addColorStop(1, '#5e6a52');
+      g.fillStyle = grad;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI);
+      g.fill();
+      g.strokeStyle = '#2a3024';
+      g.lineWidth = 2;
+      g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(3, 2);
+  return t;
+}
+
+/** Torn cloth panel: straight top edge, ragged bottom. Lies in the XY plane, hanging down from y = 0. */
+function raggedPanel(width: number, height: number, teeth: number, seed: number): THREE.ShapeGeometry {
+  let s = seed;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  const shape = new THREE.Shape();
+  shape.moveTo(-width / 2, 0);
+  shape.lineTo(width / 2, 0);
+  for (let i = teeth; i >= 0; i--) {
+    const x = -width / 2 + (i / teeth) * width;
+    const y = -height * (i % 2 ? 0.62 + rnd() * 0.15 : 0.85 + rnd() * 0.15);
+    shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+/** Wrap a limb from a to b with rings (bandages, bracers). */
+function wraps(parent: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, r: number, count: number, mat: THREE.Material) {
+  const dir = b.clone().sub(a);
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir.clone().normalize());
+  const geo = new THREE.TorusGeometry(r, 0.75, 5, 14);
+  for (let i = 0; i < count; i++) {
+    const ring = new THREE.Mesh(geo, mat);
+    ring.position.copy(a).addScaledVector(dir, (i + 0.5) / count);
+    ring.quaternion.copy(q);
+    ring.rotateX((i % 2 ? 1 : -1) * 0.18);
+    parent.add(ring);
+  }
+}
+
+/**
+ * Warrior — orc berserker (from the concept sheet), toon style: green skin, black
+ * mohawk and braid, tusks and a roaring mouth, a scaly horned pauldron on the left
+ * shoulder, chain across the chest, skull belt over chainmail and torn cloth,
+ * wrapped arms and legs, knee plates, sandals and a notched cleaver.
+ * Team color: front cloth, pauldron strips and eyes.
+ */
 function buildWarrior(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
   const bright = lighten(color, 0.45);
-  // Class palette: bronze plate over dark leather; the team color on shield, tabard and eyes.
-  const matTeam = new THREE.MeshStandardMaterial({ color: team, roughness: 0.55, metalness: 0.15, flatShading: true });
-  const matBronze = new THREE.MeshStandardMaterial({ color: '#b07a3e', roughness: 0.35, metalness: 0.75, flatShading: true });
-  const matDark = new THREE.MeshStandardMaterial({ color: '#3a2a1f', roughness: 0.85, flatShading: true });
-  const matMetal = new THREE.MeshStandardMaterial({ color: '#9aa4b8', roughness: 0.32, metalness: 0.8, flatShading: true });
-  const matGold = new THREE.MeshStandardMaterial({ color: '#d1a75a', roughness: 0.4, metalness: 0.8, flatShading: true });
-  const matWood = new THREE.MeshStandardMaterial({ color: '#5d4433', roughness: 0.8, flatShading: true });
-  const matFur = new THREE.MeshStandardMaterial({ color: '#6b5a48', roughness: 1, flatShading: true });
-  const matBone = new THREE.MeshStandardMaterial({ color: '#e9dfc9', roughness: 0.6, flatShading: true });
+  const matTeam = toon(team, { side: THREE.DoubleSide });
+  const matSkin = toon('#7f9545');
+  const matSkinDark = toon('#5f7334');
+  const matHair = toon('#1c1a1a');
+  const matLeather = toon('#6a4428');
+  const matWrap = toon('#8e3d26');
+  const matCloth = toon('#7a2f20', { side: THREE.DoubleSide });
+  const matMail = toon('#6f6c69');
+  const matMetal = toon('#a8a29a');
+  const matBone = toon('#e8dcc0');
+  const matScales = toon('#ffffff', { map: makeScaleTexture() });
+  const matMouth = new THREE.MeshBasicMaterial({ color: '#3a1010' });
+  const matSocket = new THREE.MeshBasicMaterial({ color: '#1a1410' });
   const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
 
   const root = new THREE.Group();
@@ -730,48 +803,189 @@ function buildWarrior(color: string, glowTex: THREE.Texture): ChampionRig {
     parent.add(mesh);
     return mesh;
   };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+  const skull = (x: number, y: number, z: number, size: number, facing: number) => {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    g.rotation.y = facing;
+    keep(add(new THREE.SphereGeometry(size, 12, 10), matBone, 0, 0, 0, g)).scale.set(0.9, 1, 0.85);
+    keep(add(new THREE.BoxGeometry(size * 0.9, size * 0.6, size * 1.1), matBone, size * 0.25, -size * 0.75, 0, g));
+    for (const side of [-1, 1]) add(new THREE.SphereGeometry(size * 0.28, 8, 6), matSocket, size * 0.78, size * 0.05, side * size * 0.38, g);
+    body.add(g);
+  };
 
-  for (const side of [-1, 1]) add(new THREE.BoxGeometry(8, 20, 8), matDark, 0, 10, side * 7); // legs
-  add(new THREE.CylinderGeometry(14, 17, 12, 8), matBronze, 0, 22, 0); // armored skirt
-  add(new THREE.CylinderGeometry(17, 13.5, 22, 8), matBronze, 0, 38, 0); // torso
-  add(new THREE.BoxGeometry(5, 15, 16), matTeam, 13.5, 37, 0); // tabard
-  add(new THREE.CylinderGeometry(14.5, 14.5, 4, 8), matGold, 0, 28, 0); // belt
-  const collar = add(new THREE.TorusGeometry(12, 4.5, 5, 10), matFur, 0, 49, 0);
-  collar.rotation.x = Math.PI / 2;
+  // Legs: thighs, wrapped shins, knee plates, sandals
   for (const side of [-1, 1]) {
-    const pad = add(new THREE.IcosahedronGeometry(10, 0), matBronze, 0, 49, side * 18);
-    pad.scale.set(1, 0.7, 1);
+    const hip = v(0, 25, side * 7.2);
+    const knee = v(1.8, 13.5, side * 8.6);
+    const ankle = v(0.4, 3.2, side * 8.8);
+    keep(limb(body, hip, knee, 4.4, matSkin));
+    keep(limb(body, knee, ankle, 3.9, matWrap));
+    wraps(body, knee, ankle, 4.1, 4, matLeather);
+    const plate = keep(add(new THREE.SphereGeometry(3.4, 10, 8, 0, Math.PI), matMetal, knee.x + 2.4, knee.y + 0.6, knee.z));
+    plate.rotation.y = -Math.PI / 2;
+    plate.scale.set(1, 1.15, 0.6);
+    keep(add(new THREE.BoxGeometry(9, 2.6, 6), matLeather, ankle.x + 2.2, 1.3, ankle.z));
+    keep(add(new THREE.CapsuleGeometry(2.4, 3.5, 3, 8), matSkin, ankle.x + 3.4, 3, ankle.z)).rotation.z = Math.PI / 2;
   }
-  add(new THREE.IcosahedronGeometry(9.5, 1), matMetal, 0, 60, 0); // helmet
-  add(new THREE.BoxGeometry(2, 2.6, 11), matGlow, 8.6, 60, 0); // visor
-  yaw.scale.setScalar(1.1); // class size; body.scale is used for squash
+
+  // Chainmail skirt, torn cloth (team front, red back and sides)
+  keep(add(lathe([[13.5, 12], [12.5, 18], [11.5, 25], [11.2, 28]], 20), matMail, 0, 0, 0));
+  const front = add(raggedPanel(12, 17, 7, 3), matTeam, 11.6, 27, 0);
+  front.rotation.y = Math.PI / 2;
+  front.rotation.z = -0.08;
+  const back = add(raggedPanel(14, 20, 8, 7), matCloth, -11.6, 27, 0);
+  back.rotation.y = -Math.PI / 2;
   for (const side of [-1, 1]) {
-    const horn = add(new THREE.ConeGeometry(3, 15, 5), matBone, -1, 67, side * 9);
-    horn.rotation.x = side * 0.7;
+    const flap = add(raggedPanel(10, 14, 5, 11 + side), matCloth, 0, 27, side * 12.4);
+    flap.rotation.y = side < 0 ? Math.PI : 0;
   }
 
-  // Round shield on the left arm
-  const shieldMesh = add(new THREE.CylinderGeometry(13, 13, 3, 10), matTeam, 4, 35, -21);
-  shieldMesh.rotation.x = Math.PI / 2;
-  add(new THREE.SphereGeometry(4, 8, 6), matGold, 4, 35, -23);
+  // Belt with a skull buckle and skulls on the hips
+  const belt = keep(add(new THREE.TorusGeometry(12, 1.8, 6, 24), matLeather, 0, 27.5, 0));
+  belt.rotation.x = Math.PI / 2;
+  belt.scale.set(1, 1.15, 1);
+  skull(12.6, 27.8, 0, 3.2, 0);
+  skull(1, 25.5, 13.6, 2.4, -Math.PI / 2);
+  skull(1, 25.5, -13.6, 2.4, Math.PI / 2);
 
-  // Axe in the right hand
+  // Torso: big lathed chest, wider than deep, with pecs
+  const torsoProfile: [number, number][] = [[11, 27], [12.6, 32], [14.8, 39], [15.8, 45], [13.8, 49.5], [7.5, 52.5], [4, 53.5]];
+  const torso = keep(add(lathe(torsoProfile, 24), matSkin, 0, 0, 0));
+  torso.scale.set(0.85, 1, 1.15);
+  /** Torso radius at height y (linear between profile points). */
+  const torsoR = (y: number) => {
+    for (let i = 1; i < torsoProfile.length; i++) {
+      const [r0, y0] = torsoProfile[i - 1];
+      const [r1, y1] = torsoProfile[i];
+      if (y <= y1) return r0 + ((y - y0) / (y1 - y0)) * (r1 - r0);
+    }
+    return torsoProfile[torsoProfile.length - 1][0];
+  };
+  for (const side of [-1, 1]) keep(add(new THREE.SphereGeometry(6, 14, 10), matSkin, 8.6, 43, side * 6)).scale.set(0.55, 0.75, 1);
+  for (let i = 0; i < 3; i++) add(new THREE.BoxGeometry(0.6, 0.5, 6), matSkinDark, 11 - i * 0.6, 37 - i * 3.2, 0);
+
+  // Chain across the chest, bone necklace with fangs
+  const linkGeo = new THREE.TorusGeometry(1.2, 0.42, 5, 10);
+  // Diagonal from the right shoulder to the left hip, lying on the (elliptical) chest.
+  for (let i = 0; i <= 13; i++) {
+    const t = i / 13;
+    const y = 48 - t * 19;
+    const a = 0.95 - t * 1.9;
+    const r = torsoR(y) + 0.7;
+    const link = add(linkGeo, matMetal, Math.cos(a) * r * 0.85, y, Math.sin(a) * r * 1.15);
+    link.rotation.set(0, -a + (i % 2 ? Math.PI / 2 : 0), 0.75);
+  }
+  const necklace = add(new THREE.TorusGeometry(7.6, 0.6, 5, 18), matLeather, 1.4, 51, 0);
+  necklace.rotation.x = Math.PI / 2;
+  necklace.rotation.y = 0.3;
+  for (let i = -3; i <= 3; i++) {
+    const a = (i / 3) * 1.1;
+    const fang = add(new THREE.ConeGeometry(0.6, 3.2, 5), matBone, 1.4 + Math.cos(a) * 7.6, 49.4, Math.sin(a) * 7.6);
+    fang.rotation.x = Math.PI;
+  }
+
+  // Left shoulder: scaly pauldron with horns and torn strips (team colored)
+  const pauldron = new THREE.Group();
+  pauldron.position.set(0, 49, -15);
+  body.add(pauldron);
+  const dome = keep(add(new THREE.SphereGeometry(10.5, 18, 12, 0, TAU, 0, Math.PI * 0.55), matScales, 0, 0, 0, pauldron));
+  dome.scale.set(1.05, 0.8, 1);
+  dome.rotation.x = -0.35;
+  for (const [x, z, h, tilt] of [[4, -6, 9, 0.6], [-1, -8, 11, 0.8], [-6, -5, 8, 0.6]]) {
+    const horn = keep(add(new THREE.ConeGeometry(1.8, h, 7), matBone, x, 4, z, pauldron));
+    horn.rotation.x = -tilt;
+  }
+  for (let i = 0; i < 3; i++) {
+    const strip = add(raggedPanel(5.5, 11, 3, 19 + i), i === 1 ? matTeam : matCloth, -3 + i * 4, -4, -4.5, pauldron);
+    strip.rotation.y = Math.PI / 2;
+    strip.rotation.x = 0.4;
+  }
+
+  // Arms: huge, forearms wrapped; the right fist holds the cleaver
+  const shoulders = [v(0, 46.5, 16.5), v(0, 46.5, -16.5)];
+  const elbows = [v(1.5, 34, 20.5), v(1, 34, -20)];
+  const fists = [v(6, 26.5, 20), v(4.5, 25, -18.5)];
+  for (let i = 0; i < 2; i++) {
+    keep(add(new THREE.SphereGeometry(6, 14, 10), matSkin, shoulders[i].x, shoulders[i].y, shoulders[i].z * 0.95));
+    keep(limb(body, shoulders[i], elbows[i], 4.8, matSkin));
+    keep(limb(body, elbows[i], fists[i], 4.3, matWrap));
+    wraps(body, elbows[i], fists[i], 4.5, 4, matLeather);
+    keep(add(new THREE.SphereGeometry(4, 12, 10), matSkin, fists[i].x, fists[i].y - 1.5, fists[i].z));
+  }
+
+  // Head: pushed forward, heavy brow, open roaring mouth with tusks, pointed ears
+  const head = new THREE.Group();
+  head.position.set(3.5, 57, 0);
+  body.add(head);
+  keep(add(new THREE.SphereGeometry(7.2, 18, 14), matSkin, 0, 0.8, 0, head)).scale.set(1, 0.95, 0.92);
+  keep(add(new THREE.SphereGeometry(5.6, 16, 12), matSkin, 2.4, -3.4, 0, head)).scale.set(0.95, 0.72, 1.22); // jaw
+  keep(limb(head, v(6.1, 2.6, -4.6), v(6.1, 2.6, 4.6), 1.5, matSkinDark)); // brow ridge
+  keep(add(new THREE.SphereGeometry(1.5, 10, 8), matSkinDark, 7.4, 0.4, 0, head)).scale.set(0.8, 0.8, 1.2); // nose
+  for (const side of [-1, 1]) add(new THREE.BoxGeometry(0.9, 1, 2.2), matGlow, 6.6, 1.6, side * 2.5, head); // eyes
+  add(new THREE.BoxGeometry(1.6, 3, 5.4), matMouth, 6.6, -3.4, 0, head);
+  for (const side of [-1, 1]) {
+    const tusk = keep(add(new THREE.ConeGeometry(1.25, 6.5, 7), matBone, 7, -2.8, side * 3.3, head));
+    tusk.rotation.x = side * -0.3;
+    tusk.rotation.z = -0.25;
+    const ear = keep(add(new THREE.ConeGeometry(1.5, 6.5, 6), matSkin, -0.5, 1.5, side * 7.2, head));
+    ear.scale.set(0.55, 1, 1);
+    ear.rotation.x = side * (Math.PI / 2 - 0.35);
+    ear.rotation.z = 0.5;
+    add(new THREE.TorusGeometry(0.9, 0.25, 4, 10), matMetal, -0.2, -0.6, side * 8.2, head).rotation.y = Math.PI / 2;
+  }
+
+  // Mohawk and a long braid down the back
+  for (let i = 0; i < 7; i++) {
+    const tuft = keep(add(new THREE.ConeGeometry(1.9, 6.5 + Math.sin((i / 6) * Math.PI) * 2.5, 5), matHair, 4.5 - i * 1.9, 8.6 - Math.abs(i - 2.5) * 0.45, 0, head));
+    tuft.scale.set(1, 1, 0.6);
+    tuft.rotation.z = 0.35 + i * 0.13;
+  }
+  for (let i = 0; i < 9; i++) {
+    keep(add(new THREE.SphereGeometry(1.7 - i * 0.07, 8, 6), matHair, -8 - i * 0.35, 3 - i * 3.1, 0, head)).scale.set(0.8, 1.2, 0.9);
+    if (i % 3 === 2) add(new THREE.CylinderGeometry(1.3, 1.3, 1, 8), matBone, -8.3 - i * 0.35, 1.4 - i * 3.1, 0, head);
+  }
+
+  // Cleaver: wrapped handle, notched one-sided blade with a back spike
   const axe = new THREE.Group();
-  axe.position.set(6, 32, 21);
+  axe.position.copy(fists[0]);
   body.add(axe);
-  add(new THREE.CylinderGeometry(1.8, 2, 56, 6), matWood, 0, 12, 0, axe);
-  add(new THREE.BoxGeometry(18, 22, 3), matMetal, 9, 34, 0, axe);
-  add(new THREE.BoxGeometry(7, 14, 3.2), matMetal, -5, 34, 0, axe);
-  const tip = add(new THREE.OctahedronGeometry(3.4, 0), matGlow, 6, 34, 1.8, axe);
+  keep(add(new THREE.CylinderGeometry(1.5, 1.8, 54, 8), matLeather, 0, 10, 0, axe));
+  wraps(axe, v(0, -12, 0), v(0, 6, 0), 1.9, 6, matWrap);
+  keep(add(new THREE.ConeGeometry(1.6, 5, 6), matMetal, 0, -19.5, 0, axe)).rotation.x = Math.PI;
+  const blade = new THREE.Shape();
+  blade.moveTo(0, 0);
+  blade.lineTo(15, -3);
+  blade.lineTo(17.5, 6);
+  blade.lineTo(16, 7.5);
+  blade.lineTo(17.8, 10);
+  blade.lineTo(16.5, 13);
+  blade.lineTo(18.5, 18);
+  blade.lineTo(13, 22);
+  blade.lineTo(0, 16);
+  blade.closePath();
+  const bladeGeo = new THREE.ExtrudeGeometry(blade, { depth: 1.6, bevelEnabled: true, bevelThickness: 0.5, bevelSize: 0.5, bevelSegments: 1 });
+  bladeGeo.translate(0, 0, -0.8);
+  keep(add(bladeGeo, matMetal, 0.8, 22, 0, axe));
+  keep(add(new THREE.ConeGeometry(1.4, 7, 5), matMetal, -3.5, 31, 0, axe)).rotation.z = Math.PI / 2;
+  const tip = add(new THREE.OctahedronGeometry(1.6, 0), matGlow, 7, 31, 1.4, axe); // rune on the blade
   const tipGlow = glowSprite(glowTex, team, 22);
-  tipGlow.position.set(8, 34, 0);
+  tipGlow.position.set(8, 31, 0);
   axe.add(tipGlow);
 
+  yaw.scale.setScalar(1.08); // class size; body.scale is used for squash
   shadowed(body);
   tip.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matMouth || m === matSocket || m === matGlow) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
 
-  const m = addMarkers(root, team, bright);
-  return { root, lean, yaw, body, weapon: axe, tip, tipGlow, mats: [matTeam, matBronze, matDark, matMetal], ...m };
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: axe, tip, tipGlow, mats: [matTeam, matSkin, matWrap, matLeather, matCloth], ...markers };
 }
 
 function buildAssassin(color: string, glowTex: THREE.Texture): ChampionRig {
