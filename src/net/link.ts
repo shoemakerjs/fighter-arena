@@ -35,18 +35,26 @@ export class NetLink {
   private conn: DataConnection | null = null;
   private lastHeard = 0;
   private heartbeat = 0;
+  private isHost = false;
   code = '';
   onMessage: (msg: NetMsg) => void = () => {};
   onConnect: () => void = () => {};
+  /** The other player is gone. The host's lobby code stays valid while `listening`. */
   onClose: (reason: string) => void = () => {};
 
   get connected() {
     return !!this.conn?.open;
   }
 
+  /** Host only: the lobby is still registered, so someone new can join with the same link. */
+  get listening() {
+    return this.isHost && !!this.peer && !this.peer.destroyed && !this.peer.disconnected;
+  }
+
   /** Open a lobby and wait for someone to join. Resolves with the lobby code. */
   host(): Promise<string> {
     this.code = randomCode();
+    this.isHost = true;
     const peer = new Peer(PREFIX + this.code);
     this.peer = peer;
     peer.on('connection', (conn) => {
@@ -62,6 +70,7 @@ export class NetLink {
   /** Join the lobby with this code. */
   join(code: string): Promise<void> {
     this.code = code;
+    this.isHost = false;
     const peer = new Peer();
     this.peer = peer;
     return this.whenOpen(peer).then(() => {
@@ -90,12 +99,10 @@ export class NetLink {
       this.lastHeard = performance.now();
       // Closing the tab should tell the other side right away, not after a timeout.
       window.addEventListener('pagehide', this.onPageHide);
+      clearInterval(this.heartbeat);
       this.heartbeat = window.setInterval(() => {
         this.send({ t: 'ping' });
-        if (performance.now() - this.lastHeard > TIMEOUT_MS && this.conn === conn) {
-          this.conn = null;
-          this.onClose('Your opponent stopped responding.');
-        }
+        if (performance.now() - this.lastHeard > TIMEOUT_MS) this.drop(conn, 'Your opponent stopped responding.');
       }, 1000);
       this.onConnect();
     });
@@ -104,13 +111,17 @@ export class NetLink {
       const msg = data as NetMsg;
       if (msg.t !== 'ping') this.onMessage(msg);
     });
-    conn.on('close', () => {
-      if (this.conn === conn) {
-        this.conn = null;
-        this.onClose('Your opponent disconnected.');
-      }
-    });
-    conn.on('error', () => this.onClose('The connection dropped.'));
+    conn.on('close', () => this.drop(conn, 'Your opponent disconnected.'));
+    conn.on('error', () => this.drop(conn, 'The connection dropped.'));
+  }
+
+  /** Forget `conn` (if it is still the current one) and report it once. */
+  private drop(conn: DataConnection, reason: string) {
+    if (this.conn !== conn) return;
+    this.conn = null;
+    clearInterval(this.heartbeat);
+    conn.close();
+    this.onClose(reason);
   }
 
   private whenOpen(peer: Peer): Promise<void> {

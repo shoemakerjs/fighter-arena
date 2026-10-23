@@ -5,7 +5,7 @@ import { RollbackSession } from './rollback';
 export interface LobbyHooks {
   /** Both players locked in: start playing this session. */
   onStart(session: RollbackSession): void;
-  /** The other player went back to champion select after a match. */
+  /** The match is over for us (the other player went back to the lobby, or left): show the lobby. */
   onBack(): void;
   /** The lobby is gone (left, or the connection dropped); `reason` is shown to the player. */
   onExit(reason?: string): void;
@@ -124,7 +124,9 @@ export class Lobby {
     this.showLobby();
     link.onMessage = (msg) => this.onMessage(msg);
     link.onClose = (reason) => {
-      if (this.link === link) this.leave(reason);
+      if (this.link !== link) return;
+      if (link.listening) this.guestLeft();
+      else this.leave(reason);
     };
   }
 
@@ -155,6 +157,15 @@ export class Lobby {
         }
         break;
     }
+  }
+
+  /** Host: the guest is gone but the link still works, so wait for someone new. */
+  private guestLeft() {
+    const inMatch = !!this.session;
+    this.foeChamp = -1;
+    this.backToLobby(false);
+    if (inMatch) this.hooks.onBack();
+    this.status('Your opponent left. The link still works for someone new.');
   }
 
   private maybeStart() {
