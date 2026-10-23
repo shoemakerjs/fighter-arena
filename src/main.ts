@@ -99,33 +99,34 @@ function goHome(note?: string) {
 const select = new ChampionSelect({
   onLock(champ) {
     myChamp = champ;
-    if (select.mode === 'bot') openBotSetup();
+    if (select.mode === 'bot') startMatch();
     else lobby.lockIn(champ);
   },
   onBack() {
     if (lobby.active) lobby.leave();
-    else goHome();
+    else openBotSetup();
   },
 });
 
-function openBotSelect() {
-  sfx.unlock();
-  $('menu-note').classList.add('hidden');
-  botSetup.close();
-  select.open('bot', myChamp);
-  setMode('select');
-}
-
-/** Vs bot, after locking in: choose the bot's champion and difficulty. */
+/** Vs bot, first step: choose the bot's champion and difficulty. */
 const botSetup = new BotSetup({
-  onStart: () => startMatch(),
-  onBack: () => openBotSelect(),
+  onStart: () => openBotSelect(),
+  onBack: () => goHome(),
 });
 
 function openBotSetup() {
+  sfx.unlock();
+  $('menu-note').classList.add('hidden');
   select.close();
   botSetup.open();
   setMode('setup');
+}
+
+/** Vs bot, second step: pick and lock in your champion to start. */
+function openBotSelect() {
+  botSetup.close();
+  select.open('bot', myChamp);
+  setMode('select');
 }
 
 // ------------------------------------------------------------------ online 1v1
@@ -267,7 +268,7 @@ function draw(dt: number) {
 
 // ------------------------------------------------------------------ UI wiring
 
-$('play').addEventListener('click', openBotSelect);
+$('play').addEventListener('click', openBotSetup);
 $('play-online').addEventListener('click', () => openLobby());
 $('rematch').addEventListener('click', () => {
   if (!session) return startMatch();
