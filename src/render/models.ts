@@ -501,8 +501,8 @@ function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
   const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
 
   // Gown: flared, slightly wavy skirt with a sheer overskirt
-  const gown = keep(add(lathe([[19.5, 0], [18.6, 3], [16.8, 8], [14.6, 14], [12.2, 20.5], [10, 26.5], [8.6, 31], [8.1, 33]]), matGown, 0, 0, 0));
-  gown.rotation.y = -Math.PI / 2; // texture's back (u = 0.75) to local -X
+  // Lathe u = 0.75 already faces local -X (the back), where the crescent is painted.
+  keep(add(lathe([[19.5, 0], [18.6, 3], [16.8, 8], [14.6, 14], [12.2, 20.5], [10, 26.5], [8.6, 31], [8.1, 33]]), matGown, 0, 0, 0));
   add(lathe([[22, 1], [20, 6], [15.5, 15], [11, 25], [9, 31]], 24), matSheer, -0.6, 0, 0);
 
   // Torso: hips → waist → chest → shoulders → neck
@@ -584,6 +584,27 @@ function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
   circlet.rotation.y = 0.16;
   add(new THREE.OctahedronGeometry(1.25, 0), matGlow, 6.85, 60.9, 0);
 
+  // Witch hat: solid brim, a cone whose tip bends back, gold band with a crescent pin
+  const hat = new THREE.Group();
+  hat.position.set(0, 61.6, 0);
+  hat.rotation.z = 0.14;
+  body.add(hat);
+  const matHat = toon('#262a63');
+  const brim = keep(add(lathe([[5.6, 0], [13.6, -0.4], [14.2, 0.5], [12.8, 1], [9, 0.9], [5.6, 1.4]], 32), matHat, 0, 0, 0, hat));
+  const coneGeo = lathe([[7, 0.8], [6.4, 3.5], [5.2, 7.5], [3.9, 11.5], [2.5, 15.5], [1.3, 19.5], [0, 23.5]], 28);
+  const pos = coneGeo.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (y > 8) pos.setX(i, pos.getX(i) - 0.032 * (y - 8) * (y - 8));
+  }
+  coneGeo.computeVertexNormals();
+  keep(add(coneGeo, matHat, 0, 0, 0, hat));
+  const band = keep(add(new THREE.TorusGeometry(6.75, 0.85, 8, 28), matGold, 0, 2.2, 0, hat));
+  band.rotation.x = Math.PI / 2;
+  const pin = add(new THREE.TorusGeometry(2.3, 0.45, 6, 16, Math.PI * 1.25), matGold, 6.9, 3.4, 0, hat);
+  pin.rotation.set(0, Math.PI / 2, 0.9);
+  add(new THREE.OctahedronGeometry(0.9, 0), matGlow, 7.3, 3.2, 0.8, hat);
+
   // Staff: dark shaft with gold bands, ring head holding the orb, crescent, spikes
   const staff = new THREE.Group();
   staff.position.set(5, 30, 16);
@@ -612,10 +633,12 @@ function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
     const m = (o as THREE.Mesh).material;
     if (m === matSheer || m === matEyeWhite || m === matIris || m === matPupil || m === matLips) o.castShadow = false;
   });
+  // The brim would put the whole face in shadow; keep it readable.
+  brim.castShadow = false;
   for (const m of outlined) outline(m);
 
   const m = addMarkers(root, team, bright);
-  return { root, lean, yaw, body, weapon: staff, tip, tipGlow, mats: [matTeam, matGown, matBodice, matSkin, matHair], ...m };
+  return { root, lean, yaw, body, weapon: staff, tip, tipGlow, mats: [matTeam, matGown, matBodice, matSkin, matHair, matHat], ...m };
 }
 
 /** Team ring + facing arrow on the floor, counter shield, slow ring. Don't tilt with the body. */
