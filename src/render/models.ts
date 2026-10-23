@@ -318,17 +318,30 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   return buildMage(color, glowTex);
 }
 
+/**
+ * Mage — moon elf sorceress (from the concept sheet): silver hair with a braid,
+ * pointed ears, gold circlet, navy gown with gold trim and sheer sleeves, and a
+ * ringed staff holding an orb under a crescent. Team color: sash, gems and eyes.
+ */
 function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
   const bright = lighten(color, 0.45);
-  // Class palette: indigo robes and gold; the team color only on cape, hat band and eyes.
-  const matTeam = new THREE.MeshStandardMaterial({ color: team, roughness: 0.6, metalness: 0.1, flatShading: true });
-  const matRobe = new THREE.MeshStandardMaterial({ color: '#2a3478', roughness: 0.8, flatShading: true });
-  const matTunic = new THREE.MeshStandardMaterial({ color: '#4157b8', roughness: 0.6, metalness: 0.1, flatShading: true });
-  const matSkin = new THREE.MeshStandardMaterial({ color: '#e3c4a2', roughness: 0.7, flatShading: true });
-  const matBeard = new THREE.MeshStandardMaterial({ color: '#dfe3ea', roughness: 0.9, flatShading: true });
-  const matGold = new THREE.MeshStandardMaterial({ color: '#d1a75a', roughness: 0.4, metalness: 0.8, flatShading: true });
-  const matWood = new THREE.MeshStandardMaterial({ color: '#5d4433', roughness: 0.8, flatShading: true });
+  const matTeam = new THREE.MeshStandardMaterial({ color: team, roughness: 0.5, metalness: 0.2, flatShading: true });
+  const matGown = new THREE.MeshStandardMaterial({ color: '#232659', roughness: 0.7, flatShading: true });
+  const matBodice = new THREE.MeshStandardMaterial({ color: '#171936', roughness: 0.55, metalness: 0.15, flatShading: true });
+  const matSheer = new THREE.MeshStandardMaterial({
+    color: '#5a5f9e',
+    roughness: 0.6,
+    transparent: true,
+    opacity: 0.42,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    flatShading: true,
+  });
+  const matSkin = new THREE.MeshStandardMaterial({ color: '#e6b392', roughness: 0.65, flatShading: true });
+  const matHair = new THREE.MeshStandardMaterial({ color: '#c9c0b4', roughness: 0.6, metalness: 0.15, flatShading: true });
+  const matGold = new THREE.MeshStandardMaterial({ color: '#d4ad62', roughness: 0.3, metalness: 0.85, flatShading: true });
+  const matStaff = new THREE.MeshStandardMaterial({ color: '#1d1a33', roughness: 0.45, metalness: 0.3, flatShading: true });
   const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
 
   const root = new THREE.Group();
@@ -346,42 +359,95 @@ function buildMage(color: string, glowTex: THREE.Texture): ChampionRig {
     return mesh;
   };
 
-  add(new THREE.CylinderGeometry(10, 19, 30, 8), matRobe, 0, 15, 0); // robe
-  add(new THREE.CylinderGeometry(12.5, 10.5, 17, 8), matTunic, 0, 36, 0); // torso
-  add(new THREE.CylinderGeometry(11, 11, 3.5, 8), matGold, 0, 28, 0); // belt
-  for (const side of [-1, 1]) {
-    const pad = add(new THREE.IcosahedronGeometry(6.5, 0), matRobe, 0, 43, side * 12);
-    pad.scale.set(1, 0.7, 1);
-  }
-  add(new THREE.IcosahedronGeometry(7.5, 1), matSkin, 0, 52, 0); // head
-  const beard = add(new THREE.ConeGeometry(5, 12, 5), matBeard, 4.5, 45, 0);
-  beard.rotation.z = Math.PI;
-  for (const side of [-1, 1]) add(new THREE.BoxGeometry(1.4, 1.6, 2.4), matGlow, 6.8, 53.5, side * 2.6); // eyes
-  // Wizard hat: wide brim, team band, tall bent cone
-  add(new THREE.CylinderGeometry(15, 15, 1.6, 12), matRobe, 0, 58, 0);
-  add(new THREE.CylinderGeometry(9.2, 9.6, 3, 10), matTeam, 0, 60.5, 0);
-  const hat = add(new THREE.ConeGeometry(9, 28, 8), matRobe, -2, 75, 0);
-  hat.rotation.z = 0.28;
-  const cape = add(new THREE.BoxGeometry(2.5, 34, 22), matTeam, -11.5, 30, 0);
-  cape.rotation.z = -0.14;
+  // Gown: flared skirt, sheer overskirt, gold hem
+  add(new THREE.CylinderGeometry(8, 18, 33, 10), matGown, 0, 16.5, 0);
+  add(new THREE.CylinderGeometry(9.5, 21.5, 29, 10, 1, true), matSheer, -0.5, 14.5, 0);
+  const hem = add(new THREE.TorusGeometry(17.6, 0.9, 4, 20), matGold, 0, 1, 0);
+  hem.rotation.x = Math.PI / 2;
+  const moon = add(new THREE.TorusGeometry(3.2, 0.6, 4, 10, Math.PI * 1.3), matGold, -15.5, 8, 0); // crescent on the back
+  moon.rotation.y = Math.PI / 2;
 
-  // Staff in the right hand
+  // Bodice with a gold V and a team gem; team sash at the waist
+  add(new THREE.CylinderGeometry(8.6, 7.6, 15, 8), matBodice, 0, 40, 0);
+  for (const side of [-1, 1]) {
+    const v = add(new THREE.BoxGeometry(1, 12, 1.2), matGold, 7.9, 41, side * 2.6);
+    v.rotation.x = side * 0.42;
+  }
+  add(new THREE.OctahedronGeometry(1.7, 0), matGlow, 8.4, 35.5, 0);
+  const sash = add(new THREE.TorusGeometry(8.1, 1.5, 4, 14), matTeam, 0, 33, 0);
+  sash.rotation.x = Math.PI / 2;
+  const tail = add(new THREE.BoxGeometry(1.2, 12, 3), matTeam, 7.5, 26, -3.5);
+  tail.rotation.x = 0.15;
+
+  // Bare shoulders and arms with long sheer sleeves
+  for (const side of [-1, 1]) {
+    add(new THREE.SphereGeometry(3.2, 8, 6), matSkin, 0, 46, side * 9);
+    const arm = add(new THREE.CylinderGeometry(1.9, 1.6, 16, 6), matSkin, 0.5, 38, side * 11);
+    arm.rotation.x = side * 0.12;
+    add(new THREE.TorusGeometry(2.1, 0.5, 4, 8), matGold, 0.5, 42, side * 10.6).rotation.x = Math.PI / 2;
+    const sleeve = add(new THREE.CylinderGeometry(2.6, 7, 24, 7, 1, true), matSheer, -0.5, 29, side * 12.5);
+    sleeve.rotation.x = side * 0.1;
+  }
+
+  // Neck, choker, head
+  add(new THREE.CylinderGeometry(2.3, 2.8, 5, 6), matSkin, 0, 50, 0);
+  add(new THREE.TorusGeometry(2.7, 0.55, 4, 10), matGold, 0, 50.5, 0).rotation.x = Math.PI / 2;
+  add(new THREE.IcosahedronGeometry(6.3, 1), matSkin, 0.6, 57, 0);
+  for (const side of [-1, 1]) add(new THREE.BoxGeometry(1.2, 1.3, 2), matGlow, 6.1, 57.5, side * 2.3); // eyes
+
+  // Elf ears: long, pointing out and a little up and back
+  for (const side of [-1, 1]) {
+    const ear = add(new THREE.ConeGeometry(1.4, 10, 4), matSkin, -0.5, 58.5, side * 7);
+    ear.rotation.x = side * (Math.PI / 2 - 0.5);
+    ear.rotation.z = 0.35;
+  }
+
+  // Silver hair: crown, long back, framing strands and a braid
+  const crown = add(new THREE.SphereGeometry(7, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), matHair, -0.4, 57.6, 0);
+  crown.rotation.z = 0.28;
+  const back = add(new THREE.BoxGeometry(4, 34, 13), matHair, -6, 42, 0);
+  back.rotation.z = -0.08;
+  for (const side of [-1, 1]) {
+    const strand = add(new THREE.BoxGeometry(2, 15, 2.2), matHair, 1.2, 49, side * 6.4);
+    strand.rotation.x = side * 0.08;
+  }
+  for (let i = 0; i < 7; i++) add(new THREE.IcosahedronGeometry(1.9 - i * 0.12, 0), matHair, -8.4 + i * 0.1, 55 - i * 3.6, 0);
+
+  // Gold circlet with a team gem
+  const circlet = add(new THREE.TorusGeometry(6.6, 0.45, 4, 18), matGold, 0.4, 59.8, 0);
+  circlet.rotation.x = Math.PI / 2;
+  circlet.rotation.y = 0.15;
+  add(new THREE.OctahedronGeometry(1.3, 0), matGlow, 6.8, 60.6, 0);
+
+  // Staff: dark shaft with gold bands, a ring head holding the orb, a crescent on top
   const staff = new THREE.Group();
-  staff.position.set(5, 30, 17);
+  staff.position.set(5, 30, 16);
   body.add(staff);
-  add(new THREE.CylinderGeometry(1.4, 1.7, 60, 6), matWood, 0, 18, 0, staff);
-  const head = add(new THREE.TorusGeometry(4.6, 1.2, 6, 12), matGold, 0, 49, 0, staff);
-  head.rotation.y = Math.PI / 2;
-  const tip = add(new THREE.OctahedronGeometry(4.6, 0), matGlow, 0, 49, 0, staff);
-  const tipGlow = glowSprite(glowTex, team, 28);
-  tipGlow.position.set(0, 49, 0);
+  add(new THREE.CylinderGeometry(1.1, 1.4, 64, 6), matStaff, 0, 16, 0, staff);
+  for (const y of [-12, 8, 30, 42]) add(new THREE.CylinderGeometry(1.6, 1.6, 1.4, 6), matGold, 0, y, 0, staff);
+  const ring = add(new THREE.TorusGeometry(6.2, 1, 5, 18), matGold, 0, 54, 0, staff);
+  ring.rotation.y = Math.PI / 2;
+  const crescent = add(new THREE.TorusGeometry(8.2, 0.9, 4, 14, Math.PI * 1.1), matGold, 0, 54, 0, staff);
+  crescent.rotation.set(0, Math.PI / 2, -Math.PI * 0.05);
+  for (const side of [-1, 1]) {
+    const spike = add(new THREE.ConeGeometry(0.9, 6, 4), matGold, 0, 54 + side * 0.5, side * 9.5, staff);
+    spike.rotation.x = side * (Math.PI / 2);
+  }
+  add(new THREE.ConeGeometry(1, 7, 4), matGold, 0, 64, 0, staff);
+  const tip = add(new THREE.IcosahedronGeometry(3.8, 1), matGlow, 0, 54, 0, staff); // the orb
+  const tipGlow = glowSprite(glowTex, team, 30);
+  tipGlow.position.set(0, 54, 0);
   staff.add(tipGlow);
 
   shadowed(body);
   tip.castShadow = false;
+  // Sheer fabric shouldn't throw solid shadows.
+  body.traverse((o) => {
+    if ((o as THREE.Mesh).material === matSheer) o.castShadow = false;
+  });
 
   const m = addMarkers(root, team, bright);
-  return { root, lean, yaw, body, weapon: staff, tip, tipGlow, mats: [matTeam, matRobe, matTunic, matSkin], ...m };
+  return { root, lean, yaw, body, weapon: staff, tip, tipGlow, mats: [matTeam, matGown, matBodice, matSkin, matHair], ...m };
 }
 
 /** Team ring + facing arrow on the floor, counter shield, slow ring. Don't tilt with the body. */
