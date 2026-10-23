@@ -148,7 +148,8 @@ button {
   font-size: 16px;
 }
 
-/* Rough card: the background is a filtered pseudo-element so the text stays crisp. */
+/* Torn-paper card: the background is painted by src/ui/rough.ts into --rough and drawn
+   by a pseudo-element that reaches past the box, so brush streaks can bleed out. */
 .rough {
   position: relative;
   isolation: isolate;
@@ -157,10 +158,10 @@ button {
 .rough::before {
   content: '';
   position: absolute;
-  inset: 0;
+  inset: -10px;
   z-index: -1;
-  background: var(--card);
-  filter: url(#rough);
+  background: var(--rough, none) no-repeat 0 0 / 100% 100%;
+  transition: filter 0.2s;
 }
 
 /* ------------------------------------------------------------ home */
@@ -219,11 +220,9 @@ button {
 }
 
 .mode-card {
-  position: relative;
-  isolation: isolate;
   width: 345px;
   height: 455px;
-  padding: 48px 40px 44px;
+  padding: 49px;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -233,27 +232,11 @@ button {
   transition: transform 0.18s ease-out;
 }
 
-.mode-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -2;
-  background: var(--card);
-  filter: url(#rough);
-  transition: box-shadow 0.2s, background 0.2s;
-}
-
 .mode-art {
-  position: absolute;
-  inset: 26px 26px 40%;
-  z-index: -1;
-  background-size: cover;
-  background-position: center 20%;
-  opacity: 0.32;
-  filter: grayscale(0.4);
-  -webkit-mask-image: linear-gradient(to bottom, #000 30%, transparent);
-  mask-image: linear-gradient(to bottom, #000 30%, transparent);
-  transition: opacity 0.2s, filter 0.2s;
+  width: 100%;
+  aspect-ratio: 1102 / 724;
+  object-fit: contain;
+  transition: transform 0.25s ease-out, filter 0.25s;
 }
 
 .mode-card:hover {
@@ -261,13 +244,12 @@ button {
 }
 
 .mode-card:hover::before {
-  background: #262328;
-  box-shadow: 0 0 0 2px var(--accent);
+  filter: drop-shadow(0 0 2px var(--accent)) drop-shadow(0 0 18px rgba(171, 5, 242, 0.45));
 }
 
 .mode-card:hover .mode-art {
-  opacity: 0.55;
-  filter: none;
+  transform: scale(1.04);
+  filter: brightness(1.15);
 }
 
 .mode-copy {
@@ -303,17 +285,6 @@ button {
   flex-direction: column;
   gap: 18px;
   align-items: flex-start;
-  position: relative;
-  isolation: isolate;
-}
-
-.invite-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--card);
-  filter: url(#rough);
 }
 
 .invite-card h2 {
@@ -360,7 +331,7 @@ button {
 .select-shade {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to left, transparent, #000);
+  background: linear-gradient(to left, transparent 26.562%, #000 93.775%);
 }
 
 /* Figma: torn black edge over the art (opaque on the left, transparent on the right). */
@@ -466,58 +437,74 @@ button {
   pointer-events: none;
 }
 
-/* Details of the picked champion, beside the roster */
+/* Picked champion (Figma: right-aligned at 64px from the right edge, name 88px) */
 .champ-info {
   position: absolute;
-  left: 250px;
-  top: 128px;
-  width: min(330px, calc(100vw - 290px));
-  text-shadow: 0 1px 8px #000;
+  right: 64px;
+  top: 34%;
+  width: 362px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.champ-info .hero {
-  font-size: 64px;
+  align-items: flex-end;
+  text-align: right;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
 }
 
 .champ-info .role {
-  font-size: 16px;
-  color: var(--muted);
+  font-size: 18px;
+}
+
+.champ-info .hero {
+  font-size: 88px;
+  line-height: 1.05;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.champ-info .lore {
+  font-size: 18px;
+  line-height: 1.4;
+  margin-top: 14px;
 }
 
 .abilities {
   display: grid;
-  gap: 10px;
-  margin-top: 8px;
+  gap: 6px;
+  margin-top: 22px;
+  padding: 12px 14px;
+  justify-items: end;
+  border-radius: 12px;
+  background: rgba(1, 0, 0, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  text-shadow: none;
 }
 
 .ability {
-  display: grid;
-  grid-template-columns: 64px 1fr;
-  gap: 12px;
+  display: flex;
   align-items: baseline;
-}
-
-.ability .key {
-  display: inline-flex;
-  justify-content: center;
-  padding: 2px 6px;
-  border: 1px solid #000;
-  background: var(--tag);
-  font-size: 13px;
+  justify-content: flex-end;
+  gap: 10px;
+  font-size: 14px;
 }
 
 .ability .what {
-  font-size: 15px;
-  line-height: 1.35;
   color: var(--muted);
 }
 
 .ability .what b {
   color: var(--text);
   font-weight: 500;
+}
+
+.ability .key {
+  min-width: 52px;
+  padding: 1px 6px;
+  border: 1px solid #000;
+  background: rgba(90, 90, 90, 0.85);
+  font-size: 12px;
+  text-align: center;
+  text-shadow: none;
 }
 
 .select-bar {
@@ -609,17 +596,6 @@ button {
   align-items: center;
   gap: 18px;
   text-align: center;
-  position: relative;
-  isolation: isolate;
-}
-
-.dialog::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  background: var(--card);
-  filter: url(#rough);
 }
 
 .dialog h2 {

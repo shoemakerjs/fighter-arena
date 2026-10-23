@@ -12,6 +12,7 @@ import type { RollbackSession } from './net/rollback';
 import { CHAMPIONS, TICK_MS } from './sim/constants';
 import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
+import { roughenCards } from './ui/rough';
 import { ChampionSelect } from './ui/select';
 
 /** home → (select | online) → play ⇄ pause → end. Menus run a bot match in the background. */
@@ -293,6 +294,8 @@ if (import.meta.env.DEV) {
     },
   });
 }
+
+roughenCards();
 
 const joinCode = new URLSearchParams(location.search).get('lobby');
 if (joinCode) openLobby(joinCode);

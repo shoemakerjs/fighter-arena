@@ -126,13 +126,14 @@ export class ChampionSelect {
       tile.classList.toggle('active', Number(tile.dataset.champ) === this.champ);
       tile.classList.toggle('locked', this.locked);
     }
+    const role = c.role[0].toUpperCase() + c.role.slice(1);
     $('champ-info').innerHTML = `
-      <span class="kicker">${r.category}</span>
+      <p class="role">${role} · ${c.hp} HP</p>
       <h2 class="display hero">${r.hero}</h2>
-      <p class="role">${c.role} · ${c.hp} HP</p>
+      <p class="lore">${r.lore}</p>
       <div class="abilities">
-        <div class="ability"><span class="key">WASD</span><span class="what">move</span></div>
-        ${c.abilities.map((a, i) => `<div class="ability"><span class="key">${KEYS[i]}</span><span class="what"><b>${a.name}</b> — ${a.desc}</span></div>`).join('')}
+        ${c.abilities.map((a, i) => `<div class="ability"><span class="what"><b>${a.name}</b> — ${a.desc}</span><span class="key">${KEYS[i]}</span></div>`).join('')}
+        <div class="ability"><span class="what">move</span><span class="key">WASD</span></div>
       </div>`;
     const lock = $('lock-in') as HTMLButtonElement;
     lock.disabled = this.locked;

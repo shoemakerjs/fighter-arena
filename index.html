@@ -13,14 +13,6 @@
     <canvas id="world"></canvas>
     <canvas id="hud"></canvas>
 
-    <!-- Rough, torn edges for cards (used via filter: url(#rough)) -->
-    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
-      <filter id="rough" x="-5%" y="-5%" width="110%" height="110%">
-        <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="7" result="noise" />
-        <feDisplacementMap in="SourceGraphic" in2="noise" scale="9" xChannelSelector="R" yChannelSelector="G" />
-      </filter>
-    </svg>
-
     <!-- Home: pick a mode -->
     <div id="home" class="screen">
       <header class="topbar">
@@ -31,16 +23,16 @@
       </header>
       <p class="toast hidden" id="menu-note"></p>
       <div class="modes">
-        <button class="mode-card" id="play-online">
-          <span class="mode-art" style="background-image: url(./art/warrior.webp)"></span>
+        <button class="mode-card rough" id="play-online">
+          <img class="mode-art" src="./art/mode-pvp.webp" alt="" />
           <span class="mode-copy">
             <span class="mode-title">Play vs Players</span>
             <span class="mode-desc">Invite your friends, face each other in deadly battle</span>
           </span>
           <span class="tag">1v1</span>
         </button>
-        <button class="mode-card" id="play">
-          <span class="mode-art" style="background-image: url(./art/mage.webp)"></span>
+        <button class="mode-card rough" id="play">
+          <img class="mode-art" src="./art/mode-bot.webp" alt="" />
           <span class="mode-copy">
             <span class="mode-title">Play vs Bot</span>
             <span class="mode-desc">Test champions and train your abilities with AI</span>
@@ -52,7 +44,7 @@
 
     <!-- Online: invite a friend -->
     <div id="invite" class="screen hidden">
-      <div class="invite-card">
+      <div class="invite-card rough">
         <p class="kicker">Play vs Players</p>
         <h2 class="display" id="invite-title">Invite a friend</h2>
         <p class="body-text" id="invite-status"></p>
@@ -93,7 +85,7 @@
     </div>
 
     <div id="pause" class="screen dim hidden">
-      <div class="dialog">
+      <div class="dialog rough">
         <h2 class="display">Paused</h2>
         <button class="pill pill-lg" id="resume">Resume</button>
         <button class="link-btn" id="quit">Leave match</button>
@@ -101,7 +93,7 @@
     </div>
 
     <div id="end" class="screen dim hidden">
-      <div class="dialog">
+      <div class="dialog rough">
         <p class="kicker">Match over</p>
         <h2 class="display" id="end-title">Victory</h2>
         <p class="display score" id="end-score">3 : 1</p>
