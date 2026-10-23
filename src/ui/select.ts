@@ -1,5 +1,6 @@
 import { CHAMPIONS } from '../sim/constants';
 import { ROSTER } from './roster';
+import { brushRing } from './rough';
 
 export type SelectMode = 'bot' | 'online';
 export type EnemyState = 'waiting' | 'locked';
@@ -33,6 +34,8 @@ export class ChampionSelect {
   private ticker = 0;
 
   constructor(private hooks: SelectHooks) {
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7cc7ff';
+    document.documentElement.style.setProperty('--ring', `url(${brushRing(110, 24, 10, 12, accent)})`);
     this.buildRoster();
     $('lock-in').addEventListener('click', () => this.lockIn());
     $('select-back').addEventListener('click', () => this.hooks.onBack());
@@ -92,7 +95,10 @@ export class ChampionSelect {
       <div class="roster-group">
         <span class="roster-label">${r.category}</span>
         <button class="champ-tile" data-champ="${i}">
-          <span class="portrait${r.flip ? ' flip' : ''}" style="background-image: url(${r.art}); background-position: ${r.portrait}"></span>
+          <span class="portrait-wrap">
+            <span class="portrait${r.flip ? ' flip' : ''}" style="background-image: url(${r.art}); background-position: ${r.portrait}"></span>
+            <span class="ring"></span>
+          </span>
           <span class="champ-name">${r.hero}</span>
         </button>
       </div>`,

@@ -1,8 +1,9 @@
 /**
- * Torn-paper card backgrounds (Figma "stylized strokes"): a slightly skewed
- * quadrilateral with jittered edges, dry-brush streaks bleeding out of the
- * edges and dark flecks just inside them. Painted to a canvas at the element's
- * size and used as its background image.
+ * Hand-painted UI shapes (Figma "stylized strokes"), drawn to canvases:
+ * - cards: a slightly skewed quadrilateral with jittered edges, dry-brush streaks
+ *   bleeding out and dark flecks just inside;
+ * - pill buttons: the same treatment around a capsule;
+ * - the selection ring: brush strokes laid along a rounded square.
  */
 
 const FILL = '#1f1f1f';
@@ -94,16 +95,169 @@ function paint(el: HTMLElement, seed: number) {
   el.style.setProperty('--rough', `url(${c.toDataURL()})`);
 }
 
-/** Paint every `.rough` element now and again whenever it changes size. */
+interface Sample {
+  x: number;
+  y: number;
+  /** Outward normal. */
+  nx: number;
+  ny: number;
+  /** Tangent, clockwise. */
+  tx: number;
+  ty: number;
+}
+
+/** Points every ~`step` px around a rounded rectangle, clockwise from the top-left. */
+function roundedRect(x: number, y: number, w: number, h: number, rad: number, step: number): Sample[] {
+  const out: Sample[] = [];
+  const edge = (x0: number, y0: number, x1: number, y1: number, nx: number, ny: number) => {
+    const n = Math.max(1, Math.round(Math.hypot(x1 - x0, y1 - y0) / step));
+    for (let i = 0; i < n; i++) {
+      const t = i / n;
+      out.push({ x: x0 + (x1 - x0) * t, y: y0 + (y1 - y0) * t, nx, ny, tx: -ny, ty: nx });
+    }
+  };
+  const arc = (cx: number, cy: number, a0: number) => {
+    const n = Math.max(2, Math.round((rad * Math.PI) / 2 / step));
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i / n) * (Math.PI / 2);
+      const nx = Math.cos(a);
+      const ny = Math.sin(a);
+      out.push({ x: cx + nx * rad, y: cy + ny * rad, nx, ny, tx: -ny, ty: nx });
+    }
+  };
+  edge(x + rad, y, x + w - rad, y, 0, -1);
+  arc(x + w - rad, y + rad, -Math.PI / 2);
+  edge(x + w, y + rad, x + w, y + h - rad, 1, 0);
+  arc(x + w - rad, y + h - rad, 0);
+  edge(x + w - rad, y + h, x + rad, y + h, 0, 1);
+  arc(x + rad, y + h - rad, Math.PI / 2);
+  edge(x, y + h - rad, x, y + rad, -1, 0);
+  arc(x + rad, y + rad, Math.PI);
+  return out;
+}
+
+function makeCanvas(w: number, h: number) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * dpr);
+  c.height = Math.round(h * dpr);
+  const g = c.getContext('2d')!;
+  g.scale(dpr, dpr);
+  g.lineCap = 'round';
+  return { c, g };
+}
+
+function rgba(hex: string, a: number) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+}
+
+/** Stroke a run of samples (following curves) shifted along the normal by `off`. */
+function strokeAlong(g: CanvasRenderingContext2D, pts: Sample[], start: number, count: number, off: number) {
+  g.beginPath();
+  for (let k = 0; k <= count; k++) {
+    const p = pts[(start + k) % pts.length];
+    const x = p.x + p.nx * off;
+    const y = p.y + p.ny * off;
+    if (k === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+  g.stroke();
+}
+
+const PILL_MARGIN = 6;
+
+/** A capsule with a torn edge and brush streaks, in `color`. */
+function paintPill(w: number, h: number, color: string, seed: number): string {
+  const W = w + PILL_MARGIN * 2;
+  const H = h + PILL_MARGIN * 2;
+  const { c, g } = makeCanvas(W, H);
+  const r = rng(seed);
+  const pts = roundedRect(PILL_MARGIN, PILL_MARGIN, w, h, h / 2, 3);
+
+  g.beginPath();
+  pts.forEach((p, i) => {
+    let j = (r() - 0.5) * 1.2;
+    if (r() < 0.05) j -= 1 + r() * 2;
+    const x = p.x + p.nx * j;
+    const y = p.y + p.ny * j;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  });
+  g.closePath();
+  g.fillStyle = color;
+  g.fill();
+
+  const count = Math.round(pts.length / 1.6);
+  for (let k = 0; k < count; k++) {
+    const i = Math.floor(r() * pts.length);
+    const out = r() < 0.55;
+    g.strokeStyle = out ? rgba(color, 0.5 + r() * 0.5) : `rgba(0,0,0,${0.12 + r() * 0.25})`;
+    g.lineWidth = 0.6 + r() * (out ? 1.8 : 1.2);
+    strokeAlong(g, pts, i, 2 + Math.floor(r() * (out ? 8 : 4)), out ? r() * 3 : -(1 + r() * 3));
+  }
+  return c.toDataURL();
+}
+
+/**
+ * Selection ring: brush strokes laid along a rounded square of `size` (radius
+ * `rad`), spread over a band of `band` px centered on its edge. The image is
+ * `size + 2 * pad` square.
+ */
+export function brushRing(size: number, rad: number, band: number, pad: number, color: string, seed = 5): string {
+  const S = size + pad * 2;
+  const { c, g } = makeCanvas(S, S);
+  const r = rng(seed);
+  const pts = roundedRect(pad, pad, size, size, rad, 2);
+
+  // A solid core so the ring reads as one shape, then strokes on top for texture.
+  g.strokeStyle = rgba(color, 0.9);
+  g.lineWidth = band * 0.55;
+  strokeAlong(g, pts, 0, pts.length, 0);
+  const count = pts.length * 3;
+  for (let k = 0; k < count; k++) {
+    const i = Math.floor(r() * pts.length);
+    g.strokeStyle = rgba(color, 0.35 + r() * 0.65);
+    g.lineWidth = 0.8 + r() * 2.6;
+    strokeAlong(g, pts, i, 3 + Math.floor(r() * 14), (r() - 0.5) * band);
+  }
+  // A few dark nicks so it doesn't look machine-perfect.
+  for (let k = 0; k < 10; k++) {
+    g.strokeStyle = 'rgba(0,0,0,0.45)';
+    g.lineWidth = 1 + r() * 1.5;
+    strokeAlong(g, pts, Math.floor(r() * pts.length), 1 + Math.floor(r() * 3), (r() - 0.5) * band * 0.6);
+  }
+  return c.toDataURL();
+}
+
+const cssVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+/**
+ * Paint every `.rough` card and `.pill` button now and again whenever it changes
+ * size. Pills get two images: `--brush` (accent) and `--brush-off` (disabled).
+ */
 export function roughenCards() {
-  const els = document.querySelectorAll<HTMLElement>('.rough');
-  const seeds = new Map<HTMLElement, number>();
-  els.forEach((el, i) => seeds.set(el, 1013 * (i + 1)));
+  const accent = cssVar('--accent') || '#7cc7ff';
+  const seeds = new Map<Element, number>();
+  let n = 1;
+  const paintOne = (el: HTMLElement) => {
+    if (!seeds.has(el)) seeds.set(el, 1013 * n++);
+    const seed = seeds.get(el)!;
+    if (el.classList.contains('pill')) {
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (!w || !h) return;
+      el.style.setProperty('--brush', `url(${paintPill(w, h, accent, seed)})`);
+      el.style.setProperty('--brush-off', `url(${paintPill(w, h, '#3a3a40', seed)})`);
+    } else {
+      paint(el, seed);
+    }
+  };
   const ro = new ResizeObserver((entries) => {
-    for (const e of entries) paint(e.target as HTMLElement, seeds.get(e.target as HTMLElement) ?? 7);
+    for (const e of entries) paintOne(e.target as HTMLElement);
   });
-  els.forEach((el) => {
-    paint(el, seeds.get(el)!);
+  for (const el of document.querySelectorAll<HTMLElement>('.rough, .pill')) {
+    paintOne(el);
     ro.observe(el);
-  });
+  }
 }
