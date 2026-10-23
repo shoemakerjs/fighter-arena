@@ -430,19 +430,72 @@ button {
   pointer-events: none;
   display: flex;
   flex-direction: column;
-  gap: 40px;
+  gap: 28px;
 }
 
 .select-title {
   font-size: 32px;
 }
 
+/* One column of champions that scrolls (SimpleBar) once it outgrows the screen. */
 .roster {
   pointer-events: auto;
   align-self: flex-start;
-  display: grid;
-  grid-template-columns: repeat(2, 110px);
-  gap: 24px 48px;
+  flex: 0 1 auto;
+  min-height: 0;
+  width: 190px;
+  /* Room for the selection ring, which reaches 12px past each portrait. */
+  margin: -14px 0 0 -14px;
+}
+
+/* Champions fade out at the edges instead of being cut off mid-portrait. */
+#roster .simplebar-content-wrapper {
+  mask-image: linear-gradient(transparent, #000 14px, #000 calc(100% - 22px), transparent);
+}
+
+.roster .simplebar-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 14px 0 14px 14px !important;
+}
+
+.roster .simplebar-track.simplebar-vertical {
+  right: 4px;
+  width: 10px;
+  overflow: visible;
+}
+
+/* Track: a faint hand-drawn groove. */
+.roster .simplebar-track.simplebar-vertical::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Thumb: brush stroke in the accent color (painted into --brush by roughenCards). */
+.roster .simplebar-scrollbar {
+  left: 1px;
+  right: 1px;
+}
+
+/* The id beats SimpleBar's own `.simplebar-vertical .simplebar-scrollbar:before` rules. */
+#roster .simplebar-scrollbar::before {
+  inset: -6px;
+  opacity: 1;
+  border-radius: 0;
+  background: var(--brush, var(--accent)) no-repeat 0 0 / 100% 100%;
+  transition: filter 0.15s;
+}
+
+#roster .simplebar-track:hover .simplebar-scrollbar::before,
+#roster.simplebar-dragging .simplebar-scrollbar::before {
+  filter: brightness(1.1) drop-shadow(0 0 8px var(--accent-glow));
 }
 
 .roster-group {

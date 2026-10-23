@@ -320,8 +320,9 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   if (champ === CHAMP.MAGE) return buildMage(color, glowTex);
   if (champ === CHAMP.WARRIOR) return buildWarrior(color, glowTex);
   if (champ === CHAMP.ASSASSIN) return buildAssassin(color, glowTex);
+  if (champ === CHAMP.ARCHER) return buildArcher(color, glowTex);
   // No modeled skin yet: the test mannequin.
-  return buildDummy(color, glowTex, champ === CHAMP.ARCHER ? 'bow' : 'rod');
+  return buildDummy(color, glowTex);
 }
 
 // ---------------------------------------------------------------- toon style
@@ -777,16 +778,15 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
 
 /**
  * Test mannequin for champions without a modeled skin: team-colored torso, grey
- * limbs, a visor showing where it faces and a simple prop (bow or rod).
+ * limbs, a visor showing where it faces and a plain rod as the weapon.
  */
-function buildDummy(color: string, glowTex: THREE.Texture, prop: 'bow' | 'rod'): ChampionRig {
+function buildDummy(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
   const bright = lighten(color, 0.45);
   const matTeam = toon(team);
   const matGrey = toon('#8d93a3');
   const matDark = toon('#3a3f4c');
   const matWood = toon('#8a6640');
-  const matString = new THREE.MeshBasicMaterial({ color: '#e8e2d0' });
   const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
 
   const root = new THREE.Group();
@@ -818,7 +818,7 @@ function buildDummy(color: string, glowTex: THREE.Texture, prop: 'bow' | 'rod'):
   const belt = add(new THREE.TorusGeometry(8.2, 1, 6, 24), matDark, 0, 30.5, 0);
   belt.rotation.x = Math.PI / 2;
 
-  // Arms: the left hand holds the prop out front, the right one rests near the chest.
+  // Arms: the left hand holds the rod out front, the right one rests near the chest.
   const lHand = v(13, 37, -9);
   const rHand = v(7, 36, 9);
   keep(limb(body, v(0, 45, -10.5), v(5, 40, -12), 2.4, matGrey));
@@ -832,27 +832,13 @@ function buildDummy(color: string, glowTex: THREE.Texture, prop: 'bow' | 'rod'):
   const visor = add(new THREE.BoxGeometry(2, 2.2, 9), matGlow, 6.8, 58, 0);
   visor.castShadow = false;
 
-  // Prop: rotates around its local Z axis at the left hand.
+  // Rod: rotates around its local Z axis at the left hand.
   const weapon = new THREE.Group();
   weapon.position.copy(lHand);
+  weapon.rotation.z = -0.22;
   body.add(weapon);
-  let tip: THREE.Mesh;
-  if (prop === 'bow') {
-    // Limbs bow forward (+X), string straight across at the back.
-    const arc = Math.PI * 0.72;
-    const bowR = 22;
-    const bow = keep(add(new THREE.TorusGeometry(bowR, 1.1, 6, 28, arc), matWood, -bowR + 1, 0, 0, weapon));
-    bow.rotation.z = -arc / 2;
-    const half = Math.sin(arc / 2) * bowR;
-    const back = Math.cos(arc / 2) * bowR - bowR + 1;
-    add(new THREE.CylinderGeometry(0.3, 0.3, half * 2, 4), matString, back, 0, 0, weapon).castShadow = false;
-    add(new THREE.CylinderGeometry(1.6, 1.6, 5, 8), matDark, 1, 0, 0, weapon);
-    tip = add(new THREE.OctahedronGeometry(1.4, 0), matGlow, 4, 0, 0, weapon);
-  } else {
-    weapon.rotation.z = -0.22;
-    keep(add(new THREE.CylinderGeometry(0.9, 0.9, 54, 8), matWood, 0, 12, 0, weapon));
-    tip = add(new THREE.OctahedronGeometry(2.2, 0), matGlow, 0, 40, 0, weapon);
-  }
+  keep(add(new THREE.CylinderGeometry(0.9, 0.9, 54, 8), matWood, 0, 12, 0, weapon));
+  const tip = add(new THREE.OctahedronGeometry(2.2, 0), matGlow, 0, 40, 0, weapon);
   const tipGlow = glowSprite(glowTex, team, 22);
   tipGlow.position.copy(tip.position);
   weapon.add(tipGlow);
@@ -1353,4 +1339,271 @@ function buildAssassin(color: string, glowTex: THREE.Texture): ChampionRig {
 
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon: right, tip, tipGlow, mats: [matTeam, matCloak, matQuilt, matBlack, matBoot], ...markers };
+}
+
+/** Dark leather with bronze vine filigree and small leaves, for the elf's armor. u around, v bottom→top. */
+function makeElvenLeatherTexture(): THREE.CanvasTexture {
+  const W = 512;
+  const H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#3a291e';
+  g.fillRect(0, 0, W, H);
+  // Overlapping leaf-shaped plates
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 16; col++) {
+      const x = col * 32 + (row % 2 ? 16 : 0);
+      const y = row * 32 + 4;
+      g.fillStyle = (row + col) % 3 === 0 ? '#45311f' : '#33251a';
+      g.beginPath();
+      g.moveTo(x, y);
+      g.quadraticCurveTo(x + 15, y + 12, x, y + 30);
+      g.quadraticCurveTo(x - 15, y + 12, x, y);
+      g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.35)';
+      g.lineWidth = 1.5;
+      g.stroke();
+    }
+  }
+  // Bronze filigree: wavy vines climbing up with curls
+  g.strokeStyle = '#b8894d';
+  g.lineCap = 'round';
+  for (let k = 0; k < 6; k++) {
+    const x0 = 40 + k * 86;
+    g.lineWidth = 3;
+    g.beginPath();
+    for (let y = 0; y <= H; y += 8) {
+      const x = x0 + Math.sin(y * 0.05 + k) * 14;
+      if (y === 0) g.moveTo(x, H - y);
+      else g.lineTo(x, H - y);
+    }
+    g.stroke();
+    g.lineWidth = 2;
+    for (let y = 30; y < H; y += 60) {
+      const x = x0 + Math.sin(y * 0.05 + k) * 14;
+      const dir = (y / 60) % 2 ? 1 : -1;
+      g.beginPath();
+      g.arc(x + dir * 9, H - y, 8, 0, Math.PI * 1.5);
+      g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+/**
+ * Elianis, wood elf archer: platinum hair with a leaf circlet and long ears, a torn
+ * moss-green cloak with the hood down, dark leaf-plate leather with bronze filigree,
+ * a thorned recurve bow in the left hand and a quiver on the back.
+ */
+function buildArcher(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team);
+  const matCloak = toon('#3e5634', { side: THREE.FrontSide });
+  const matCloakDark = toon('#2b3d26');
+  const matLining = toon('#6b6a3e', { side: THREE.BackSide });
+  const matArmor = toon('#ffffff', { map: makeElvenLeatherTexture() });
+  const matLeather = toon('#4a3324');
+  const matDark = toon('#2a1e17');
+  const matBoot = toon('#3d2a1d');
+  const matBronze = toon('#b8894d');
+  const matWood = toon('#4b3220');
+  const matLeaf = toon('#6f8f3a');
+  const matSkin = toonSoft('#f1d2bb');
+  const matHair = toonSoft('#e6c98f');
+  const matHairDark = toonSoft('#c29b5e');
+  const matSteel = toon('#c9ccd4');
+  const matString = new THREE.MeshBasicMaterial({ color: '#e8e2d0' });
+  const matEyeWhite = new THREE.MeshBasicMaterial({ color: '#f4f1ee' });
+  const matIris = new THREE.MeshBasicMaterial({ color: '#6f8a4a' });
+  const matPupil = new THREE.MeshBasicMaterial({ color: '#1b1a12' });
+  const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Legs: dark trousers, tall boots with bronze knee guards
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0, 26, side * 4.6), v(1.6, 13.5, side * 5.1), 2.9, matDark));
+    keep(limb(body, v(1.6, 14, side * 5.1), v(0.6, 3.2, side * 5.3), 2.8, matBoot));
+    keep(add(new THREE.BoxGeometry(7.4, 2.8, 4.4), matBoot, 2, 1.4, side * 5.3));
+    const knee = keep(add(new THREE.ConeGeometry(2.4, 5, 4), matBronze, 3.6, 14.5, side * 5.1));
+    knee.rotation.z = -Math.PI / 2 + 0.2;
+    knee.scale.set(1, 1, 0.7);
+    add(new THREE.TorusGeometry(2.9, 0.4, 4, 12), matBronze, 1.1, 9, side * 5.2).rotation.x = Math.PI / 2;
+  }
+
+  // Torso: leaf-plate leather; belt with pouches and a knife; quiver strap across the chest
+  keep(add(lathe([[7.6, 24], [8.3, 30], [9.2, 37], [9.8, 42], [9, 46], [6, 48.6], [2.8, 50]]), matArmor, 0, 0, 0));
+  const belt = keep(add(new THREE.TorusGeometry(8.3, 1.1, 6, 24), matLeather, 0, 28.5, 0));
+  belt.rotation.x = Math.PI / 2;
+  add(new THREE.BoxGeometry(1.2, 2.4, 2.8), matBronze, 8.8, 28.5, 0);
+  for (const [z, x] of [[-6.8, 3.8], [-2, -7.8]]) keep(add(new THREE.BoxGeometry(3, 3.6, 2.6), matLeather, x, 26.5, z));
+  const knife = new THREE.Group();
+  knife.position.set(6.5, 27, 6.4);
+  knife.rotation.set(0.25, 0, -0.35);
+  body.add(knife);
+  add(new THREE.CylinderGeometry(0.7, 0.7, 3.6, 8), matLeather, 0, 1.8, 0, knife);
+  add(new THREE.BoxGeometry(1, 0.8, 3.2), matBronze, 0, 0, 0, knife);
+  const blade = keep(add(new THREE.ConeGeometry(1.1, 9, 4), matSteel, 0, -4.8, 0, knife));
+  blade.rotation.x = Math.PI;
+  blade.scale.set(1, 1, 0.35);
+  keep(limb(body, v(8.2, 46, -6.4), v(8.6, 30, 6.4), 0.8, matLeather));
+
+  // Arms: the left one holds the bow out front, the right one rests near the string.
+  const lShoulder = v(0, 45.5, -9);
+  const lElbow = v(6.5, 41, -11.5);
+  const lHand = v(13, 37.5, -9);
+  const rShoulder = v(0, 45.5, 9);
+  const rElbow = v(1.5, 37.5, 12.5);
+  const rHand = v(6.5, 34, 9.5);
+  for (const s of [lShoulder, rShoulder]) keep(add(new THREE.SphereGeometry(3.4, 14, 10), matArmor, s.x, s.y, s.z));
+  keep(limb(body, lShoulder, lElbow, 2.3, matDark));
+  keep(limb(body, lElbow, lHand, 2.1, matLeather));
+  keep(limb(body, rShoulder, rElbow, 2.3, matDark));
+  keep(limb(body, rElbow, rHand, 2.1, matLeather));
+  for (const [elbow, hand] of [[lElbow, lHand], [rElbow, rHand]]) {
+    // Bronze bracer two thirds down the forearm
+    const at = elbow.clone().lerp(hand, 0.6);
+    const dir = hand.clone().sub(elbow).normalize();
+    const bracer = add(new THREE.CylinderGeometry(2.5, 2.4, 3.4, 10), matBronze, at.x, at.y, at.z);
+    bracer.quaternion.setFromUnitVectors(v(0, 1, 0), dir);
+    keep(add(new THREE.SphereGeometry(2.2, 12, 10), matDark, hand.x, hand.y, hand.z));
+  }
+
+  // Cloak: long torn back panel to the ankles and a torn mantle with the hood lying down
+  const cloakGeo = raggedLathe([[19.5, 1], [15.5, 13], [12.6, 27], [10.8, 40], [9.6, 47]], 26, 10, 14, Math.PI * 0.82, Math.PI * 1.36);
+  keep(add(cloakGeo, matCloak, -1.2, 0, 0));
+  add(cloakGeo, matLining, -1.2, 0, 0);
+  const mantleGeo = raggedLathe([[13.4, 38], [12, 43.5], [9, 48.4], [5, 51.4]], 30, 4.5, 21, Math.PI / 2 + 0.5, TAU - 1);
+  keep(add(mantleGeo, matCloak, 0, 0, 0));
+  add(mantleGeo, matLining, 0, 0, 0);
+  // Lowered hood: a soft roll of cloth behind the neck
+  const hood = keep(add(new THREE.TorusGeometry(5.6, 2.6, 8, 20, Math.PI * 1.2), matCloakDark, -2.2, 50.5, 0));
+  hood.rotation.set(Math.PI / 2, 0, Math.PI * 0.4);
+  // Clasp: bronze leaf with a team gem
+  add(new THREE.OctahedronGeometry(1.4, 0), matBronze, 9.6, 46.4, -4.6).scale.set(0.6, 1.4, 1);
+  add(new THREE.OctahedronGeometry(0.85, 0), matTeam, 10.3, 46.4, -4.6);
+
+  // Quiver on the back, angled over the right shoulder, full of fletched arrows
+  const quiver = new THREE.Group();
+  quiver.position.set(-13.5, 43, 3.5);
+  quiver.rotation.set(-0.5, 0, 0.22);
+  body.add(quiver);
+  keep(add(new THREE.CylinderGeometry(3.2, 2.6, 24, 10), matLeather, 0, 0, 0, quiver));
+  for (const y of [-9, 8]) add(new THREE.TorusGeometry(3.1, 0.45, 4, 12), matBronze, 0, y, 0, quiver).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU;
+    const x = Math.cos(a) * 1.5;
+    const z = Math.sin(a) * 1.5;
+    add(new THREE.CylinderGeometry(0.25, 0.25, 6, 4), matWood, x, 14, z, quiver);
+    const fletch = add(new THREE.ConeGeometry(1, 3.4, 3), i % 2 ? matTeam : matHair, x, 16.5, z, quiver);
+    fletch.rotation.y = a;
+  }
+
+  // Neck and head
+  keep(add(new THREE.CylinderGeometry(2.3, 2.8, 5, 12), matSkin, 0, 50.5, 0));
+  keep(add(new THREE.SphereGeometry(6.1, 24, 18), matSkin, 0.7, 57.4, 0)).scale.set(1, 1.12, 0.92);
+  keep(add(new THREE.SphereGeometry(2.4, 14, 10), matSkin, 2.7, 53.8, 0)).scale.set(1, 0.85, 1.25);
+  for (const side of [-1, 1]) {
+    add(new THREE.SphereGeometry(1.15, 12, 8), matEyeWhite, 5.75, 57.8, side * 2.4).scale.set(0.45, 0.55, 1);
+    add(new THREE.SphereGeometry(0.75, 10, 8), matIris, 6.25, 57.75, side * 2.3).scale.set(0.4, 0.8, 1);
+    add(new THREE.SphereGeometry(0.36, 8, 6), matPupil, 6.6, 57.75, side * 2.3).scale.set(0.4, 1, 1);
+    const brow = add(new THREE.BoxGeometry(0.55, 0.45, 2.7), matHairDark, 6, 59.5, side * 2.5);
+    brow.rotation.x = side * 0.18;
+    // Long elven ears sweeping back and up
+    const ear = keep(add(new THREE.ConeGeometry(1.3, 8.5, 8), matSkin, -1.2, 59, side * 6.4));
+    ear.scale.set(0.5, 1, 1);
+    ear.rotation.x = side * (Math.PI / 2 - 0.75);
+    ear.rotation.z = 0.7;
+  }
+  add(new THREE.ConeGeometry(0.42, 1.4, 6), matSkin, 6.45, 56.2, 0).rotation.z = -Math.PI / 2 + 0.6;
+  add(new THREE.BoxGeometry(0.3, 0.3, 1.6), new THREE.MeshBasicMaterial({ color: '#a8635a' }), 6.05, 53.9, 0);
+
+  // Platinum hair: crown, swept bangs, wavy locks to the shoulder blades
+  const crown = keep(add(new THREE.SphereGeometry(6.8, 24, 14, 0, TAU, 0, Math.PI * 0.6), matHair, -0.6, 58.5, 0));
+  crown.rotation.z = 0.3;
+  crown.scale.set(1.05, 1.06, 0.99);
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(5.4, 62, side * 0.6), v(5.6, 57, side * 5.4), 1.4, matHair));
+    keep(limb(body, v(3, 57, side * 6.3), v(3.2, 45, side * 7.6), 1.5, matHair));
+  }
+  // Back locks fall over the lowered hood and mantle, not inside them.
+  for (let i = 0; i < 7; i++) {
+    const z = -6.6 + i * 2.2;
+    const wave = i % 2 ? 1 : -1;
+    const mid = v(-9.6, 52, z * 1.05);
+    keep(limb(body, v(-4.6, 60, z * 0.8), mid, 2.1, i % 2 ? matHair : matHairDark));
+    keep(limb(body, mid, v(-13.4 + wave * 0.5, 39 + Math.abs(z) * 0.6, z * 1.2 + wave), 1.9, i % 2 ? matHair : matHairDark));
+  }
+
+  // Circlet of leaves and twigs
+  const circlet = add(new THREE.TorusGeometry(6.6, 0.4, 5, 24), matWood, -0.3, 61.4, 0);
+  circlet.rotation.set(Math.PI / 2, 0.22, 0);
+  for (let i = 0; i < 7; i++) {
+    const a = Math.PI * 0.55 + (i / 6) * Math.PI * 0.9;
+    const leaf = add(new THREE.OctahedronGeometry(1.6, 0), matLeaf, -0.3 + Math.cos(a) * 6.8, 61.6 + (i % 2) * 0.8, Math.sin(a) * 6.8);
+    leaf.scale.set(0.35, 0.9, 1.5);
+    leaf.rotation.y = -a;
+  }
+
+  // Bow: dark recurve with bronze thorns along the limbs, held upright in the left hand.
+  // Local +X faces forward; the limbs bend back towards the archer and the tips curl forward.
+  const bowGroup = new THREE.Group();
+  bowGroup.position.copy(lHand);
+  body.add(bowGroup);
+  const half: [number, number][] = [[0, 0], [-2.6, 6], [-6.8, 14], [-8.6, 22], [-7, 28.5], [-5.4, 31]];
+  const pts = [...half.slice(1).reverse().map(([x, y]) => v(x, -y, 0)), ...half.map(([x, y]) => v(x, y, 0))];
+  const curve = new THREE.CatmullRomCurve3(pts);
+  keep(add(new THREE.TubeGeometry(curve, 64, 1.05, 6), matWood, 0, 0, 0, bowGroup));
+  for (const s of [-1, 1]) {
+    for (const d of [0.1, 0.2, 0.3, 0.4]) {
+      const p = curve.getPoint(0.5 + s * d);
+      const thorn = add(new THREE.ConeGeometry(0.55, 2.8, 4), matBronze, p.x + 1, p.y, p.z, bowGroup);
+      thorn.rotation.z = -Math.PI / 2 + s * 0.6;
+    }
+    const tipPt = half[half.length - 1];
+    add(new THREE.ConeGeometry(0.7, 3, 5), matBronze, tipPt[0] + 0.6, s * (tipPt[1] + 1), 0, bowGroup).rotation.z = s > 0 ? -0.6 : Math.PI + 0.6;
+  }
+  const nock = half[half.length - 2];
+  const string = add(new THREE.CylinderGeometry(0.22, 0.22, nock[1] * 2, 4), matString, nock[0], 0, 0, bowGroup);
+  string.castShadow = false;
+  keep(add(new THREE.CylinderGeometry(1.5, 1.5, 5.5, 8), matLeather, 0.2, 0, 0, bowGroup));
+  add(new THREE.OctahedronGeometry(0.9, 0), matTeam, 1.6, 3.6, 0, bowGroup);
+
+  const tip = add(new THREE.OctahedronGeometry(1.2, 0), matGlow, 3.4, 0, 0, bowGroup);
+  const tipGlow = glowSprite(glowTex, team, 18);
+  tipGlow.position.set(3.4, 0, 0);
+  bowGroup.add(tipGlow);
+
+  shadowed(body);
+  tip.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matLining || m === matEyeWhite || m === matIris || m === matPupil || m === matGlow) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: bowGroup, tip, tipGlow, mats: [matTeam, matCloak, matArmor, matDark, matSkin, matHair], ...markers };
 }

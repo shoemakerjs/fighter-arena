@@ -4,7 +4,7 @@ export interface RosterEntry {
   hero: string;
   /** Roster group on the champion select screen. */
   category: string;
-  /** Key art, relative to the page. */
+  /** Key art, relative to the page (./art/placeholder.svg until a painting exists). */
   art: string;
   /** Mirror the art so the figure stands on the right side of the screen. */
   flip: boolean;
@@ -43,12 +43,11 @@ export const ROSTER: RosterEntry[] = [
     lore: 'A hooded killer from the harbor alleys. It marks its target, vanishes into smoke and returns only to finish the job.',
   },
   {
-    hero: 'Elowen',
+    hero: 'Elianis',
     category: 'Marksman',
-    // Stand-in until the painted art arrives.
-    art: './art/placeholder.svg',
-    flip: false,
-    portrait: '68% 12%',
-    lore: 'A wood elf from the deep groves. She hunts from the treeline, pins her prey with vines and lets the sky rain arrows on whoever is still standing.',
+    art: './art/archer.webp',
+    flip: true,
+    portrait: '45% 20%',
+    lore: 'A wood elf from the deep groves. He hunts from the treeline, pins his prey with vines and lets the sky rain arrows on whoever is still standing.',
   },
 ];

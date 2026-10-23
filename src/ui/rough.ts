@@ -173,7 +173,7 @@ function paintPill(w: number, h: number, color: string, seed: number): string {
   const H = h + PILL_MARGIN * 2;
   const { c, g } = makeCanvas(W, H);
   const r = rng(seed);
-  const pts = roundedRect(PILL_MARGIN, PILL_MARGIN, w, h, h / 2, 3);
+  const pts = roundedRect(PILL_MARGIN, PILL_MARGIN, w, h, Math.min(w, h) / 2, 3);
 
   g.beginPath();
   pts.forEach((p, i) => {
@@ -233,8 +233,9 @@ export function brushRing(size: number, rad: number, band: number, pad: number, 
 const cssVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /**
- * Paint every `.rough` card and `.pill` button now and again whenever it changes
- * size. Pills get two images: `--brush` (accent) and `--brush-off` (disabled).
+ * Paint every `.rough` card, `.pill` button and `.brush` stroke (e.g. a scrollbar
+ * thumb) now and again whenever it changes size. Pills get two images: `--brush`
+ * (accent) and `--brush-off` (disabled); brush strokes only `--brush`.
  */
 export function roughenCards() {
   const accent = cssVar('--accent') || '#7cc7ff';
@@ -243,12 +244,12 @@ export function roughenCards() {
   const paintOne = (el: HTMLElement) => {
     if (!seeds.has(el)) seeds.set(el, 1013 * n++);
     const seed = seeds.get(el)!;
-    if (el.classList.contains('pill')) {
+    if (el.classList.contains('pill') || el.classList.contains('brush')) {
       const w = el.clientWidth;
       const h = el.clientHeight;
       if (!w || !h) return;
       el.style.setProperty('--brush', `url(${paintPill(w, h, accent, seed)})`);
-      el.style.setProperty('--brush-off', `url(${paintPill(w, h, '#3a3a40', seed)})`);
+      if (el.classList.contains('pill')) el.style.setProperty('--brush-off', `url(${paintPill(w, h, '#3a3a40', seed)})`);
     } else {
       paint(el, seed);
     }
@@ -256,7 +257,7 @@ export function roughenCards() {
   const ro = new ResizeObserver((entries) => {
     for (const e of entries) paintOne(e.target as HTMLElement);
   });
-  for (const el of document.querySelectorAll<HTMLElement>('.rough, .pill')) {
+  for (const el of document.querySelectorAll<HTMLElement>('.rough, .pill, .brush')) {
     paintOne(el);
     ro.observe(el);
   }

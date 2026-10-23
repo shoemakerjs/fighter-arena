@@ -1,3 +1,5 @@
+import SimpleBar from 'simplebar';
+import 'simplebar/dist/simplebar.css';
 import { CHAMPIONS } from '../sim/constants';
 import { ROSTER } from './roster';
 import { brushRing } from './rough';
@@ -45,6 +47,9 @@ export class ChampionSelect {
     const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#7cc7ff';
     document.documentElement.style.setProperty('--ring', `url(${brushRing(110, 24, 10, 12, accent)})`);
     this.buildRoster();
+    // Custom scrollbar for the roster column; its thumb is brush-painted like the buttons (see rough.ts).
+    new SimpleBar($('roster'), { autoHide: false });
+    for (const thumb of $('roster').querySelectorAll('.simplebar-scrollbar')) thumb.classList.add('brush');
     $('lock-in').addEventListener('click', () => this.lockIn());
     $('select-back').addEventListener('click', () => this.hooks.onBack());
   }
@@ -128,6 +133,7 @@ export class ChampionSelect {
       tile.classList.toggle('active', Number(tile.dataset.champ) === this.champ);
       tile.classList.toggle('locked', this.locked);
     }
+    document.querySelector('.champ-tile.active')?.scrollIntoView({ block: 'nearest' });
     const role = c.role[0].toUpperCase() + c.role.slice(1);
     $('champ-info').innerHTML = `
       <p class="role">${role} · ${c.hp} HP</p>

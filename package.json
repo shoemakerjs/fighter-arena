@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "peerjs": "^1.5.5",
+    "simplebar": "^6.3.3",
     "three": "^0.180.0"
   }
 }
