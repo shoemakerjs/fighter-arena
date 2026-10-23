@@ -42,4 +42,13 @@ export const ROSTER: RosterEntry[] = [
     portrait: '22% 4%',
     lore: 'A hooded killer from the harbor alleys. It marks its target, vanishes into smoke and returns only to finish the job.',
   },
+  {
+    hero: 'Elowen',
+    category: 'Marksman',
+    // Stand-in until the painted art arrives.
+    art: './art/placeholder.svg',
+    flip: false,
+    portrait: '68% 12%',
+    lore: 'A wood elf from the deep groves. She hunts from the treeline, pins her prey with vines and lets the sky rain arrows on whoever is still standing.',
+  },
 ];

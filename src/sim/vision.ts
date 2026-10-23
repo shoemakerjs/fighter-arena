@@ -2,7 +2,7 @@
  * Fog of war. Pure functions of the state: they never change it, so they can be
  * used by the renderer, the HUD and the bot alike.
  */
-import { PILLARS, VISION_R } from './constants';
+import { PILLARS, SONIC, VISION_R } from './constants';
 import type { GameState, Player } from './types';
 
 /** True if no pillar blocks the straight line between the two points. */
@@ -33,5 +33,18 @@ export function canSee(s: GameState, viewerId: number, targetId: number): boolea
   if (viewerId === targetId) return true;
   const target = s.players[targetId];
   if (target.stealthT > 0) return false;
+  // Sonic arrows see through the fog (not through stealth).
+  if (target.revealT > 0 || sensed(s, viewerId, target.x, target.y)) return true;
   return pointVisible(s.players[viewerId], target.x, target.y);
+}
+
+/** Inside one of `viewerId`'s sonic sensors? */
+export function sensed(s: GameState, viewerId: number, x: number, y: number): boolean {
+  for (const z of s.zones) {
+    if (z.kind !== 'sonic' || z.owner !== viewerId) continue;
+    const dx = x - z.x;
+    const dy = y - z.y;
+    if (dx * dx + dy * dy < SONIC.r * SONIC.r) return true;
+  }
+  return false;
 }

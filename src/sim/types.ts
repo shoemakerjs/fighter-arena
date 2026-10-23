@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -70,6 +70,12 @@ export interface Player {
   markT: number;
   stealthT: number;
   poisonT: number;
+  /** Rooted by a snare: can't walk or use mobility. */
+  rootT: number;
+  /** Hit by a sonic arrow: visible to the enemy through the fog. */
+  revealT: number;
+  /** After a vault: the next Arrow is instant and hits harder. */
+  quickT: number;
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -88,6 +94,20 @@ export interface Projectile {
   r: number;
   life: number;
   age: number;
+  /** Damage and knockback on hit (fixed per kind, except a drawn longshot or a quick arrow). */
+  dmg: number;
+  kb: number;
+}
+
+/** Lingering area on the floor: an archer's arrow rain or a sonic sensor. */
+export interface Zone {
+  id: number;
+  owner: number;
+  kind: 'rain' | 'sonic';
+  x: number;
+  y: number;
+  /** Ticks left. Rain is still falling while t > RAIN.ticks. */
+  t: number;
 }
 
 export interface Meteor {
@@ -122,6 +142,7 @@ export interface GameState {
   players: Player[];
   projectiles: Projectile[];
   meteors: Meteor[];
+  zones: Zone[];
   orb: Orb;
   nextId: number;
 }
@@ -150,6 +171,11 @@ export type GameEvent =
   | { type: 'markPop'; player: number; x: number; y: number }
   | { type: 'execute'; player: number; x: number; y: number; lethal: boolean }
   | { type: 'counter'; player: number }
+  | { type: 'vault'; player: number; x: number; y: number }
+  /** Arrow rain: `first` is the landing volley, the rest are lingering pulses. */
+  | { type: 'rain'; owner: number; x: number; y: number; first: boolean }
+  | { type: 'sensor'; owner: number; x: number; y: number }
+  | { type: 'root'; player: number; x: number; y: number }
   | { type: 'ko'; player: number; x: number; y: number }
   | { type: 'fight' }
   | { type: 'roundStart'; round: number }

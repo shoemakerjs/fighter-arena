@@ -231,7 +231,8 @@ export class Hud {
       const active =
         p.cast?.ability === i ||
         (def.id === 'counter' && p.counterT > 0) ||
-        ((def.id === 'dash' || def.id === 'leap') && p.dashT > 0) ||
+        ((def.id === 'dash' || def.id === 'leap' || def.id === 'vault') && p.dashT > 0) ||
+        (def.id === 'arrow' && p.quickT > 0) ||
         (def.id === 'whirl' && p.whirlT > 0) ||
         (def.id === 'smoke' && p.stealthT > 0);
 
@@ -579,6 +580,105 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId, x: number, 
       ctx.moveTo(-14, -4);
       ctx.lineTo(4, 14);
       ctx.stroke();
+      break;
+    case 'arrow':
+    case 'longshot': {
+      const long = ability === 'longshot';
+      ctx.strokeStyle = long ? COLORS.longshot : color;
+      ctx.fillStyle = long ? COLORS.longshot : color;
+      ctx.lineWidth = long ? 3 : 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-13, 13);
+      ctx.lineTo(9, -9);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(14, -14);
+      ctx.lineTo(4, -11);
+      ctx.lineTo(11, -4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = 2;
+      for (const o of [0, 4]) {
+        ctx.beginPath();
+        ctx.moveTo(-13 + o, 13 - o);
+        ctx.lineTo(-16 + o, 6 - o);
+        ctx.moveTo(-13 + o, 13 - o);
+        ctx.lineTo(-6 + o, 16 - o);
+        ctx.stroke();
+      }
+      if (long) {
+        // Drawn bow behind the arrow.
+        ctx.globalAlpha *= 0.6;
+        ctx.beginPath();
+        ctx.arc(-2, -2, 15, Math.PI * 0.95, Math.PI * 1.55);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'vault':
+      ctx.strokeStyle = COLORS.vine;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(12, 10);
+      ctx.quadraticCurveTo(0, -18, -12, 6);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.vine;
+      ctx.beginPath();
+      ctx.moveTo(-16, 2);
+      ctx.lineTo(-8, 4);
+      ctx.lineTo(-13, 11);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 'sonic':
+      ctx.strokeStyle = COLORS.sonic;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 14, 8, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.sonic;
+      ctx.beginPath();
+      ctx.arc(0, 0, 4, 0, TAU);
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      for (const r of [17, 20]) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r, -0.5, 0.5);
+        ctx.stroke();
+      }
+      break;
+    case 'snare':
+      ctx.strokeStyle = COLORS.vine;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-14, 0);
+      ctx.bezierCurveTo(-6, -12, 2, 12, 14, 0);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-14, 6);
+      ctx.bezierCurveTo(-6, 18, 2, -6, 14, 6);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.vine;
+      for (const [x, y] of [[-5, -4], [6, 9]]) {
+        ctx.beginPath();
+        ctx.ellipse(x, y, 4, 2, 0.6, 0, TAU);
+        ctx.fill();
+      }
+      break;
+    case 'rain':
+      ctx.strokeStyle = COLORS.vine;
+      ctx.lineWidth = 2.5;
+      for (const [x, y] of [[-10, -6], [0, -12], [10, -4], [-4, 4], [7, 8]]) {
+        ctx.beginPath();
+        ctx.moveTo(x, y - 6);
+        ctx.lineTo(x, y + 6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y + 3);
+        ctx.lineTo(x, y + 7);
+        ctx.lineTo(x + 3, y + 3);
+        ctx.stroke();
+      }
       break;
     case 'rift':
       ctx.strokeStyle = COLORS.earth;

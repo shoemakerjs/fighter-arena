@@ -23,6 +23,7 @@ import {
   HASTE_MUL,
   KB_DECAY,
   LEAP,
+  LONGSHOT,
   MARK,
   MAX_ENERGY,
   METEOR,
@@ -36,6 +37,7 @@ import {
   PLAYER_R,
   POISON,
   PROJ,
+  RAIN,
   RIFT,
   ROUND_END_TICKS,
   ROUNDS_TO_WIN,
@@ -43,12 +45,15 @@ import {
   SLOT,
   SLOT_BUTTONS,
   SMOKE,
+  SNARE,
+  SONIC,
   SPAWNS,
   SUDDEN_DEATH_AT,
+  VAULT,
   WHIRL,
   type AbilityDef,
 } from './constants';
-import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type ProjKind } from './types';
+import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
 
 export function createMatch(champs: number[] = [0, 0]): GameState {
   return {
@@ -64,6 +69,7 @@ export function createMatch(champs: number[] = [0, 0]): GameState {
     players: [createPlayer(0, champs[0]), createPlayer(1, champs[1])],
     projectiles: [],
     meteors: [],
+    zones: [],
     orb: { active: false, hp: ORB_HP, timer: ORB_SPAWN_AT },
     nextId: 1,
   };
@@ -108,6 +114,9 @@ function createPlayer(id: number, champ: number): Player {
     markT: 0,
     stealthT: 0,
     poisonT: 0,
+    rootT: 0,
+    revealT: 0,
+    quickT: 0,
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -125,6 +134,7 @@ function resetRound(s: GameState) {
   s.players = [createPlayer(0, s.champs[0]), createPlayer(1, s.champs[1])];
   s.projectiles = [];
   s.meteors = [];
+  s.zones = [];
   s.orb = { active: false, hp: ORB_HP, timer: ORB_SPAWN_AT };
 }
 
@@ -194,6 +204,7 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
   separatePlayers(s);
   updateProjectiles(s, ev);
   updateMeteors(s, ev);
+  updateZones(s, ev);
 
   const dead = s.players.filter((p) => p.hp <= 0);
   if (dead.length > 0) {
@@ -203,6 +214,7 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
     s.lastRoundWinner = winner;
     s.projectiles = [];
     s.meteors = [];
+    s.zones = [];
     s.phase = 'roundEnd';
     s.phaseT = ROUND_END_TICKS;
     ev.push({ type: 'roundEnd', winner });
@@ -239,6 +251,9 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.counterT > 0) p.counterT--;
   if (p.hitT > 0) p.hitT--;
   if (p.markT > 0) p.markT--;
+  if (p.rootT > 0) p.rootT--;
+  if (p.revealT > 0) p.revealT--;
+  if (p.quickT > 0) p.quickT--;
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   if (p.poisonT > 0) {
     p.poisonT--;
@@ -271,10 +286,17 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   // The basic attack auto-repeats while held.
   if (inp.buttons & BTN.M1 && p.bufferT === 0) tryStart(s, p, SLOT.M1, inp, ev);
 
-  if (p.cast && --p.cast.t <= 0) {
+  if (p.cast) {
     const slot = p.cast.ability;
-    p.cast = null;
-    release(s, p, slot, inp, ev);
+    const def = abilityOf(p, slot);
+    p.cast.t--;
+    // A longshot fires when the button is let go (after a minimal draw) or at full draw.
+    const drawn = def.cast - p.cast.t;
+    const letGo = def.id === 'longshot' && !(inp.buttons & SLOT_BUTTONS[slot]) && drawn >= LONGSHOT.minDraw;
+    if (p.cast.t <= 0 || letGo) {
+      p.cast = null;
+      release(s, p, slot, inp, ev, drawn / def.cast);
+    }
   }
 
   if (p.whirlT > 0) {
@@ -292,8 +314,8 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     }
     if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
   } else {
-    const mx = Math.sign(inp.mx);
-    const my = Math.sign(inp.my);
+    const mx = p.rootT > 0 ? 0 : Math.sign(inp.mx);
+    const my = p.rootT > 0 ? 0 : Math.sign(inp.my);
     let speed = CHAMPIONS[p.champ].speed;
     if (p.slowT > 0) speed *= p.slowMul;
     if (p.hasteT > 0) speed *= HASTE_MUL;
@@ -320,6 +342,8 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
 function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEvent[]): boolean {
   const def = abilityOf(p, slot);
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
+  // Rooted: no dashes, leaps or teleports.
+  if (p.rootT > 0 && (def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute')) return false;
 
   // Blink: instant teleport, also usable mid-cast (cancels it).
   if (def.id === 'blink') {
@@ -343,7 +367,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
 
   // Mobility works mid-cast and cancels the cast.
-  if (def.id === 'dash' || def.id === 'leap') {
+  if (def.id === 'dash' || def.id === 'leap' || def.id === 'vault') {
     if (p.dashT > 0) return false;
     p.cast = null;
     p.counterT = 0;
@@ -355,6 +379,21 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       p.dashX = p.fx * DASH.speed;
       p.dashY = p.fy * DASH.speed;
       ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+    } else if (def.id === 'vault') {
+      p.dashKind = 0;
+      p.dashT = VAULT.ticks;
+      p.dashX = -p.fx * VAULT.speed;
+      p.dashY = -p.fy * VAULT.speed;
+      p.quickT = VAULT.quick;
+      const foe = s.players[1 - p.id];
+      const dx = foe.x - p.x;
+      const dy = foe.y - p.y;
+      const reach = VAULT.r + PLAYER_R;
+      if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
+        foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, VAULT.slowMul) : VAULT.slowMul;
+        foe.slowT = Math.max(foe.slowT, VAULT.slowT);
+      }
+      ev.push({ type: 'vault', player: p.id, x: p.x, y: p.y });
     } else {
       let tx = inp.ax - p.x;
       let ty = inp.ay - p.y;
@@ -385,6 +424,11 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     p.cooldowns[slot] = def.cooldown;
     return true;
   }
+  // After a vault the next arrow skips its windup.
+  if (def.id === 'arrow' && p.quickT > 0) {
+    release(s, p, slot, inp, ev);
+    return true;
+  }
   if (def.id === 'smoke') {
     p.stealthT = SMOKE.ticks;
     p.cooldowns[slot] = def.cooldown;
@@ -397,7 +441,8 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   return true;
 }
 
-function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEvent[]) {
+/** `draw` is how much of the windup ran (0..1); only a longshot cares. */
+function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEvent[], draw = 1) {
   const def = abilityOf(p, slot);
   p.cooldowns[slot] = def.cooldown;
   p.energy -= def.energyCost;
@@ -418,6 +463,19 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         ty = (ty / d) * METEOR.range;
       }
       s.meteors.push({ id: s.nextId++, owner: p.id, x: p.x + tx, y: p.y + ty, t: METEOR.delay });
+      ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'rain': {
+      let tx = inp.ax - p.x;
+      let ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      if (d > RAIN.range) {
+        tx = (tx / d) * RAIN.range;
+        ty = (ty / d) * RAIN.range;
+      }
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
       return;
     }
@@ -464,6 +522,19 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
     default: {
       const kind = def.id as ProjKind;
       const pd = PROJ[kind];
+      let speed = pd.speed;
+      let range = pd.range;
+      let dmg = pd.dmg;
+      let kb = pd.kb;
+      if (kind === 'longshot') {
+        speed += LONGSHOT.speed * draw;
+        range += LONGSHOT.range * draw;
+        dmg = Math.round(dmg + LONGSHOT.dmg * draw);
+        if (draw >= 1) kb = LONGSHOT.kb;
+      } else if (kind === 'arrow' && p.quickT > 0) {
+        p.quickT = 0;
+        dmg += VAULT.bonus;
+      }
       const off = PLAYER_R + pd.r * 0.5;
       const x = p.x + p.fx * off;
       const y = p.y + p.fy * off;
@@ -473,11 +544,13 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         kind,
         x,
         y,
-        vx: p.fx * pd.speed,
-        vy: p.fy * pd.speed,
+        vx: p.fx * speed,
+        vy: p.fy * speed,
         r: pd.r,
-        life: Math.floor(pd.range / pd.speed),
+        life: Math.floor(range / speed),
         age: 0,
+        dmg,
+        kb,
       });
       ev.push({ type: 'release', player: p.id, ability: def.id, x, y });
     }
@@ -665,12 +738,12 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
     pr.age++;
 
     if (pr.age > pr.life) {
-      ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+      fizzle(s, pr, ev);
       continue;
     }
     const ad = Math.sqrt(pr.x * pr.x + pr.y * pr.y);
     if (ad > s.arenaR - pr.r * 0.5 || hitsPillar(pr.x, pr.y, pr.r)) {
-      ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+      fizzle(s, pr, ev);
       continue;
     }
 
@@ -681,10 +754,10 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
     // Untargetable champions let projectiles fly through.
     if (!untargetable(target) && tdx * tdx + tdy * tdy < tmin * tmin) {
       const pd = PROJ[pr.kind];
-      if (hit(s.players[pr.owner], target, pd.dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
-        if (pd.kb !== 0) {
+      if (hit(s.players[pr.owner], target, pr.dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
+        if (pr.kb !== 0) {
           const sp = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy);
-          knockback(target, pr.vx / sp, pr.vy / sp, pd.kb);
+          knockback(target, pr.vx / sp, pr.vy / sp, pr.kb);
         }
         if (pd.slowT > 0) {
           target.slowT = pd.slowT;
@@ -692,6 +765,11 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         }
         if (pr.kind === 'mark') target.markT = MARK.ticks;
         if (pr.kind === 'poison') target.poisonT = POISON.ticks;
+        if (pr.kind === 'sonic') target.revealT = SONIC.reveal;
+        if (pr.kind === 'snare') {
+          target.rootT = SNARE.root;
+          ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });
+        }
       }
       continue;
     }
@@ -699,7 +777,8 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
     if (s.orb.active) {
       const omin = ORB_R + pr.r;
       if (pr.x * pr.x + pr.y * pr.y < omin * omin) {
-        damageOrb(s, pr.owner, PROJ[pr.kind].dmg, pr.x, pr.y, ev);
+        damageOrb(s, pr.owner, pr.dmg, pr.x, pr.y, ev);
+        fizzle(s, pr, ev, false);
         continue;
       }
     }
@@ -707,6 +786,41 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
     alive.push(pr);
   }
   s.projectiles = alive;
+}
+
+/** A projectile that ends without hitting the enemy; a sonic arrow leaves a sensor where it stops. */
+function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
+  if (impact) ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+  if (pr.kind === 'sonic') {
+    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks });
+    ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });
+  }
+}
+
+function updateZones(s: GameState, ev: GameEvent[]) {
+  const left = [];
+  for (const z of s.zones) {
+    z.t--;
+    if (z.kind === 'rain' && z.t <= RAIN.ticks) {
+      const owner = s.players[z.owner];
+      const foe = s.players[1 - z.owner];
+      const first = z.t === RAIN.ticks;
+      if (first || z.t % RAIN.every === 0) {
+        ev.push({ type: 'rain', owner: z.owner, x: z.x, y: z.y, first });
+        areaHit(s, owner, z.x, z.y, RAIN.r, first ? RAIN.dmg : RAIN.pulse, 0, 0, 'rain', ev);
+      }
+      // Standing in the rain slows; the slow lingers a moment after stepping out.
+      const dx = foe.x - z.x;
+      const dy = foe.y - z.y;
+      const reach = RAIN.r + PLAYER_R;
+      if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
+        foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, RAIN.slow) : RAIN.slow;
+        foe.slowT = Math.max(foe.slowT, 10);
+      }
+    }
+    if (z.t > 0) left.push(z);
+  }
+  s.zones = left;
 }
 
 function updateMeteors(s: GameState, ev: GameEvent[]) {

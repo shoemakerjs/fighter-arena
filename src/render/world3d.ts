@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, LEAP, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RIFT, SLOT, SUDDEN_DEATH_AT } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, pointVisible } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
-import type { GameState, Meteor, Projectile, ProjKind, Vec } from '../sim/types';
+import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
 import { buildArena, buildChampion, buildPillar, glowSprite, lighten, makeGlowTexture, type ArenaModel, type ChampionRig } from './models';
 import { abilityColor, COLORS } from './theme';
@@ -43,6 +43,16 @@ interface MeteorView {
   sz: number;
 }
 
+interface ZoneView {
+  fill: THREE.Mesh;
+  ring: THREE.Mesh;
+  /** Sonic sensor only: a radar sweep expanding from the center. */
+  sweep: THREE.Mesh | null;
+}
+
+/** Projectiles drawn as an arrow pointing along their flight instead of a spinning gem. */
+const ARROWS: ProjKind[] = ['arrow', 'longshot', 'sonic', 'snare'];
+
 interface KindLook {
   core: THREE.BufferGeometry;
   coreMat: THREE.MeshBasicMaterial;
@@ -75,6 +85,7 @@ export class World3D implements WorldView {
   private decalGeo = new THREE.CircleGeometry(1, 24);
   private projViews = new Map<number, ProjView>();
   private meteorViews = new Map<number, MeteorView>();
+  private zoneViews = new Map<number, ZoneView>();
   private lights: THREE.PointLight[] = [];
   private rings: THREE.Mesh[] = [];
   private particles: THREE.Points;
@@ -420,6 +431,7 @@ export class World3D implements WorldView {
     this.updateChampions(prev, cur, alpha, dt, opts.localId);
     this.updateProjectiles(prev, cur, alpha, opts.localId);
     this.updateMeteors(cur);
+    this.updateZones(cur, opts.localId);
     this.updateAim(cur, opts);
     this.updateFx(fx);
 
@@ -597,6 +609,11 @@ export class World3D implements WorldView {
         const thrown = !pc.cast && pc.cooldowns[SLOT.M1] > 0;
         rig.weapon.rotation.z = pc.dashT > 0 && pc.dashKind === 2 ? -1.2 : thrown ? -0.7 : -0.2 + ck * 0.9;
         twist = def ? ck * 0.3 : 0;
+      } else if (pc.champ === CHAMP.ARCHER) {
+        // Bow held level; it kicks up a little right after a shot.
+        const kick = !pc.cast && pc.cooldowns[SLOT.M1] > 0 ? pc.cooldowns[SLOT.M1] / kitCd(pc.champ, SLOT.M1) : 0;
+        rig.weapon.rotation.z = kick * 0.35;
+        twist = def ? -ck * 0.25 : 0;
       } else {
         rig.weapon.rotation.z = -0.22 - ck * 0.95;
       }
@@ -633,6 +650,13 @@ export class World3D implements WorldView {
         rig.shield.rotation.y += dt * 2.2;
         rig.shield.scale.setScalar(1 + Math.sin(this.time * 25) * 0.025);
       }
+      rig.rootRing.visible = pc.rootT > 0 && !dead;
+      if (rig.rootRing.visible) rig.rootRing.rotation.y += dt * 0.8;
+      rig.revealEye.visible = pc.revealT > 0 && !dead;
+      if (rig.revealEye.visible) {
+        rig.revealEye.position.y = 96 + Math.sin(this.time * 3) * 2;
+        rig.revealEye.quaternion.copy(this.camera.quaternion);
+      }
       rig.slowRing.visible = slowed;
       if (slowed) rig.slowRing.rotation.z += dt * 1.5;
       const ringMat = rig.ring.material as THREE.MeshBasicMaterial;
@@ -648,8 +672,9 @@ export class World3D implements WorldView {
     if (l) return l;
     const color = abilityColor(kind, owner);
     const size = PROJ[kind].r;
-    const core =
-      kind === 'blast'
+    const core = ARROWS.includes(kind)
+      ? arrowGeometry(size)
+      : kind === 'blast'
         ? new THREE.IcosahedronGeometry(size * 0.75, 0)
         : kind === 'frost' || kind === 'hook'
           ? new THREE.OctahedronGeometry(size * 0.85, 0)
@@ -716,8 +741,12 @@ export class World3D implements WorldView {
       const seen = localId === null || pr.owner === localId || pointVisible(cur.players[localId], x, y);
       v.group.visible = seen;
       if (v.chain) v.chain.visible = seen;
-      v.core.rotation.x += 0.15;
-      v.core.rotation.y += 0.11;
+      if (ARROWS.includes(pr.kind)) {
+        v.core.rotation.set(0, Math.atan2(-pr.vy, pr.vx), 0);
+      } else {
+        v.core.rotation.x += 0.15;
+        v.core.rotation.y += 0.11;
+      }
       const age = pr.age + alpha;
       v.trail.forEach((s, i) => {
         const back = Math.min(age, (i + 1) * 0.9);
@@ -805,6 +834,78 @@ export class World3D implements WorldView {
     }
   }
 
+  // ---------------------------------------------------------------- zones
+
+  private createZoneView(z: Zone): ZoneView {
+    const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
+    const color = abilityColor(z.kind, z.owner);
+    const fill = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 48),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+    );
+    fill.rotation.x = -Math.PI / 2;
+    fill.position.set(z.x, 1.25, z.y);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(r - 4, r, 64),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(z.x, 1.35, z.y);
+    this.scene.add(fill, ring);
+    let sweep: THREE.Mesh | null = null;
+    if (z.kind === 'sonic') {
+      sweep = new THREE.Mesh(
+        new THREE.RingGeometry(0.9, 1, 64),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }),
+      );
+      sweep.rotation.x = -Math.PI / 2;
+      sweep.position.set(z.x, 1.3, z.y);
+      this.scene.add(sweep);
+    }
+    return { fill, ring, sweep };
+  }
+
+  private updateZones(cur: GameState, localId: number | null) {
+    const alive = new Set<number>();
+    for (const z of cur.zones) {
+      alive.add(z.id);
+      let v = this.zoneViews.get(z.id);
+      if (!v) {
+        v = this.createZoneView(z);
+        this.zoneViews.set(z.id, v);
+      }
+      // Someone else's sensor shows only when you can see where it lies.
+      const seen = localId === null || z.owner === localId || z.kind === 'rain' || pointVisible(cur.players[localId], z.x, z.y);
+      v.fill.visible = v.ring.visible = seen;
+      const fillMat = v.fill.material as THREE.MeshBasicMaterial;
+      const ringMat = v.ring.material as THREE.MeshBasicMaterial;
+      if (z.kind === 'rain') {
+        const falling = z.t > RAIN.ticks;
+        // While the volley is in the air the fill grows like a meteor warning.
+        const k = falling ? 1 - (z.t - RAIN.ticks) / RAIN.delay : 1;
+        v.fill.scale.setScalar(Math.max(0.01, k));
+        fillMat.opacity = falling ? 0.2 : 0.14 + 0.06 * Math.sin(this.time * 6);
+        ringMat.opacity = falling ? 0.55 + 0.4 * Math.abs(Math.sin(this.time * 12)) : Math.min(0.8, z.t / 30);
+      } else {
+        const fade = Math.min(1, z.t / 40);
+        fillMat.opacity = 0.06 * fade;
+        ringMat.opacity = 0.5 * fade;
+        if (v.sweep) {
+          v.sweep.visible = seen;
+          const k = (this.time * 0.8) % 1;
+          v.sweep.scale.setScalar(Math.max(1, SONIC.r * k));
+          (v.sweep.material as THREE.MeshBasicMaterial).opacity = 0.6 * (1 - k) * fade;
+        }
+      }
+    }
+    for (const [id, v] of this.zoneViews) {
+      if (alive.has(id)) continue;
+      this.scene.remove(v.fill, v.ring);
+      if (v.sweep) this.scene.remove(v.sweep);
+      this.zoneViews.delete(id);
+    }
+  }
+
   // ---------------------------------------------------------------- aim
 
   private updateAim(s: GameState, opts: DrawOptions) {
@@ -812,9 +913,12 @@ export class World3D implements WorldView {
     this.aimCircle.visible = false;
     if (opts.localId === null || s.phase !== 'fight') return;
     const p = s.players[opts.localId];
-    const id = p.cast ? abilityOf(p, p.cast.ability).id : null;
-    if (id === 'blast' || id === 'frost' || id === 'hook' || id === 'rift') {
-      const len = id === 'rift' ? RIFT.len : PROJ[id].range;
+    const def = p.cast ? abilityOf(p, p.cast.ability) : null;
+    const id = def?.id ?? null;
+    if (id === 'blast' || id === 'frost' || id === 'hook' || id === 'rift' || id === 'longshot' || id === 'snare' || id === 'sonic') {
+      // A longshot's lane grows as the bow is drawn.
+      const draw = id === 'longshot' && p.cast && def ? (def.cast - p.cast.t) / def.cast : 1;
+      const len = id === 'rift' ? RIFT.len : PROJ[id].range + (id === 'longshot' ? LONGSHOT.range * draw : 0);
       const half = id === 'rift' ? RIFT.half : PROJ[id].r;
       this.aimLane.visible = true;
       this.aimLane.position.set(p.x, 1.2, p.y);
@@ -822,17 +926,20 @@ export class World3D implements WorldView {
       this.aimLaneMesh.position.set(PLAYER_R + len / 2, 0, 0);
       this.aimLaneMesh.scale.set(len, half * 2, 1);
       (this.aimLaneMesh.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
-    } else if (id === 'meteor' && opts.cursor) {
+    } else if ((id === 'meteor' || id === 'rain') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
       const d = Math.hypot(dx, dy);
-      if (d > METEOR.range) {
-        dx = (dx / d) * METEOR.range;
-        dy = (dy / d) * METEOR.range;
+      if (d > range) {
+        dx = (dx / d) * range;
+        dy = (dy / d) * range;
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : 1);
+      (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }
 
@@ -887,6 +994,31 @@ export class World3D implements WorldView {
   }
 }
 
+
+function kitCd(champ: number, slot: number): number {
+  return CHAMPIONS[champ].abilities[slot].cooldown;
+}
+
+/** Shaft with a head pointing along +X, centered on the projectile. */
+function arrowGeometry(size: number): THREE.BufferGeometry {
+  const shaft = new THREE.CylinderGeometry(size * 0.16, size * 0.16, size * 4, 6);
+  shaft.rotateZ(Math.PI / 2);
+  shaft.translate(-size * 1.2, 0, 0);
+  const head = new THREE.ConeGeometry(size * 0.5, size * 1.4, 6);
+  head.rotateZ(-Math.PI / 2);
+  head.translate(size * 1.3, 0, 0);
+  const merged = new THREE.BufferGeometry();
+  const parts = [shaft.toNonIndexed(), head.toNonIndexed()];
+  const count = parts.reduce((n, g) => n + g.attributes.position.count, 0);
+  const pos = new Float32Array(count * 3);
+  let o = 0;
+  for (const g of parts) {
+    pos.set(g.attributes.position.array as Float32Array, o);
+    o += g.attributes.position.count * 3;
+  }
+  merged.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  return merged;
+}
 
 /** Switch every material under `root` between normal and see-through. */
 function setGhost(root: THREE.Object3D, ghost: boolean) {

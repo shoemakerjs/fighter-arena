@@ -59,7 +59,8 @@ export const SLOT_BUTTONS = [BTN.M1, BTN.M2, BTN.SPACE, BTN.Q, BTN.E, BTN.R];
 export type AbilityId =
   | 'bolt' | 'blast' | 'dash' | 'counter' | 'frost' | 'meteor'
   | 'slash' | 'hook' | 'leap' | 'cry' | 'whirl' | 'rift'
-  | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute';
+  | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute'
+  | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -81,7 +82,7 @@ export interface ChampionDef {
   abilities: AbilityDef[];
 }
 
-export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2 } as const;
+export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3 } as const;
 
 export const CHAMPIONS: ChampionDef[] = [
   {
@@ -126,6 +127,21 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'execute', name: 'Execute', desc: 'dash through the enemy; double damage under 25% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
     ],
   },
+  {
+    name: 'Archer',
+    role: 'long range and zoning',
+    hp: 145,
+    speed: 3.2,
+    abilities: [
+      { id: 'arrow', name: 'Arrow', desc: 'fast arrow, hold to keep firing', cooldown: 4, cast: 16, castSlow: 0.6, energyCost: 0 },
+      // Charged: `cast` is the full draw; releasing the button early fires a weaker shot.
+      { id: 'longshot', name: 'Longshot', desc: 'hold to draw; a full draw hits harder, flies further and knocks back', cooldown: 300, cast: 60, castSlow: 0.45, energyCost: 0 },
+      { id: 'vault', name: 'Vault', desc: 'leap away from the cursor, slowing a close enemy; next Arrow is instant and stronger', cooldown: 300, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'sonic', name: 'Sonic Arrow', desc: 'reveals the enemy it hits, or the area where it lands', cooldown: 420, cast: 12, castSlow: 0.6, energyCost: 0 },
+      { id: 'snare', name: 'Snare', desc: 'vine arrow that roots the enemy in place', cooldown: 420, cast: 18, castSlow: 0.5, energyCost: 0 },
+      { id: 'rain', name: 'Arrow Rain', desc: 'volley on an area that keeps hurting and slowing, 100 energy', cooldown: 60, cast: 20, castSlow: 0.3, energyCost: 100 },
+    ],
+  },
 ];
 
 export interface ProjDef {
@@ -149,6 +165,11 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   dagger: { speed: 14, r: 7, range: 300, dmg: 5, energy: 7, kb: 0, slowMul: 1, slowT: 0 },
   mark: { speed: 14, r: 11, range: 500, dmg: 6, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
   poison: { speed: 15, r: 9, range: 420, dmg: 4, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
+  arrow: { speed: 15, r: 7, range: 600, dmg: 6, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
+  // Base values for a minimal draw; LONGSHOT scales them up to a full draw.
+  longshot: { speed: 15, r: 8, range: 460, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
+  sonic: { speed: 16, r: 8, range: 640, dmg: 5, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
+  snare: { speed: 13, r: 11, range: 480, dmg: 8, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
 };
 
 // Mage
@@ -171,3 +192,17 @@ export const SMOKE = { ticks: 120, speed: 1.3 };
 export const POISON = { ticks: 120, every: 20, dmg: 2 };
 /** Dash through the target; double damage if it's at or below `threshold` of max HP. */
 export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.25 };
+
+// Archer
+/** Draw at least `minDraw` ticks; a full draw adds these on top of PROJ.longshot. */
+export const LONGSHOT = { minDraw: 14, dmg: 16, speed: 8, range: 340, kb: 9 };
+/**
+ * Jumps away from the aim; an enemy within `r` of the take-off is slowed, and the
+ * next Arrow within `quick` ticks is instant with `bonus` damage.
+ */
+export const VAULT = { ticks: 12, speed: 15, r: 110, slowMul: 0.5, slowT: 70, quick: 90, bonus: 5 };
+/** A hit reveals the target for `reveal` ticks; a miss leaves a sensor of radius `r` for `ticks`. */
+export const SONIC = { reveal: 240, r: 240, ticks: 300 };
+export const SNARE = { root: 75 };
+/** Lands `delay` after release for `dmg`, then lingers `ticks`, pulsing every `every` and slowing. */
+export const RAIN = { range: 520, delay: 36, r: 120, dmg: 12, ticks: 120, every: 20, pulse: 3, slow: 0.55 };

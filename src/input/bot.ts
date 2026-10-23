@@ -1,4 +1,4 @@
-import { ARENA_R, BLINK, CHAMP, CHAMPIONS, CRY, EXECUTE, LEAP, METEOR, PILLARS, PLAYER_R, PROJ, RIFT, SLASH, SLOT, SLOT_BUTTONS, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLINK, CHAMP, CHAMPIONS, CRY, EXECUTE, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type ProjKind } from '../sim/types';
 import { canSee, pointVisible } from '../sim/vision';
 
@@ -55,6 +55,8 @@ export class Bot {
   /** Last position where the (possibly stealthed) enemy was seen. */
   private seenX = 0;
   private seenY = 0;
+  /** How long to draw the current longshot (ticks). */
+  private drawFor = 0;
   /** Per-projectile decision: will the bot react to it at all? */
   private judged = new Map<number, boolean>();
 
@@ -106,6 +108,8 @@ export class Bot {
     const ny = dy / dist;
     const warrior = me.champ === CHAMP.WARRIOR;
     const assassin = me.champ === CHAMP.ASSASSIN;
+    const archer = me.champ === CHAMP.ARCHER;
+    const mage = me.champ === CHAMP.MAGE;
     const foeMelee = foe.champ === CHAMP.WARRIOR;
     const foeLow = foe.hp <= CHAMPIONS[foe.champ].hp * EXECUTE.threshold;
     const kit = CHAMPIONS[me.champ].abilities;
@@ -115,7 +119,7 @@ export class Bot {
     // --- Movement: warriors close in, mages hold range (more of it against melee) and strafe.
     let wx = 0;
     let wy = 0;
-    const pref = assassin ? (foeMelee ? 300 : 230) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
+    const pref = assassin ? (foeMelee ? 300 : 230) : archer ? (foeMelee ? 420 : 380) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
     const radial = warrior ? (dist > 60 ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
     wx += nx * radial * (warrior ? 1.4 : 1);
     wy += ny * radial * (warrior ? 1.4 : 1);
@@ -165,6 +169,17 @@ export class Bot {
       }
     }
 
+    for (const z of s.zones) {
+      if (z.kind !== 'rain' || z.owner === this.id) continue;
+      const zd = Math.hypot(me.x - z.x, me.y - z.y);
+      if (zd < RAIN.r + PLAYER_R + 25 && this.decide(z.id)) {
+        const k = zd < 1 ? 1 : zd;
+        wx = ((me.x - z.x) / k) * 3;
+        wy = ((me.y - z.y) / k) * 3;
+        dodging = true;
+      }
+    }
+
     let threatT = Infinity;
     let threatKind: ProjKind = 'bolt';
     for (const pr of s.projectiles) {
@@ -195,15 +210,18 @@ export class Bot {
       wy = dodgeY * 2;
       if (!warrior && threatT < 10 && ready(SLOT.SPACE) && r() < 0.3) {
         buttons |= BTN.SPACE;
-      } else if (!warrior && !assassin && threatT < 12 && threatKind !== 'bolt' && ready(SLOT.Q) && r() < 0.5) {
+      } else if (mage && threatT < 12 && threatKind !== 'bolt' && ready(SLOT.Q) && r() < 0.5) {
         buttons |= BTN.Q;
       }
     }
 
     // Ranged champions caught in melee range try to get out.
-    const foeThreatening = foeMelee && (dist < 90 || (dist < 120 && (foe.cast !== null || foe.whirlT > 0)));
+    // Archers have nothing for close range, so they bail out earlier.
+    const close = archer ? 50 : 0;
+    const foeThreatening = foeMelee && (dist < 90 + close || (dist < 120 + close && (foe.cast !== null || foe.whirlT > 0)));
     if (!warrior && foeThreatening && !buttons && this.decide(-s.frame)) {
-      if (ready(SLOT.Q) && r() < 0.5) buttons |= BTN.Q;
+      if (archer && ready(SLOT.E) && me.cast === null && r() < 0.5) buttons |= BTN.E;
+      else if (!archer && ready(SLOT.Q) && r() < 0.5) buttons |= BTN.Q;
       else if (ready(SLOT.SPACE)) {
         buttons |= BTN.SPACE;
         escape = true;
@@ -219,8 +237,26 @@ export class Bot {
       aimId = kit[slot].id;
     };
 
-    if (!busy && !(buttons & (BTN.SPACE | BTN.Q))) {
-      if (assassin) {
+    // Keep drawing a longshot until the planned draw is reached (or the target hides).
+    if (archer && me.cast && kit[me.cast.ability].id === 'longshot') {
+      const drawn = kit[me.cast.ability].cast - me.cast.t;
+      if (drawn < this.drawFor && !hidden) buttons |= BTN.M2;
+    }
+
+    if (!busy && !(buttons & (BTN.SPACE | BTN.Q | BTN.E))) {
+      if (archer) {
+        const pinned = foe.rootT > 0 || foe.slowT > 0 || foe.cast !== null;
+        if (ready(SLOT.R) && !hidden && dist < RAIN.range + 40 && (pinned ? r() < 0.2 : r() < 0.005)) press(SLOT.R);
+        else if (ready(SLOT.Q) && hidden && r() < 0.015) press(SLOT.Q);
+        else if (ready(SLOT.E) && los && dist < PROJ.snare.range - 40 && r() < (foeMelee && dist < 220 ? 0.2 : 0.02) * a) press(SLOT.E);
+        else if (ready(SLOT.M2) && los && !hidden && dist < PROJ.longshot.range + LONGSHOT.range - 60 && r() < (foe.rootT > 0 ? 0.3 : 0.03) * a) {
+          press(SLOT.M2);
+          // Draw just enough to reach, more when the target is pinned down.
+          const need = (dist - PROJ.longshot.range) / LONGSHOT.range;
+          this.drawFor = Math.ceil(kit[SLOT.M2].cast * Math.max(foe.rootT > 0 ? 1 : 0.4 + r() * 0.6, need + 0.1));
+        } else if (ready(SLOT.Q) && los && r() < 0.004) press(SLOT.Q);
+        else if (los && dist < PROJ.arrow.range && (!dodging || r() < 0.5) && r() < 0.9 * a) press(SLOT.M1);
+      } else if (assassin) {
         const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.4;
         if (ready(SLOT.R) && !hidden && dist < EXECUTE.range - 20 && r() < (foeLow ? 0.4 : 0.02)) press(SLOT.R);
         else if (ready(SLOT.Q) && me.stealthT === 0 && (lowMe || dist > 380) && r() < 0.02) press(SLOT.Q);
@@ -264,12 +300,14 @@ export class Bot {
       ay = ty;
     } else if (buttons & BTN.SPACE && !warrior) {
       // Dash / blink: sideways out of a projectile, or straight away from a melee threat.
-      const ex = escape ? -nx : dodgeX;
-      const ey = escape ? -ny : dodgeY;
+      // A vault jumps away from the aim point, so aim the other way.
+      const flip = archer ? -1 : 1;
+      const ex = (escape ? -nx : dodgeX) * flip;
+      const ey = (escape ? -ny : dodgeY) * flip;
       ax = me.x + ex * 200;
       ay = me.y + ey * 200;
-    } else if (aimId === 'meteor') {
-      const t = kit[SLOT.R].cast + METEOR.delay;
+    } else if (aimId === 'meteor' || aimId === 'rain') {
+      const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : METEOR.delay);
       ax = tx + this.tvx * t * this.p.lead * 0.5;
       ay = ty + this.tvy * t * this.p.lead * 0.5;
     } else if (aimId === 'leap') {

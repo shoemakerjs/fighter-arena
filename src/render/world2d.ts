@@ -1,4 +1,4 @@
-import { ARENA_R, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RIFT, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
+import { ARENA_R, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
 import { abilityOf } from '../sim/step';
 import { canSee, pointVisible } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -65,6 +65,7 @@ export class World2D implements WorldView {
 
     this.drawFloor(cur);
     this.drawMeteors(cur);
+    this.drawZones(cur, opts.localId);
     this.drawOrb(cur);
     this.drawPillars();
     this.drawAimGuide(cur, opts);
@@ -294,6 +295,29 @@ export class World2D implements WorldView {
       ctx.lineDashOffset = -this.time * 40;
       ctx.beginPath();
       ctx.arc(m.x, m.y, METEOR.r, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /** Arrow rain (everyone sees it) and sonic sensors (only the archer who placed them). */
+  private drawZones(s: GameState, localId: number | null) {
+    const { ctx } = this;
+    for (const z of s.zones) {
+      if (z.kind === 'sonic' && localId !== null && z.owner !== localId) continue;
+      const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
+      const falling = z.kind === 'rain' && z.t > RAIN.ticks;
+      ctx.save();
+      ctx.fillStyle = ctx.strokeStyle = z.kind === 'rain' ? COLORS.vine : COLORS.sonic;
+      ctx.globalAlpha = z.kind === 'rain' ? (falling ? 0.12 : 0.2) : 0.06;
+      ctx.beginPath();
+      ctx.arc(z.x, z.y, r, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 0.8;
+      ctx.lineWidth = 2;
+      ctx.setLineDash(falling ? [10, 8] : []);
+      ctx.beginPath();
+      ctx.arc(z.x, z.y, r, 0, TAU);
       ctx.stroke();
       ctx.restore();
     }

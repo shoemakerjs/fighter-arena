@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <!-- Stand-in key art for champions without a painting yet: a forest-dark backdrop and a silhouette. -->
+  <defs>
+    <radialGradient id="bg" cx="0.66" cy="0.45" r="0.75">
+      <stop offset="0" stop-color="#2c3a2f"/>
+      <stop offset="0.55" stop-color="#151c18"/>
+      <stop offset="1" stop-color="#090b0a"/>
+    </radialGradient>
+    <linearGradient id="fig" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3d4d42"/>
+      <stop offset="1" stop-color="#1b221e"/>
+    </linearGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g fill="#0f1411" opacity="0.7">
+    <path d="M1500 1080 L1560 120 L1590 120 L1660 1080 Z"/>
+    <path d="M820 1080 L870 60 L895 60 L950 1080 Z"/>
+    <path d="M1760 1080 L1790 300 L1810 300 L1850 1080 Z"/>
+  </g>
+  <g fill="url(#fig)" stroke="#7cc7ff" stroke-opacity="0.25" stroke-width="3">
+    <!-- hood with pointed ears -->
+    <path d="M1250 160 C1195 160 1170 215 1172 268 L1120 236 L1168 300 C1180 345 1215 368 1250 368 C1285 368 1320 345 1332 300 L1380 236 L1328 268 C1330 215 1305 160 1250 160 Z"/>
+    <!-- body and cloak -->
+    <path d="M1185 360 C1120 390 1095 470 1090 560 L1060 1080 L1440 1080 L1410 560 C1405 470 1380 390 1315 360 C1290 380 1210 380 1185 360 Z"/>
+    <!-- bow -->
+    <path d="M1010 230 C930 420 930 700 1010 890" fill="none" stroke="#3d4d42" stroke-opacity="1" stroke-width="16" stroke-linecap="round"/>
+    <path d="M1010 230 L1010 890" fill="none" stroke="#7cc7ff" stroke-opacity="0.35" stroke-width="2"/>
+    <path d="M1100 520 L960 560" fill="none" stroke="#3d4d42" stroke-opacity="1" stroke-width="22" stroke-linecap="round"/>
+  </g>
+</svg>

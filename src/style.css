@@ -440,9 +440,9 @@ button {
 .roster {
   pointer-events: auto;
   align-self: flex-start;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, 110px);
+  gap: 24px 48px;
 }
 
 .roster-group {
@@ -453,6 +453,7 @@ button {
 
 .roster-label {
   font-size: 18px;
+  white-space: nowrap;
 }
 
 .champ-tile {
@@ -530,7 +531,8 @@ button {
 .champ-info {
   position: absolute;
   right: 64px;
-  top: 34%;
+  /* Grows upwards from just above the bottom bar, so long kits never slide under it. */
+  bottom: 112px;
   width: 362px;
   display: flex;
   flex-direction: column;

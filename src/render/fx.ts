@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RIFT, SLASH, PLAYER_R, WHIRL } from '../sim/constants';
+import { COUNTDOWN_TICKS, CRY, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SLASH, SONIC, PLAYER_R, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { pointVisible } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -88,7 +88,7 @@ export class Fx {
       if (viewer && at && at.player !== localId && !pointVisible(viewer, at.x, at.y)) continue;
       switch (e.type) {
         case 'cast':
-          if (e.ability === 'meteor' || e.ability === 'rift') this.sound('meteorCast');
+          if (e.ability === 'meteor' || e.ability === 'rift' || e.ability === 'rain') this.sound('meteorCast');
           break;
 
         case 'release': {
@@ -112,6 +112,16 @@ export class Fx {
           } else if (e.ability === 'mark' || e.ability === 'poison') {
             this.burst(e.x, e.y, 8, abilityColor(e.ability, e.player), 150, 2.5, 0.3);
             this.sound('frost');
+          } else if (e.ability === 'arrow') {
+            this.burst(e.x, e.y, 3, color, 110, 2, 0.15);
+            this.sound('bolt');
+          } else if (e.ability === 'longshot' || e.ability === 'sonic' || e.ability === 'snare') {
+            this.burst(e.x, e.y, 9, abilityColor(e.ability, e.player), 180, 2.8, 0.3);
+            this.sound(e.ability === 'longshot' ? 'blast' : 'hook');
+          } else if (e.ability === 'rain') {
+            // Volley loosed into the sky.
+            for (let i = 0; i < 12; i++) this.particles.push(spark(e.x, e.y, COLORS.vine, 900));
+            this.sound('bolt');
           }
           break;
         }
@@ -124,7 +134,8 @@ export class Fx {
             this.texts.push({ x: t.x + (Math.random() - 0.5) * 30, y: t.y - 30, text: String(e.dmg), color: COLORS.poison, life: 0.7, max: 0.7, size: 14 });
             break;
           }
-          const big = e.kind === 'blast' || e.kind === 'meteor' || e.kind === 'rift' || e.kind === 'leap' || e.kind === 'execute';
+          const big =
+            e.kind === 'blast' || e.kind === 'meteor' || e.kind === 'rift' || e.kind === 'leap' || e.kind === 'execute' || (e.kind === 'longshot' && e.dmg >= 20) || (e.kind === 'rain' && e.dmg >= RAIN.dmg);
           const color = abilityColor(e.kind, e.source);
           this.burst(e.x, e.y, big ? 26 : 10, color, big ? 340 : 220, big ? 4.5 : 3, big ? 0.5 : 0.32);
           this.burst(e.x, e.y, 4, '#ffffff', 160, 2, 0.15);
@@ -198,6 +209,41 @@ export class Fx {
         case 'counter':
           this.sound('counter');
           break;
+
+        case 'vault':
+          this.burst(e.x, e.y, 14, COLORS.vine, 140, 3, 0.35, 6);
+          this.sound('dash');
+          break;
+
+        case 'root': {
+          this.rings.push({ x: e.x, y: e.y, r0: 40, r1: PLAYER_R, life: 0.3, max: 0.3, color: COLORS.vine, width: 5 });
+          this.burst(e.x, e.y, 16, COLORS.vine, 160, 3, 0.45, 6);
+          this.texts.push({ x: e.x, y: e.y - 50, text: 'ROOTED', color: COLORS.vine, life: 0.9, max: 0.9, size: 17 });
+          break;
+        }
+
+        case 'sensor':
+          // Only the archer learns where their sensor landed.
+          if (localId !== null && e.owner !== localId && viewer && !pointVisible(viewer, e.x, e.y)) break;
+          this.rings.push({ x: e.x, y: e.y, r0: 10, r1: SONIC.r, life: 0.6, max: 0.6, color: COLORS.sonic, width: 3 });
+          break;
+
+        case 'rain': {
+          // Arrows falling over the area; the landing volley is a lot denser.
+          const n = e.first ? 40 : 8;
+          for (let i = 0; i < n; i++) {
+            const a = Math.random() * Math.PI * 2;
+            const d = Math.sqrt(Math.random()) * RAIN.r;
+            this.particles.push(fallingArrow(e.x + Math.cos(a) * d, e.y + Math.sin(a) * d));
+          }
+          if (e.first) {
+            this.rings.push({ x: e.x, y: e.y, r0: 20, r1: RAIN.r + 10, life: 0.35, max: 0.35, color: COLORS.vine, width: 6 });
+            this.burst(e.x, e.y, 24, COLORS.vine, 260, 3, 0.45, 3);
+            this.shake += 5;
+            this.sound('boom');
+          }
+          break;
+        }
 
         case 'swing': {
           // Arc of sparks along the axe's path.
@@ -396,6 +442,18 @@ export class Fx {
 }
 
 
+/** A streak shot straight up (e.g. a volley loosed into the sky). */
+function spark(x: number, y: number, color: string, vz: number): Particle {
+  const l = 0.35 + Math.random() * 0.2;
+  return { x, y, z: 40, vx: (Math.random() - 0.5) * 60, vy: (Math.random() - 0.5) * 60, vz: vz * (0.8 + Math.random() * 0.4), life: l, max: l, size: 2.4, color, drag: 1 };
+}
+
+/** An arrow dropping onto the floor from above. */
+function fallingArrow(x: number, y: number): Particle {
+  const l = 0.25 + Math.random() * 0.25;
+  return { x, y, z: 160 + Math.random() * 120, vx: 0, vy: 0, vz: -700, life: l, max: l, size: 2.6, color: Math.random() < 0.3 ? '#ffffff' : COLORS.vine, drag: 0 };
+}
+
 /** Where a purely cosmetic event happens (null for events that are always shown). */
 function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player: number } | null {
   switch (e.type) {
@@ -414,6 +472,7 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'blink':
     case 'stealth':
     case 'reveal':
+    case 'vault':
       return { x: e.x, y: e.y, player: e.player };
     case 'impact':
       return { x: e.x, y: e.y, player: e.owner };

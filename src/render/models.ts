@@ -5,7 +5,7 @@
  * World mapping: sim (x, y) → three (x, 0, y), height is +Y.
  */
 import * as THREE from 'three';
-import { ARENA_R, PLAYER_R, SPAWNS } from '../sim/constants';
+import { ARENA_R, CHAMP, PLAYER_R, SPAWNS } from '../sim/constants';
 import { COLORS } from './theme';
 import { hexA } from './view';
 
@@ -310,12 +310,18 @@ export interface ChampionRig {
   slowRing: THREE.Mesh;
   /** Floating sigil shown while marked by an assassin. */
   markSigil: THREE.Mesh;
+  /** Vines around the feet while rooted. */
+  rootRing: THREE.Group;
+  /** Eye above the head while revealed by a sonic arrow. */
+  revealEye: THREE.Group;
 }
 
 export function buildChampion(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
-  if (champ === 1) return buildWarrior(color, glowTex);
-  if (champ === 2) return buildAssassin(color, glowTex);
-  return buildMage(color, glowTex);
+  if (champ === CHAMP.MAGE) return buildMage(color, glowTex);
+  if (champ === CHAMP.WARRIOR) return buildWarrior(color, glowTex);
+  if (champ === CHAMP.ASSASSIN) return buildAssassin(color, glowTex);
+  // No modeled skin yet: the test mannequin.
+  return buildDummy(color, glowTex, champ === CHAMP.ARCHER ? 'bow' : 'rod');
 }
 
 // ---------------------------------------------------------------- toon style
@@ -743,7 +749,120 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
   markSigil.visible = false;
   root.add(markSigil);
 
-  return { ring, pointer, shield, slowRing, markSigil };
+  // Root: a few vine loops hugging the feet.
+  const rootRing = new THREE.Group();
+  const vineMat = new THREE.MeshBasicMaterial({ color: COLORS.vine, toneMapped: false });
+  for (let i = 0; i < 3; i++) {
+    const loop = new THREE.Mesh(new THREE.TorusGeometry(PLAYER_R - 2 - i * 3, 1.6, 5, 24), vineMat);
+    loop.rotation.set(Math.PI / 2 + (i - 1) * 0.25, (i - 1) * 0.3, 0);
+    loop.position.y = 3 + i * 5;
+    rootRing.add(loop);
+  }
+  rootRing.visible = false;
+  root.add(rootRing);
+
+  // Revealed: an open eye floating above the head.
+  const revealEye = new THREE.Group();
+  const eyeMat = new THREE.MeshBasicMaterial({ color: COLORS.sonic, transparent: true, opacity: 0.95, toneMapped: false, side: THREE.DoubleSide });
+  const lid = new THREE.Mesh(new THREE.TorusGeometry(8, 1.4, 4, 24), eyeMat);
+  lid.scale.set(1.4, 0.75, 1);
+  const pupil = new THREE.Mesh(new THREE.CircleGeometry(3.4, 16), eyeMat);
+  revealEye.add(lid, pupil);
+  revealEye.position.y = 96;
+  revealEye.visible = false;
+  root.add(revealEye);
+
+  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye };
+}
+
+/**
+ * Test mannequin for champions without a modeled skin: team-colored torso, grey
+ * limbs, a visor showing where it faces and a simple prop (bow or rod).
+ */
+function buildDummy(color: string, glowTex: THREE.Texture, prop: 'bow' | 'rod'): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team);
+  const matGrey = toon('#8d93a3');
+  const matDark = toon('#3a3f4c');
+  const matWood = toon('#8a6640');
+  const matString = new THREE.MeshBasicMaterial({ color: '#e8e2d0' });
+  const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Legs and feet
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0, 26, side * 5), v(0.5, 4, side * 5.4), 3, matGrey));
+    keep(add(new THREE.BoxGeometry(7, 3, 4.6), matDark, 1.6, 1.5, side * 5.4));
+  }
+  // Pelvis, torso, belt
+  keep(add(new THREE.SphereGeometry(7.6, 16, 12), matDark, 0, 27, 0)).scale.set(1, 0.6, 1.15);
+  keep(add(new THREE.CapsuleGeometry(8.4, 12, 4, 16), matTeam, 0, 38, 0)).scale.set(0.9, 1, 1.08);
+  const belt = add(new THREE.TorusGeometry(8.2, 1, 6, 24), matDark, 0, 30.5, 0);
+  belt.rotation.x = Math.PI / 2;
+
+  // Arms: the left hand holds the prop out front, the right one rests near the chest.
+  const lHand = v(13, 37, -9);
+  const rHand = v(7, 36, 9);
+  keep(limb(body, v(0, 45, -10.5), v(5, 40, -12), 2.4, matGrey));
+  keep(limb(body, v(5, 40, -12), lHand, 2.2, matGrey));
+  keep(limb(body, v(0, 45, 10.5), v(1, 37, 12), 2.4, matGrey));
+  keep(limb(body, v(1, 37, 12), rHand, 2.2, matGrey));
+  for (const h of [lHand, rHand]) keep(add(new THREE.SphereGeometry(2.6, 10, 8), matDark, h.x, h.y, h.z));
+
+  // Head with a glowing visor so the facing reads at a glance
+  keep(add(new THREE.SphereGeometry(7.2, 18, 14), matGrey, 0.5, 57, 0));
+  const visor = add(new THREE.BoxGeometry(2, 2.2, 9), matGlow, 6.8, 58, 0);
+  visor.castShadow = false;
+
+  // Prop: rotates around its local Z axis at the left hand.
+  const weapon = new THREE.Group();
+  weapon.position.copy(lHand);
+  body.add(weapon);
+  let tip: THREE.Mesh;
+  if (prop === 'bow') {
+    // Limbs bow forward (+X), string straight across at the back.
+    const arc = Math.PI * 0.72;
+    const bowR = 22;
+    const bow = keep(add(new THREE.TorusGeometry(bowR, 1.1, 6, 28, arc), matWood, -bowR + 1, 0, 0, weapon));
+    bow.rotation.z = -arc / 2;
+    const half = Math.sin(arc / 2) * bowR;
+    const back = Math.cos(arc / 2) * bowR - bowR + 1;
+    add(new THREE.CylinderGeometry(0.3, 0.3, half * 2, 4), matString, back, 0, 0, weapon).castShadow = false;
+    add(new THREE.CylinderGeometry(1.6, 1.6, 5, 8), matDark, 1, 0, 0, weapon);
+    tip = add(new THREE.OctahedronGeometry(1.4, 0), matGlow, 4, 0, 0, weapon);
+  } else {
+    weapon.rotation.z = -0.22;
+    keep(add(new THREE.CylinderGeometry(0.9, 0.9, 54, 8), matWood, 0, 12, 0, weapon));
+    tip = add(new THREE.OctahedronGeometry(2.2, 0), matGlow, 0, 40, 0, weapon);
+  }
+  const tipGlow = glowSprite(glowTex, team, 22);
+  tipGlow.position.copy(tip.position);
+  weapon.add(tipGlow);
+
+  shadowed(body);
+  tip.castShadow = false;
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matGrey, matDark], ...markers };
 }
 
 /** Overlapping scales for the orc's pauldron. */
