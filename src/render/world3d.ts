@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
-import { abilityOf, airborne } from '../sim/step';
+import { abilityOf, airborne, rewindPoint } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
@@ -1111,9 +1111,10 @@ export class World3D implements WorldView {
     if (opts.localId === null || s.phase !== 'fight') return;
     const p = s.players[opts.localId];
     // Rustic sees where Rewind would take it.
-    if (p.champ === CHAMP.CHRONO && p.trail.length >= 3 && !p.out) {
+    const back = p.champ === CHAMP.CHRONO && !p.out ? rewindPoint(s, p) : null;
+    if (back) {
       this.recallMark.visible = true;
-      this.recallMark.position.set(p.trail[0], 1.5, p.trail[1]);
+      this.recallMark.position.set(back.x, 1.5, back.y);
       (this.recallMark.material as THREE.MeshBasicMaterial).opacity = p.cooldowns[SLOT.E] === 0 ? 0.65 : 0.2;
     }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;

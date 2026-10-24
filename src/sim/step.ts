@@ -325,6 +325,19 @@ function aimAt(p: Player, inp: Input) {
   }
 }
 
+/**
+ * Where Rewind takes the time kobold now. Once the trail spans RECALL.ticks, that moment
+ * lies between the two oldest samples, so blend them (the spot then glides instead of
+ * jumping a sample at a time). Null with no trail yet.
+ */
+export function rewindPoint(s: GameState, p: Player): { x: number; y: number; hp: number } | null {
+  const t = p.trail;
+  if (t.length < 3) return null;
+  const full = t.length >= 3 * (RECALL.ticks / RECALL.every + 1);
+  const k = full ? (s.roundFrame % RECALL.every) / RECALL.every : 0;
+  return { x: t[0] + (t[3] - t[0]) * k, y: t[1] + (t[4] - t[1]) * k, hp: t[2] + (t[5] - t[2]) * k };
+}
+
 /** Mid-leap: in the air, flies over pillars. */
 export function airborne(p: Player): boolean {
   return p.dashT > 0 && p.dashKind === 1;
@@ -508,10 +521,11 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     return true;
   }
 
-  // Rewind: back to the oldest remembered spot, getting part of the HP lost since then.
+  // Rewind: back to where it was RECALL.ticks ago, getting part of the HP lost since then.
   if (def.id === 'recall') {
-    if (p.dashT > 0 || p.trail.length < 3) return false;
-    const [x, y, hp] = p.trail;
+    const back = rewindPoint(s, p);
+    if (p.dashT > 0 || !back) return false;
+    const { x, y, hp } = back;
     const x0 = p.x;
     const y0 = p.y;
     p.cast = null;
