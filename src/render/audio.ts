@@ -1,10 +1,19 @@
-export type SfxName = 'bolt' | 'blast' | 'frost' | 'meteorCast' | 'hit' | 'bigHit' | 'block' | 'boom' | 'dash' | 'counter' | 'orb' | 'ko' | 'tick' | 'fight' | 'impact' | 'slash' | 'hook' | 'whirl';
+export type SfxName = 'bolt' | 'blast' | 'frost' | 'meteorCast' | 'hit' | 'bigHit' | 'block' | 'boom' | 'dash' | 'counter' | 'orb' | 'ko' | 'tick' | 'fight' | 'impact' | 'slash' | 'hook' | 'whirl' | 'perrieBlast';
 
-/** Tiny Web Audio synth — every sound is generated, no assets needed. */
+/**
+ * Recorded sounds in public/sound, loaded on unlock. `fallback` is the synth sound
+ * played until the file has loaded (or if it can't be).
+ */
+const SAMPLES: Partial<Record<SfxName, { url: string; gain: number; fallback: SfxName }>> = {
+  perrieBlast: { url: './sound/perrie/blast.m4a', gain: 0.7, fallback: 'blast' },
+};
+
+/** Tiny Web Audio synth (every sound generated), plus the few recorded samples above. */
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private noiseBuf: AudioBuffer | null = null;
+  private samples = new Map<SfxName, AudioBuffer>();
   private lastPlayed = new Map<SfxName, number>();
   private volume = 1;
   muted = false;
@@ -26,17 +35,41 @@ export class Sfx {
       this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const data = this.noiseBuf.getChannelData(0);
       for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      this.loadSamples(this.ctx);
     }
     if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
-  play(name: SfxName) {
+  private loadSamples(ctx: AudioContext) {
+    for (const [name, s] of Object.entries(SAMPLES) as [SfxName, { url: string }][]) {
+      fetch(s.url)
+        .then((r) => r.arrayBuffer())
+        .then((data) => ctx.decodeAudioData(data))
+        .then((buf) => this.samples.set(name, buf))
+        .catch((err) => console.warn(`Sound ${s.url} failed to load`, err));
+    }
+  }
+
+  play(name: SfxName): void {
     const ctx = this.ctx;
     if (!ctx || this.muted) return;
     const now = ctx.currentTime;
     const last = this.lastPlayed.get(name) ?? -1;
     if (now - last < 0.03) return;
     this.lastPlayed.set(name, now);
+
+    const sample = SAMPLES[name];
+    if (sample) {
+      const buf = this.samples.get(name);
+      if (!buf) return this.play(sample.fallback);
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = sample.gain;
+      src.connect(g).connect(this.master!);
+      src.start();
+      return;
+    }
 
     switch (name) {
       case 'bolt':

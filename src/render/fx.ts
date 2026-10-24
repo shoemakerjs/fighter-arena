@@ -102,7 +102,7 @@ export class Fx {
           } else if (e.ability === 'blast') {
             this.burst(e.x, e.y, 12, COLORS.blast, 220, 4, 0.3);
             this.shake += 2;
-            this.sound('blast');
+            this.sound('perrieBlast');
           } else if (e.ability === 'frost') {
             this.burst(e.x, e.y, 8, COLORS.frost, 160, 3, 0.3);
             this.sound('frost');
