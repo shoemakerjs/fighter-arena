@@ -64,7 +64,7 @@ export type AbilityId =
   | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute'
   | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain'
   | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
-  | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'plague';
+  | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -128,7 +128,7 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'blink', name: 'Shadow Step', desc: 'instant teleport to the cursor', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'smoke', name: 'Veil', desc: 'stealth and haste for 3 s; attacking reveals you, and that first hit deals +50%', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'poison', name: 'Venom', desc: 'poisoned dagger: damage over 2 s', cooldown: 420, cast: 12, castSlow: 0.6, energyCost: 0 },
-      { id: 'execute', name: 'Execute', desc: 'dash through the enemy; double damage under 35% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
+      { id: 'execute', name: 'Execute', desc: 'dash through the enemy; double damage under 30% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
     ],
   },
   {
@@ -172,7 +172,7 @@ export const CHAMPIONS: ChampionDef[] = [
       // Charged: `cast` is the full gathering; letting go early bursts weaker.
       { id: 'tides', name: 'Tides of Blood', desc: 'hold to gather blood, release to burst around you and slow; costs 6 HP', cooldown: 300, cast: 60, castSlow: 0.5, energyCost: 0 },
       { id: 'drain', name: 'Exsanguinate', desc: 'tether the nearest enemy and drain it for up to 2 s while it stays close; a pillar between you breaks it', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'plague', name: 'Hemoplague', desc: 'curse an area: enemies inside take +15% damage for 3 s, then burst and heal you, 100 energy', cooldown: 60, cast: 16, castSlow: 0.3, energyCost: 100 },
+      { id: 'swarm', name: 'Night Swarm', desc: 'scatter into bats and fly toward the cursor, untargetable; enemies you pass through take damage and are slowed, healing you, 100 energy', cooldown: 60, cast: 0, castSlow: 1, energyCost: 100 },
     ],
   },
 ];
@@ -231,7 +231,7 @@ export const BLINK = { range: 230 };
 export const SMOKE = { ticks: 180, speed: 1.3, ambush: 1.5, window: 45 };
 export const POISON = { ticks: 120, every: 20, dmg: 2 };
 /** Dash through the target; double damage if it's at or below `threshold` of max HP. */
-export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.35 };
+export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.3 };
 
 // Archer
 /** Draw at least `minDraw` ticks; a full draw adds these on top of PROJ.longshot. */
@@ -282,4 +282,8 @@ export const TIDES = { minDraw: 12, r: 135, dmg: 10, bonus: 14, slowMul: 0.6, sl
  */
 export const DRAIN = { ticks: 120, range: 300, every: 15, dmg: 5, heal: 4, energy: 4, speed: 0.6 };
 /** Area within `range` of radius `r`: enemies take `amp` times damage for `ticks`, then take `dmg` and heal the caster `heal` each. */
-export const PLAGUE = { range: 450, r: 140, ticks: 180, amp: 1.15, dmg: 22, heal: 14 };
+/**
+ * Night Swarm: fly up to `range` toward the cursor over `ticks` as bats, untargetable. Every enemy
+ * passed through takes `dmg`, is slowed to `slowMul` for `slowT` and heals you `heal`.
+ */
+export const SWARM = { range: 260, ticks: 20, dmg: 10, heal: 5, slowMul: 0.75, slowT: 45 };

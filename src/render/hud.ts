@@ -313,6 +313,7 @@ export class Hud {
         (def.id === 'deflect' && p.deflectT > 0) ||
         (def.id === 'step' && p.dashT > 0 && p.dashKind === 4) ||
         (def.id === 'drain' && p.drainT > 0) ||
+        (def.id === 'swarm' && p.dashT > 0 && p.dashKind === 5) ||
         // The next Transfusion is the empowered one.
         (def.id === 'transfusion' && (p.bloodCount + 1) % 3 === 0) ||
         (def.id === 'tempest' && p.stacks >= TEMPEST.max) ||
@@ -977,18 +978,29 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
       ctx.arc(12, 4, 3, 0, TAU);
       ctx.fill();
       break;
-    case 'plague':
-      ctx.strokeStyle = COLORS.crimson;
-      ctx.lineWidth = 2.5;
-      ctx.beginPath();
-      for (let a = 0; a < 5 * Math.PI; a += 0.3) {
-        const r = 2 + a * 1.0;
-        const px = Math.cos(a) * r;
-        const py = Math.sin(a) * r;
-        if (a === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
+    case 'swarm':
+      // Three bats, the front one with crimson eyes
+      ctx.fillStyle = COLORS.crimson;
+      for (const [bx, by, k] of [[-9, -9, 0.6], [10, -6, 0.7], [0, 5, 1.1]]) {
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.scale(k, k);
+        ctx.beginPath();
+        ctx.moveTo(0, -3);
+        ctx.quadraticCurveTo(6, -9, 14, -6);
+        ctx.quadraticCurveTo(10, -2, 11, 3);
+        ctx.quadraticCurveTo(6, 0, 4, 3);
+        ctx.lineTo(0, 1);
+        ctx.lineTo(-4, 3);
+        ctx.quadraticCurveTo(-6, 0, -11, 3);
+        ctx.quadraticCurveTo(-10, -2, -14, -6);
+        ctx.quadraticCurveTo(-6, -9, 0, -3);
+        ctx.fill();
+        ctx.restore();
       }
-      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-2.2, 3.5, 1.6, 1.6);
+      ctx.fillRect(0.6, 3.5, 1.6, 1.6);
       break;
     case 'rift':
       ctx.strokeStyle = COLORS.earth;

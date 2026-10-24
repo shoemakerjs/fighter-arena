@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, DRAIN, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAGUE, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, DRAIN, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, teamSees } from '../sim/vision';
 
@@ -282,8 +282,10 @@ export class Bot {
         else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (blood) {
         const hurt = me.hp < CHAMPIONS[me.champ].hp * 0.75;
-        const enemiesNear = s.players.filter((p) => p.team !== me.team && !p.out && Math.hypot(p.x - me.x, p.y - me.y) < PLAGUE.range).length;
-        if (ready(SLOT.R) && !hidden && dist < PLAGUE.range && (enemiesNear > 1 || foe.hp < CHAMPIONS[foe.champ].hp * 0.5 || r() < 0.01)) press(SLOT.R);
+        // Night Swarm: through a weakened target, or away from a melee one when low.
+        const low = me.hp < CHAMPIONS[me.champ].hp * 0.3;
+        const swarmIn = !hidden && dist < SWARM.range - 30 && foe.hp < CHAMPIONS[foe.champ].hp * 0.4;
+        if (ready(SLOT.R) && (swarmIn || (low && foeMelee && dist < 200) || (!hidden && dist < SWARM.range - 30 && r() < 0.005))) press(SLOT.R);
         else if (ready(SLOT.E) && !hidden && dist < DRAIN.range - 40 && (hurt || foeMelee) && r() < 0.08 * a) press(SLOT.E);
         else if (ready(SLOT.Q) && dist < TIDES.r + PLAYER_R && r() < 0.15 * a) {
           press(SLOT.Q);
@@ -366,9 +368,11 @@ export class Bot {
       const ey = (escape ? -ny : dodgeY) * flip;
       ax = me.x + ex * 200;
       ay = me.y + ey * 200;
-    } else if (aimId === 'plague') {
-      ax = tx + this.tvx * kit[SLOT.R].cast * this.p.lead;
-      ay = ty + this.tvy * kit[SLOT.R].cast * this.p.lead;
+    } else if (aimId === 'swarm') {
+      // Fly through the target, or away from it when low.
+      const away = me.hp < CHAMPIONS[me.champ].hp * 0.3 && foe.hp >= CHAMPIONS[foe.champ].hp * 0.4;
+      ax = away ? me.x - nx * SWARM.range : tx + nx * 80;
+      ay = away ? me.y - ny * SWARM.range : ty + ny * 80;
     } else if (aimId === 'meteor' || aimId === 'rain') {
       const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : METEOR.delay);
       ax = tx + this.tvx * t * this.p.lead * 0.5;

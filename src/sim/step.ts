@@ -43,7 +43,6 @@ import {
   ORB_RESPAWN,
   ORB_SPAWN_AT,
   PILLARS,
-  PLAGUE,
   PLAYER_R,
   POISON,
   PROJ,
@@ -60,6 +59,7 @@ import {
   SONIC,
   SPAWNS,
   STEP,
+  SWARM,
   SUDDEN_DEATH_AT,
   TEAM_SPREAD,
   TEMPEST,
@@ -168,8 +168,6 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     drainT: 0,
     drainTarget: -1,
     bloodCount: 0,
-    plagueT: 0,
-    plagueBy: 0,
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -322,7 +320,7 @@ export function airborne(p: Player): boolean {
 
 /** Leaping or executing: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
-  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2);
+  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5);
 }
 
 /** Leaping, executing or sweeping: moves through the enemy instead of bumping it. */
@@ -346,7 +344,6 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.stackT > 0 && --p.stackT === 0) p.stacks = 0;
   if (p.soulT > 0 && --p.soulT === 0) soulReturn(s, p, ev);
   if (p.drainT > 0) drainPulse(s, p, ev);
-  if (p.plagueT > 0 && --p.plagueT === 0) plagueBurst(s, p, ev);
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   if (p.poisonT > 0) {
     p.poisonT--;
@@ -423,6 +420,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
     if (p.dashKind === 3 && !p.dashHit) bladeContact(s, p, ev);
     if (p.dashKind === 4) stepContact(s, p, ev);
+    if (p.dashKind === 5) swarmContact(s, p, ev);
   } else {
     const held = p.rootT > 0 || stunned;
     const mx = held ? 0 : Math.sign(inp.mx);
@@ -460,8 +458,33 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step';
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm';
   if (p.rootT > 0 && mobility) return false;
+
+  // Night Swarm: like a leap toward the cursor, but on the ground (pillars still stop it).
+  if (def.id === 'swarm') {
+    if (p.dashT > 0) return false;
+    let tx = inp.ax - p.x;
+    let ty = inp.ay - p.y;
+    const d = Math.sqrt(tx * tx + ty * ty);
+    if (d > SWARM.range) {
+      tx = (tx / d) * SWARM.range;
+      ty = (ty / d) * SWARM.range;
+    }
+    p.cast = null;
+    p.counterT = 0;
+    p.drainT = 0;
+    p.cooldowns[slot] = def.cooldown;
+    p.energy -= def.energyCost;
+    p.dashKind = 5;
+    p.dashHit = 0;
+    p.dashT = SWARM.ticks;
+    p.dashX = tx / SWARM.ticks;
+    p.dashY = ty / SWARM.ticks;
+    if (p.stealthT > 0) p.stealthT = 0;
+    ev.push({ type: 'swarm', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
 
   // Blink: instant teleport, also usable mid-cast (cancels it).
   if (def.id === 'blink') {
@@ -657,29 +680,6 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       for (const foe of areaHit(s, p, p.x, p.y, TIDES.r, dmg, 10, 0, 'tides', ev)) {
         foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, TIDES.slowMul) : TIDES.slowMul;
         foe.slowT = Math.max(foe.slowT, TIDES.slowT);
-      }
-      return;
-    }
-
-    case 'plague': {
-      let tx = inp.ax - p.x;
-      let ty = inp.ay - p.y;
-      const d = Math.sqrt(tx * tx + ty * ty);
-      if (d > PLAGUE.range) {
-        tx = (tx / d) * PLAGUE.range;
-        ty = (ty / d) * PLAGUE.range;
-      }
-      const x = p.x + tx;
-      const y = p.y + ty;
-      ev.push({ type: 'plague', owner: p.id, x, y });
-      for (const foe of foes) {
-        const dx = foe.x - x;
-        const dy = foe.y - y;
-        const reach = PLAGUE.r + PLAYER_R;
-        if (dx * dx + dy * dy < reach * reach && foe.hp > 0 && !untargetable(foe)) {
-          foe.plagueT = PLAGUE.ticks;
-          foe.plagueBy = p.id;
-        }
       }
       return;
     }
@@ -1015,8 +1015,6 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
     dmg += MARK.bonus;
     ev.push({ type: 'markPop', player: target.id, x: target.x, y: target.y });
   }
-  // Hemoplague: the cursed take more from everything (but the burst itself).
-  if (target.plagueT > 0 && kind !== 'plague') dmg = Math.round(dmg * PLAGUE.amp);
   target.hp = Math.max(0, target.hp - dmg);
   target.hitT = 8;
   target.restT = 0;
@@ -1073,11 +1071,20 @@ function drainPulse(s: GameState, p: Player, ev: GameEvent[]) {
   if (--p.drainT % DRAIN.every === 0 && hit(p, t, DRAIN.dmg, DRAIN.energy, 'drain', t.x, t.y, ev)) heal(p, DRAIN.heal, ev);
 }
 
-/** Hemoplague runs out: the cursed burst, healing the caster. */
-function plagueBurst(s: GameState, p: Player, ev: GameEvent[]) {
-  const src = s.players[p.plagueBy];
-  if (src.out || p.hp <= 0) return;
-  if (hit(src, p, PLAGUE.dmg, 0, 'plague', p.x, p.y, ev)) heal(src, PLAGUE.heal, ev);
+/** Night Swarm: bite everyone flown through (once per swarm each), slowing them and healing you. */
+function swarmContact(s: GameState, p: Player, ev: GameEvent[]) {
+  const reach = 2 * PLAYER_R + 10;
+  for (const foe of enemiesOf(s, p)) {
+    const bit = 1 << foe.id;
+    const dx = foe.x - p.x;
+    const dy = foe.y - p.y;
+    if (p.dashHit & bit || dx * dx + dy * dy > reach * reach || foe.hp <= 0 || untargetable(foe)) continue;
+    p.dashHit |= bit;
+    if (!hit(p, foe, SWARM.dmg, 0, 'swarm', foe.x, foe.y, ev)) continue;
+    heal(p, SWARM.heal, ev);
+    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, SWARM.slowMul) : SWARM.slowMul;
+    foe.slowT = Math.max(foe.slowT, SWARM.slowT);
+  }
 }
 
 function stun(target: Player, ticks: number, ev: GameEvent[]) {

@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAGUE, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, TIDES, WHIRL } from '../sim/constants';
+import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, TIDES, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -153,7 +153,6 @@ export class Fx {
             e.kind === 'execute' ||
             e.kind === 'fate' ||
             e.kind === 'crescent' ||
-            e.kind === 'plague' ||
             (e.kind === 'tides' && e.dmg >= TIDES.dmg + TIDES.bonus * 0.8) ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
@@ -268,10 +267,10 @@ export class Fx {
           break;
         }
 
-        case 'plague':
-          this.rings.push({ x: e.x, y: e.y, r0: PLAGUE.r + 30, r1: PLAGUE.r, life: 0.45, max: 0.45, color: COLORS.crimson, width: 8 });
-          this.burst(e.x, e.y, 30, COLORS.crimson, 260, 3.5, 0.6, 20);
-          this.sound('meteorCast');
+        case 'swarm':
+          this.burst(e.x, e.y, 18, '#2a0d18', 200, 3.5, 0.5, 30);
+          this.burst(e.x, e.y, 10, COLORS.crimson, 160, 2.5, 0.4, 30);
+          this.sound('whirl');
           break;
 
         case 'deflect':
@@ -595,8 +594,9 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'soulReturn':
     case 'fate':
       return { x: e.x, y: e.y, player: e.player };
+    case 'swarm':
+      return { x: e.x, y: e.y, player: e.player };
     case 'impact':
-    case 'plague':
       return { x: e.x, y: e.y, player: e.owner };
     default:
       return null;

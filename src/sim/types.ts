@@ -30,7 +30,7 @@ export interface Input {
 }
 
 export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'plague';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -72,7 +72,8 @@ export interface Player {
   /**
    * 0 = ground dash, 1 = leap (airborne: can't be hit, damages on landing),
    * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once),
-   * 4 = crimson step (passes through, makes each enemy bleed; dashHit is a bitmask by id).
+   * 4 = crimson step (passes through, makes each enemy bleed; dashHit is a bitmask by id),
+   * 5 = night swarm (can't be hit, passes through, bites each enemy once; dashHit is a bitmask).
    */
   dashKind: number;
   /** Execute / sweeping blade already connected during this dash (0/1). */
@@ -114,9 +115,6 @@ export interface Player {
   drainTarget: number;
   /** Transfusions cast this round (every third is empowered). */
   bloodCount: number;
-  /** Cursed by Hemoplague (ticks left) and by whom. */
-  plagueT: number;
-  plagueBy: number;
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -231,7 +229,8 @@ export type GameEvent =
   | { type: 'bleed'; player: number; x: number; y: number }
   /** A missed Transfusion costs its caster HP. */
   | { type: 'bloodloss'; player: number; amount: number; x: number; y: number }
-  | { type: 'plague'; owner: number; x: number; y: number }
+  /** Romulus scatters into bats (Night Swarm). */
+  | { type: 'swarm'; player: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */
   | { type: 'deflect'; player: number; x: number; y: number }
   | { type: 'soul'; player: number; x: number; y: number }

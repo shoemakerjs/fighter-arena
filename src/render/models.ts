@@ -318,8 +318,8 @@ export interface ChampionRig {
   stunStars: THREE.Group;
   /** Shimmering half-shell in front of a deflecting samurai (turns with the aim). */
   deflectArc: THREE.Mesh;
-  /** Crimson spiral over the head while cursed by Hemoplague. */
-  plagueMark: THREE.Mesh;
+  /** Cloud of bats shown instead of the body during Night Swarm (bats are [body, left wing, right wing, eyes]; last child is the floor haze). */
+  swarm: THREE.Group;
 }
 
 export function buildChampion(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
@@ -802,16 +802,37 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
   deflectArc.visible = false;
   pointer.add(deflectArc);
 
-  const plagueMark = new THREE.Mesh(
-    new THREE.TorusGeometry(8, 1.4, 4, 24, Math.PI * 1.6),
-    new THREE.MeshBasicMaterial({ color: COLORS.crimson, transparent: true, opacity: 0.95, toneMapped: false }),
+  const swarm = new THREE.Group();
+  const batMat = new THREE.MeshBasicMaterial({ color: '#2a0a14', side: THREE.DoubleSide });
+  const batEyeMat = new THREE.MeshBasicMaterial({ color: '#ff3355', toneMapped: false });
+  const batBody = new THREE.SphereGeometry(3.4, 6, 4);
+  const eye = new THREE.SphereGeometry(1, 4, 3);
+  const wing = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -3.5), new THREE.Vector3(16, 2.5, -6), new THREE.Vector3(11, 0, 1.5), new THREE.Vector3(0, 0, 3.5)]);
+  wing.setIndex([0, 1, 2, 0, 2, 3]);
+  for (let i = 0; i < 10; i++) {
+    const bat = new THREE.Group();
+    const left = new THREE.Mesh(wing, batMat);
+    const right = new THREE.Mesh(wing, batMat);
+    right.rotation.y = Math.PI;
+    const eyeL = new THREE.Mesh(eye, batEyeMat);
+    const eyeR = new THREE.Mesh(eye, batEyeMat);
+    eyeL.position.set(-1.3, 1.6, 2.8);
+    eyeR.position.set(1.3, 1.6, 2.8);
+    bat.add(new THREE.Mesh(batBody, batMat), left, right, eyeL, eyeR);
+    swarm.add(bat);
+  }
+  // A blood-red haze on the floor under the cloud.
+  const haze = new THREE.Mesh(
+    new THREE.CircleGeometry(34, 24),
+    new THREE.MeshBasicMaterial({ color: COLORS.crimson, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
   );
-  plagueMark.rotation.x = -Math.PI / 2;
-  plagueMark.position.y = 88;
-  plagueMark.visible = false;
-  root.add(plagueMark);
+  haze.rotation.x = -Math.PI / 2;
+  haze.position.y = 1;
+  swarm.add(haze);
+  swarm.visible = false;
+  root.add(swarm);
 
-  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars, deflectArc, plagueMark };
+  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars, deflectArc, swarm };
 }
 
 /**

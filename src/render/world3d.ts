@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAGUE, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -713,10 +713,22 @@ export class World3D implements WorldView {
         rig.revealEye.position.y = 96 + Math.sin(this.time * 3) * 2;
         rig.revealEye.quaternion.copy(this.camera.quaternion);
       }
-      rig.plagueMark.visible = pc.plagueT > 0 && !dead;
-      if (rig.plagueMark.visible) {
-        rig.plagueMark.rotation.z += dt * 5;
-        rig.plagueMark.position.y = 88 + Math.sin(this.time * 4) * 2;
+      // Night Swarm: the body scatters into bats circling where it flies.
+      const swarming = pc.dashT > 0 && pc.dashKind === 5 && !dead;
+      rig.body.visible = !swarming;
+      rig.swarm.visible = swarming;
+      if (swarming) {
+        const bats = rig.swarm.children.slice(0, -1);
+        bats.forEach((bat, j) => {
+          const a = this.time * 8 + j * 2.4;
+          const r = 9 + (j % 3) * 8;
+          bat.position.set(Math.cos(a) * r, 20 + (j % 4) * 10 + Math.sin(this.time * 9 + j) * 4, Math.sin(a) * r);
+          bat.rotation.y = -a;
+          const flap = Math.sin(this.time * 45 + j * 1.7) * 0.8;
+          // The right wing is the left one turned around, so the same angle mirrors it.
+          bat.children[1].rotation.z = flap;
+          bat.children[2].rotation.z = flap;
+        });
       }
       this.updateTether(i, cur, p);
       rig.deflectArc.visible = pc.deflectT > 0 && !dead;
@@ -1069,8 +1081,8 @@ export class World3D implements WorldView {
       this.aimCircle.position.set(p.x, 1.4, p.y);
       this.aimCircle.scale.setScalar((TIDES.r / METEOR.r) * (0.5 + 0.5 * draw));
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.crimson);
-    } else if ((id === 'meteor' || id === 'rain' || id === 'plague') && opts.cursor) {
-      const range = id === 'rain' ? RAIN.range : id === 'plague' ? PLAGUE.range : METEOR.range;
+    } else if ((id === 'meteor' || id === 'rain') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
@@ -1081,7 +1093,7 @@ export class World3D implements WorldView {
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
-      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'plague' ? PLAGUE.r / METEOR.r : 1);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : 1);
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }
