@@ -614,7 +614,14 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
 
     case 'cry': {
       ev.push({ type: 'nova', player: p.id, x: p.x, y: p.y });
-      areaHit(s, p, p.x, p.y, CRY.r, CRY.dmg, CRY.energy, CRY.kb, 'cry', ev);
+      if (areaHit(s, p, p.x, p.y, CRY.r, CRY.dmg, CRY.energy, 0, 'cry', ev)) {
+        // An impulse that, decaying, carries the enemy to just in front of the warrior.
+        const dx = p.x - foe.x;
+        const dy = p.y - foe.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d > 0.0001) knockback(foe, dx / d, dy / d, Math.max(0, d - CRY.stop) * (1 - KB_DECAY));
+        else knockback(foe, p.fx, p.fy, 0);
+      }
       return;
     }
 
@@ -718,7 +725,11 @@ function whirlPulse(s: GameState, p: Player, ev: GameEvent[]) {
 
 function land(s: GameState, p: Player, ev: GameEvent[]) {
   ev.push({ type: 'land', player: p.id, x: p.x, y: p.y });
-  areaHit(s, p, p.x, p.y, LEAP.r, LEAP.dmg, LEAP.energy, LEAP.kb, 'leap', ev);
+  if (areaHit(s, p, p.x, p.y, LEAP.r, LEAP.dmg, LEAP.energy, 0, 'leap', ev)) {
+    const foe = s.players[1 - p.id];
+    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, LEAP.slowMul) : LEAP.slowMul;
+    foe.slowT = Math.max(foe.slowT, LEAP.slowT);
+  }
 }
 
 /** Target center within `reach` and in front of the attacker (cos of the half-angle >= minDot). */
@@ -742,13 +753,14 @@ function segDist2(px: number, py: number, x0: number, y0: number, x1: number, y1
   return cx * cx + cy * cy;
 }
 
-/** Circle around (x, y): hits the enemy (pushed outwards by kb) and the orb. */
-function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: number, energy: number, kb: number, kind: HitKind, ev: GameEvent[]) {
+/** Circle around (x, y): hits the enemy (pushed outwards by kb) and the orb. Returns whether the enemy was hit. */
+function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: number, energy: number, kb: number, kind: HitKind, ev: GameEvent[]): boolean {
   const foe = s.players[1 - p.id];
   let dx = foe.x - x;
   let dy = foe.y - y;
   let d = Math.sqrt(dx * dx + dy * dy);
-  if (d < r + PLAYER_R && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev) && kb > 0) {
+  const landed = d < r + PLAYER_R && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev);
+  if (landed && kb > 0) {
     if (d < 0.0001) {
       dx = p.fx;
       dy = p.fy;
@@ -757,6 +769,7 @@ function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: 
     knockback(foe, dx / d, dy / d, kb);
   }
   if (s.orb.active && Math.sqrt(x * x + y * y) < r + ORB_R) damageOrb(s, p.id, dmg, 0, 0, ev);
+  return landed;
 }
 
 function collideWorld(s: GameState, p: Player) {

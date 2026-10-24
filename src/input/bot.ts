@@ -295,7 +295,8 @@ export class Bot {
       } else if (warrior) {
         const reach = 2 * PLAYER_R + SLASH.reach;
         if (ready(SLOT.R) && los && dist < RIFT.len && r() < 0.1) press(SLOT.R);
-        else if (ready(SLOT.Q) && dist < CRY.r && (foe.cast !== null || r() < 0.03 * a)) press(SLOT.Q);
+        // War Cry pulls: interrupt a cast, or drag a target that is just out of axe reach.
+        else if (ready(SLOT.Q) && dist < CRY.r && (foe.cast !== null || (dist > reach && r() < 0.15 * a))) press(SLOT.Q);
         else if (ready(SLOT.SPACE) && dist > 150 && dist < LEAP.range + 40 && r() < 0.07 * a) press(SLOT.SPACE);
         else if (ready(SLOT.M2) && los && dist > 140 && dist < PROJ.hook.range - 30 && r() < 0.06 * a) press(SLOT.M2);
         else if (ready(SLOT.E) && dist < WHIRL.r + 10 && me.whirlT === 0 && r() < 0.03 * a) press(SLOT.E);

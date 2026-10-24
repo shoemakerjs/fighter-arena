@@ -92,7 +92,7 @@ export const CHAMPIONS: ChampionDef[] = [
     hp: 150,
     speed: 3.1,
     abilities: [
-      { id: 'bolt', name: 'Spark', desc: 'basic bolt, hold to keep firing', cooldown: 4, cast: 14, castSlow: 0.6, energyCost: 0 },
+      { id: 'bolt', name: 'Spark', desc: 'basic bolt, hold to keep firing', cooldown: 8, cast: 14, castSlow: 0.6, energyCost: 0 },
       { id: 'blast', name: 'Blast', desc: 'knocks back and interrupts casts', cooldown: 300, cast: 32, castSlow: 0.35, energyCost: 0 },
       { id: 'dash', name: 'Dash', desc: 'dash toward the cursor, cancels your cast', cooldown: 360, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'counter', name: 'Counter', desc: 'blocks a hit, grants energy and haste', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
@@ -108,8 +108,8 @@ export const CHAMPIONS: ChampionDef[] = [
     abilities: [
       { id: 'slash', name: 'Cleave', desc: 'axe swing in front of you, hold to keep swinging', cooldown: 6, cast: 12, castSlow: 0.5, energyCost: 0 },
       { id: 'hook', name: 'Chain', desc: 'hook that pulls the enemy in', cooldown: 360, cast: 20, castSlow: 0.4, energyCost: 0 },
-      { id: 'leap', name: 'Leap', desc: 'jump to the cursor; untargetable in the air', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'cry', name: 'War Cry', desc: 'pushes everything away, interrupts casts', cooldown: 480, cast: 6, castSlow: 0.2, energyCost: 0 },
+      { id: 'leap', name: 'Leap', desc: 'jump to the cursor, slowing where you land; untargetable in the air', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'cry', name: 'War Cry', desc: 'pulls the enemy in close, interrupts casts', cooldown: 480, cast: 6, castSlow: 0.2, energyCost: 0 },
       { id: 'whirl', name: 'Whirl', desc: 'spin, hitting everything around you', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'rift', name: 'Rift', desc: 'shockwave in a line, 100 energy', cooldown: 60, cast: 24, castSlow: 0.2, energyCost: 100 },
     ],
@@ -173,7 +173,7 @@ export interface ProjDef {
 }
 
 export const PROJ: Record<ProjKind, ProjDef> = {
-  bolt: { speed: 13, r: 9, range: 580, dmg: 8, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
+  bolt: { speed: 13, r: 9, range: 480, dmg: 8, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
   blast: { speed: 10, r: 16, range: 620, dmg: 20, energy: 12, kb: 11, slowMul: 1, slowT: 0 },
   frost: { speed: 11, r: 12, range: 520, dmg: 10, energy: 10, kb: 0, slowMul: 0.5, slowT: 100 },
   hook: { speed: 15, r: 10, range: 470, dmg: 12, energy: 10, kb: -22, slowMul: 1, slowT: 0 },
@@ -197,8 +197,10 @@ export const METEOR = { range: 480, delay: 54, r: 115, dmg: 32, kb: 12 };
 // Warrior
 /** Hits when the target's center is within 2*PLAYER_R + reach and in front (dot >= minDot). */
 export const SLASH = { reach: 52, minDot: 0.45, dmg: 9, energy: 10 };
-export const LEAP = { ticks: 22, range: 280, r: 85, dmg: 14, energy: 10, kb: 6 };
-export const CRY = { r: 125, dmg: 8, kb: 13, energy: 8 };
+/** Landing hits everything within `r` and slows it (slowMul for slowT ticks). */
+export const LEAP = { ticks: 22, range: 280, r: 85, dmg: 14, energy: 10, slowMul: 0.6, slowT: 50 };
+/** Pulls an enemy within `r` towards the warrior, stopping `stop` from his center. */
+export const CRY = { r: 150, dmg: 8, stop: 56, energy: 8 };
 export const WHIRL = { ticks: 60, every: 12, r: 82, dmg: 4, energy: 4, speed: 0.9 };
 export const RIFT = { len: 360, half: 42, dmg: 30, kb: 11 };
 

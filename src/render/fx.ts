@@ -367,8 +367,9 @@ export class Fx {
 
         case 'nova': {
           const color = COLORS.players[e.player];
-          this.rings.push({ x: e.x, y: e.y, r0: 20, r1: CRY.r, life: 0.35, max: 0.35, color, width: 8 });
-          this.rings.push({ x: e.x, y: e.y, r0: 10, r1: CRY.r * 0.7, life: 0.25, max: 0.25, color: '#ffffff', width: 3 });
+          // War Cry pulls: the rings collapse inwards.
+          this.rings.push({ x: e.x, y: e.y, r0: CRY.r, r1: 24, life: 0.35, max: 0.35, color, width: 8 });
+          this.rings.push({ x: e.x, y: e.y, r0: CRY.r * 0.75, r1: 10, life: 0.25, max: 0.25, color: '#ffffff', width: 3 });
           this.burst(e.x, e.y, 24, color, 380, 3.5, 0.35, 10);
           this.shake += 4;
           this.sound('blast');
