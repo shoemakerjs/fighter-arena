@@ -485,21 +485,30 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
       ctx.arc(10, -10, 3, 0, TAU);
       ctx.stroke();
       break;
-    case 'winder':
-      // A spinning ring with a return arrow
+    case 'clock':
+      // A clock-faced bomb with its bounce arcs behind it
       ctx.strokeStyle = COLORS.chrono;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([2, 3]);
       ctx.beginPath();
-      ctx.arc(4, -2, 7, 0, TAU);
+      ctx.moveTo(-16, 10);
+      ctx.quadraticCurveTo(-11, -2, -6, 10);
+      ctx.quadraticCurveTo(-3, 4, 0, 10);
       ctx.stroke();
-      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#3a3f4f';
       ctx.beginPath();
-      ctx.arc(0, 0, 15, Math.PI * 0.65, Math.PI * 1.25);
+      ctx.arc(6, -3, 9, 0, TAU);
+      ctx.fill();
+      ctx.lineWidth = 2.5;
       ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
       ctx.beginPath();
-      ctx.moveTo(-14, -9);
-      ctx.lineTo(-9, -12);
-      ctx.lineTo(-8, -6);
+      ctx.moveTo(6, -3);
+      ctx.lineTo(6, -9);
+      ctx.moveTo(6, -3);
+      ctx.lineTo(10, -1);
       ctx.stroke();
       break;
     case 'flicker':

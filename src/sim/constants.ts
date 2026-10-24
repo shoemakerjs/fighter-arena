@@ -65,7 +65,7 @@ export type AbilityId =
   | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain'
   | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
   | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm'
-  | 'chrono' | 'winder' | 'flicker' | 'converge' | 'recall' | 'pulse';
+  | 'chrono' | 'clock' | 'flicker' | 'converge' | 'recall' | 'pulse';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -183,11 +183,11 @@ export const CHAMPIONS: ChampionDef[] = [
     speed: 3.5,
     abilities: [
       { id: 'chrono', name: 'Chrono Blade', desc: 'quick slash, hold to keep slashing; every third hit in a row on one enemy resonates: bonus damage, slows it and hastes you', cooldown: 5, cast: 9, castSlow: 0.6, energyCost: 0 },
-      { id: 'winder', name: 'Timewinder', desc: 'throw a device that flies out and comes back to you, hitting on both ways; the way out slows', cooldown: 270, cast: 14, castSlow: 0.5, energyCost: 0 },
+      { id: 'clock', name: 'Clockwork Bomb', desc: 'lob a ticking bomb at the cursor that bounces on twice; it bursts when it lands next to an enemy (or at the last bounce), slowing time around it', cooldown: 270, cast: 14, castSlow: 0.5, energyCost: 0 },
       // The cooldown is only a short lockout between blinks; charges do the limiting.
       { id: 'flicker', name: 'Flicker', desc: 'short blink where you are moving (or aiming), two charges', cooldown: 12, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'converge', name: 'Parallel Convergence', desc: 'place a field that collapses after 1.5 s, stunning enemies inside', cooldown: 600, cast: 10, castSlow: 0.5, energyCost: 0 },
-      { id: 'recall', name: 'Recall', desc: 'jump back to where you were 2 s ago, regaining a quarter of the HP you lost since', cooldown: 720, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'recall', name: 'Recall', desc: 'jump back to where you were 3 s ago, regaining a third of the HP you lost since', cooldown: 720, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'pulse', name: 'Pulse Bomb', desc: 'throw a bomb that sticks to the first enemy it hits (or lands) and bursts after 1 s, 100 energy', cooldown: 60, cast: 12, castSlow: 0.4, energyCost: 100 },
     ],
   },
@@ -223,8 +223,8 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   crescent: { speed: 12, r: 22, range: 440, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
   bloodbolt: { speed: 12, r: 9, range: 440, dmg: 7, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
   transfusion: { speed: 15, r: 11, range: 420, dmg: 13, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
-  // Flies out `range`, then homes back (WINDER); hits each enemy once per way, the way out slows.
-  winder: { speed: 11, r: 12, range: 340, dmg: 7, energy: 8, kb: 0, slowMul: 0.6, slowT: 45 },
+  // Lobbed at the cursor (up to `range`) over pillars, then bounces on (CLOCK); its burst slows.
+  clock: { speed: 10, r: 11, range: 380, dmg: 12, energy: 8, kb: 0, slowMul: 0.6, slowT: 45 },
   // Deals nothing itself: it sticks and bursts (PULSE).
   pulse: { speed: 11, r: 10, range: 300, dmg: 0, energy: 0, kb: 0, slowMul: 1, slowT: 0 },
 };
@@ -310,16 +310,19 @@ export const SWARM = { range: 260, ticks: 20, dmg: 10, heal: 5, slowMul: 0.75, s
 // Chronoblade
 /**
  * Like KATANA but shorter. `hits` hits in a row on one enemy (each within `window` of the last,
- * from Chrono Blade or Timewinder) resonate: +`bonus`, a slow, and haste for the attacker.
+ * from Chrono Blade or Clockwork Bomb) resonate: +`bonus`, a slow, and haste for the attacker.
  */
 export const CHRONO = { reach: 48, minDot: 0.5, dmg: 6, energy: 9, hits: 3, window: 150, bonus: 12, slowMul: 0.65, slowT: 50, haste: 60 };
-/** Timewinder's speed on the way back to its thrower. */
-export const WINDER = { returnSpeed: 13 };
+/**
+ * Clockwork Bomb: `bounces` bounces, each hop `hop` times the last (at least `minHop`). It bursts
+ * within `r` when it lands next to an enemy (or the orb), on a pillar or the wall, or at the last landing.
+ */
+export const CLOCK = { bounces: 2, hop: 0.45, minHop: 40, r: 75 };
 /** Blink `range` along your movement (or the aim when standing); `charges` charges, each back after `recharge`. */
 export const FLICKER = { range: 125, charges: 2, recharge: 180 };
 /** A field of radius `r` up to `range` away; after `delay` it stuns enemies inside for `stun` and deals `dmg`. */
 export const CONVERGE = { range: 420, r: 90, delay: 90, stun: 50, dmg: 6 };
 /** Back to where you were `ticks` ago (positions sampled every `every`), regaining `heal` of the HP lost since. */
-export const RECALL = { ticks: 120, every: 6, heal: 0.25 };
+export const RECALL = { ticks: 180, every: 6, heal: 0.35 };
 /** Sticks to the first enemy hit (or lies where it stops) and bursts `fuse` later within `r`. */
 export const PULSE = { fuse: 60, r: 90, dmg: 30, kb: 6 };

@@ -57,6 +57,6 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'tempest' || id === 'crescent' || id === 'blade' || id === 'deflect') return COLORS.edge;
   if (id === 'soul' || id === 'fate') return COLORS.spirit;
   if (id === 'transfusion' || id === 'step' || id === 'bleed' || id === 'tides' || id === 'drain' || id === 'swarm') return COLORS.crimson;
-  if (id === 'winder' || id === 'flicker' || id === 'converge' || id === 'recall' || id === 'pulse' || id === 'resonance') return COLORS.chrono;
+  if (id === 'clock' || id === 'flicker' || id === 'converge' || id === 'recall' || id === 'pulse' || id === 'resonance') return COLORS.chrono;
   return COLORS.players[owner];
 }

@@ -293,7 +293,7 @@ export class Bot {
         else if (me.charges > 0 && ready(SLOT.SPACE) && !hidden && dist > 170 && dist < 170 + FLICKER.range && r() < 0.08 * a) {
           press(SLOT.SPACE);
           engage = true;
-        } else if (ready(SLOT.M2) && los && dist < PROJ.winder.range - 20 && r() < 0.08 * a) press(SLOT.M2);
+        } else if (ready(SLOT.M2) && !hidden && dist < PROJ.clock.range && r() < 0.08 * a) press(SLOT.M2);
         else if (dist < reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (blood) {
         const hurt = me.hp < CHAMPIONS[me.champ].hp * 0.75;

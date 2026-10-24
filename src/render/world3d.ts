@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, CONVERGE, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -33,6 +33,8 @@ interface ProjView {
   trail: THREE.Sprite[];
   /** Hook only: chain back to the thrower's hand. */
   chain: THREE.Mesh | null;
+  /** Glow on the floor under it (stays down when the projectile is lobbed). */
+  decal: THREE.Mesh;
 }
 
 interface MeteorView {
@@ -776,8 +778,8 @@ export class World3D implements WorldView {
           ? new THREE.OctahedronGeometry(size * 0.85, 0)
           : kind === 'transfusion' || kind === 'pulse'
             ? new THREE.IcosahedronGeometry(size * 0.7, 0)
-            : kind === 'winder'
-              ? new THREE.TorusGeometry(size * 0.7, size * 0.22, 6, 16)
+            : kind === 'clock'
+              ? new THREE.SphereGeometry(size * 0.75, 14, 10)
               : new THREE.SphereGeometry(size * 0.6, 12, 8);
     const sprite = (opacity: number) =>
       new THREE.SpriteMaterial({ map: this.glowTex, color, opacity, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
@@ -817,7 +819,17 @@ export class World3D implements WorldView {
       chain.castShadow = true;
       this.scene.add(chain);
     }
-    return { group, core, trail, chain };
+    if (pr.kind === 'clock') {
+      // A clock face: gear rim and two hands, turning as it flies.
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(l.size * 0.85, l.size * 0.16, 6, 18), new THREE.MeshBasicMaterial({ color: COLORS.chrono, toneMapped: false }));
+      const handMat = new THREE.MeshBasicMaterial({ color: '#2a2230' });
+      const long = new THREE.Mesh(new THREE.BoxGeometry(l.size * 0.12, l.size * 0.7, l.size * 0.12), handMat);
+      long.position.set(0, l.size * 0.35, l.size * 0.74);
+      const short = new THREE.Mesh(new THREE.BoxGeometry(l.size * 0.45, l.size * 0.12, l.size * 0.12), handMat);
+      short.position.set(l.size * 0.22, 0, l.size * 0.74);
+      core.add(rim, long, short);
+    }
+    return { group, core, trail, chain, decal };
   }
 
   private updateProjectiles(prev: GameState, cur: GameState, alpha: number, localId: number | null) {
@@ -836,12 +848,18 @@ export class World3D implements WorldView {
       const old = prevById.get(pr.id);
       const x = old ? old.x + (pr.x - old.x) * alpha : pr.x;
       const y = old ? old.y + (pr.y - old.y) * alpha : pr.y;
-      v.group.position.set(x, PROJ_H, y);
+      // A Clockwork Bomb arcs up and down on every hop.
+      const hop = pr.kind === 'clock' ? Math.sin(Math.PI * Math.min(1, (pr.age + alpha) / pr.life)) * Math.min(110, pr.life * 3.2) : 0;
+      v.group.position.set(x, PROJ_H + hop, y);
+      v.decal.position.y = -PROJ_H - hop + 1;
       // Enemy projectiles only show up once they fly into your vision.
       const seen = localId === null || cur.training || cur.players[pr.owner].team === cur.players[localId].team || teamSees(cur, localId, x, y);
       v.group.visible = seen;
       if (v.chain) v.chain.visible = seen;
-      if (ARROWS.includes(pr.kind) || pr.kind === 'crescent') {
+      if (pr.kind === 'clock') {
+        // Tilted towards the camera, the face (and its hands) spinning.
+        v.core.rotation.set(-0.6, 0, v.core.rotation.z - 0.25);
+      } else if (ARROWS.includes(pr.kind) || pr.kind === 'crescent') {
         v.core.rotation.set(0, Math.atan2(-pr.vy, pr.vx), 0);
       } else {
         v.core.rotation.x += 0.15;
@@ -1090,7 +1108,7 @@ export class World3D implements WorldView {
     }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'winder', 'pulse'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1117,8 +1135,8 @@ export class World3D implements WorldView {
       this.aimCircle.position.set(p.x, 1.4, p.y);
       this.aimCircle.scale.setScalar((TIDES.r / METEOR.r) * (0.5 + 0.5 * draw));
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.crimson);
-    } else if ((id === 'meteor' || id === 'rain' || id === 'converge') && opts.cursor) {
-      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : METEOR.range;
+    } else if ((id === 'meteor' || id === 'rain' || id === 'converge' || id === 'clock') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : id === 'clock' ? PROJ.clock.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
@@ -1129,7 +1147,7 @@ export class World3D implements WorldView {
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
-      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : 1);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : id === 'clock' ? CLOCK.r / METEOR.r : 1);
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }

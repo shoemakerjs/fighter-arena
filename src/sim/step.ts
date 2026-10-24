@@ -20,6 +20,7 @@ import {
   CHAMP,
   CHAMPIONS,
   CHRONO,
+  CLOCK,
   CONVERGE,
   COUNTDOWN_TICKS,
   COUNTER,
@@ -72,7 +73,6 @@ import {
   TRANSFUSION,
   VAULT,
   WHIRL,
-  WINDER,
   type AbilityDef,
   type AbilityId,
 } from './constants';
@@ -752,6 +752,21 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       return;
     }
 
+    case 'clock': {
+      // Lobbed to the cursor (clamped to its range), landing exactly there.
+      const pd = PROJ.clock;
+      const tx = inp.ax - p.x;
+      const ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      const nx = d > 1 ? tx / d : p.fx;
+      const ny = d > 1 ? ty / d : p.fy;
+      const len = Math.max(CLOCK.minHop, Math.min(pd.range, d));
+      const life = Math.max(1, Math.round(len / pd.speed));
+      s.projectiles.push({ id: s.nextId++, owner: p.id, kind: 'clock', x: p.x, y: p.y, vx: (nx * len) / life, vy: (ny * len) / life, r: pd.r, life, age: 0, dmg: pd.dmg, kb: 0, bounces: CLOCK.bounces });
+      ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
     case 'chrono': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: CHRONO.reach });
       for (const foe of foes) {
@@ -920,8 +935,7 @@ function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, e
     age: 0,
     dmg,
     kb,
-    back: 0,
-    hitMask: 0,
+    bounces: 0,
   });
   ev.push({ type: 'release', player: p.id, ability, x, y });
 }
@@ -1244,8 +1258,8 @@ function hitsPillar(x: number, y: number, r: number): boolean {
 function updateProjectiles(s: GameState, ev: GameEvent[]) {
   const alive = [];
   for (const pr of s.projectiles) {
-    if (pr.kind === 'winder') {
-      if (winderTick(s, pr, ev)) alive.push(pr);
+    if (pr.kind === 'clock') {
+      if (clockTick(s, pr, ev)) alive.push(pr);
       continue;
     }
     pr.x += pr.vx;
@@ -1351,51 +1365,46 @@ function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
 }
 
 /**
- * Timewinder: flies out, then homes back to its thrower (over pillars), hitting each enemy
- * once per way. Returns false once caught (or its thrower is gone).
+ * Clockwork Bomb: hops over pillars to each landing spot. Lands next to an enemy (or the
+ * orb), on a pillar or with no bounces left: bursts. Otherwise it bounces on, shorter.
  */
-function winderTick(s: GameState, pr: Projectile, ev: GameEvent[]): boolean {
-  const owner = s.players[pr.owner];
-  if (owner.out) return false;
-  if (pr.back) {
-    const dx = owner.x - pr.x;
-    const dy = owner.y - pr.y;
-    const d = Math.sqrt(dx * dx + dy * dy);
-    if (d < PLAYER_R + pr.r || pr.age > pr.life * 4) return false;
-    pr.vx = (dx / d) * WINDER.returnSpeed;
-    pr.vy = (dy / d) * WINDER.returnSpeed;
-  }
+function clockTick(s: GameState, pr: Projectile, ev: GameEvent[]): boolean {
   pr.x += pr.vx;
   pr.y += pr.vy;
   pr.age++;
-  if (!pr.back) {
-    const ad = Math.sqrt(pr.x * pr.x + pr.y * pr.y);
-    if (pr.age >= pr.life || ad > s.arenaR - pr.r * 0.5 || hitsPillar(pr.x, pr.y, pr.r)) {
-      pr.back = 1;
-      pr.hitMask = 0;
-      ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
-    }
+  if (Math.sqrt(pr.x * pr.x + pr.y * pr.y) > s.arenaR - pr.r) {
+    clockBurst(s, pr, ev);
+    return false;
   }
-  const reach = PLAYER_R + pr.r;
-  for (const foe of enemiesOf(s, owner)) {
-    const bit = 1 << foe.id;
+  if (pr.age < pr.life) return true;
+  const reach = CLOCK.r + PLAYER_R;
+  const foeNear = enemiesOf(s, s.players[pr.owner]).some((foe) => {
     const dx = foe.x - pr.x;
     const dy = foe.y - pr.y;
-    if (pr.hitMask & bit || dx * dx + dy * dy >= reach * reach || untargetable(foe)) continue;
-    pr.hitMask |= bit;
-    if (!hit(owner, foe, pr.dmg, PROJ.winder.energy, 'winder', pr.x, pr.y, ev)) continue;
-    if (!pr.back) {
-      foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, PROJ.winder.slowMul) : PROJ.winder.slowMul;
-      foe.slowT = Math.max(foe.slowT, PROJ.winder.slowT);
-    }
+    return foe.hp > 0 && !untargetable(foe) && dx * dx + dy * dy < reach * reach;
+  });
+  const orbR = CLOCK.r + ORB_R;
+  const orbNear = s.orb.active && pr.x * pr.x + pr.y * pr.y < orbR * orbR;
+  if (foeNear || orbNear || pr.bounces === 0 || hitsPillar(pr.x, pr.y, pr.r)) {
+    clockBurst(s, pr, ev);
+    return false;
+  }
+  pr.bounces--;
+  const sp = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy);
+  pr.life = Math.max(1, Math.round(Math.max(CLOCK.minHop, sp * pr.life * CLOCK.hop) / sp));
+  pr.age = 0;
+  ev.push({ type: 'bounce', owner: pr.owner, x: pr.x, y: pr.y });
+  return true;
+}
+
+function clockBurst(s: GameState, pr: Projectile, ev: GameEvent[]) {
+  const owner = s.players[pr.owner];
+  ev.push({ type: 'clockBurst', owner: pr.owner, x: pr.x, y: pr.y });
+  for (const foe of areaHit(s, owner, pr.x, pr.y, CLOCK.r, pr.dmg, PROJ.clock.energy, 0, 'clock', ev)) {
+    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, PROJ.clock.slowMul) : PROJ.clock.slowMul;
+    foe.slowT = Math.max(foe.slowT, PROJ.clock.slowT);
     resonate(owner, foe, ev);
   }
-  const omin = ORB_R + pr.r;
-  if (s.orb.active && !(pr.hitMask & 16) && pr.x * pr.x + pr.y * pr.y < omin * omin) {
-    pr.hitMask |= 16;
-    damageOrb(s, pr.owner, pr.dmg, pr.x, pr.y, ev);
-  }
-  return true;
 }
 
 function updateZones(s: GameState, ev: GameEvent[]) {

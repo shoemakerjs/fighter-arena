@@ -1,4 +1,4 @@
-import { CONVERGE, COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, WHIRL } from '../sim/constants';
+import { CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -128,9 +128,9 @@ export class Fx {
           } else if (e.ability === 'bloodbolt' || e.ability === 'transfusion') {
             this.burst(e.x, e.y, e.ability === 'transfusion' ? 10 : 4, COLORS.crimson, 150, 2.6, 0.25);
             this.sound(e.ability === 'transfusion' ? 'frost' : 'bolt');
-          } else if (e.ability === 'winder' || e.ability === 'pulse' || e.ability === 'converge') {
-            this.burst(e.x, e.y, e.ability === 'winder' ? 6 : 10, COLORS.chrono, 160, 2.6, 0.28);
-            this.sound(e.ability === 'winder' ? 'whirl' : 'frost');
+          } else if (e.ability === 'clock' || e.ability === 'pulse' || e.ability === 'converge') {
+            this.burst(e.x, e.y, e.ability === 'clock' ? 6 : 10, COLORS.chrono, 160, 2.6, 0.28);
+            this.sound(e.ability === 'clock' ? 'tick' : 'frost');
           } else if (e.ability === 'rain') {
             // Volley loosed into the sky.
             for (let i = 0; i < 12; i++) this.particles.push(spark(e.x, e.y, COLORS.vine, 900));
@@ -397,6 +397,21 @@ export class Fx {
           this.sound('boom');
           break;
 
+        case 'bounce':
+          this.rings.push({ x: e.x, y: e.y, r0: 8, r1: 34, life: 0.25, max: 0.25, color: COLORS.chrono, width: 3 });
+          this.burst(e.x, e.y, 5, COLORS.chrono, 90, 2, 0.25, 5);
+          this.sound('tick');
+          break;
+
+        case 'clockBurst':
+          // Time stalls around it: a ring that hangs a moment before fading.
+          this.rings.push({ x: e.x, y: e.y, r0: 14, r1: CLOCK.r + 14, life: 0.4, max: 0.4, color: COLORS.chrono, width: 6 });
+          this.rings.push({ x: e.x, y: e.y, r0: CLOCK.r, r1: CLOCK.r, life: 0.6, max: 0.6, color: '#ffffff', width: 2 });
+          this.burst(e.x, e.y, 22, COLORS.chrono, 240, 3.2, 0.45, 10);
+          this.shake += 4;
+          this.sound('blast');
+          break;
+
         case 'stick':
           this.rings.push({ x: e.x, y: e.y, r0: 30, r1: 12, life: 0.25, max: 0.25, color: COLORS.chrono, width: 3 });
           this.sound('tick');
@@ -654,6 +669,8 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
       return { x: e.x, y: e.y, player: e.player };
     case 'converge':
     case 'pulse':
+    case 'bounce':
+    case 'clockBurst':
       return { x: e.x, y: e.y, player: e.owner };
     case 'impact':
       return { x: e.x, y: e.y, player: e.owner };

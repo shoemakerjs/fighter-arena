@@ -29,7 +29,7 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'winder' | 'pulse';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse';
 export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge';
 
 export interface Cast {
@@ -145,9 +145,8 @@ export interface Projectile {
   /** Damage and knockback on hit (fixed per kind, except a drawn longshot or a quick arrow). */
   dmg: number;
   kb: number;
-  /** Timewinder: 1 once it turns back; `hitMask` has a bit per enemy id hit on the current way (16 = the orb). */
-  back: number;
-  hitMask: number;
+  /** Clockwork Bomb: bounces left; `life` is the current hop's length and `age` restarts every hop. */
+  bounces: number;
 }
 
 /** Something on the floor: arrow rain, a sonic sensor, a Parallel Convergence field or a Pulse Bomb. */
@@ -252,6 +251,9 @@ export type GameEvent =
   /** A Pulse Bomb sticking to `player`, and bursting. */
   | { type: 'stick'; player: number; x: number; y: number }
   | { type: 'pulse'; owner: number; x: number; y: number }
+  /** A Clockwork Bomb bouncing on, and bursting. */
+  | { type: 'bounce'; owner: number; x: number; y: number }
+  | { type: 'clockBurst'; owner: number; x: number; y: number }
   /** Romulus scatters into bats (Night Swarm). */
   | { type: 'swarm'; player: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */
