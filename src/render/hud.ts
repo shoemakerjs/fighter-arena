@@ -18,7 +18,7 @@ export class Hud {
   private h = 0;
   private dpr = 1;
   /** Lagging HP per player for the "chip damage" bar. */
-  private chip = [0, 0];
+  private chip: number[] = [];
   private time = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -41,9 +41,10 @@ export class Hud {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, this.w, this.h);
 
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < cur.players.length; i++) {
       const hp = cur.players[i].hp;
-      this.chip[i] = hp > this.chip[i] ? hp : this.chip[i] + (hp - this.chip[i]) * Math.min(1, dt * 3);
+      const chip = this.chip[i] ?? hp;
+      this.chip[i] = hp > chip ? hp : chip + (hp - chip) * Math.min(1, dt * 3);
     }
 
     if (fx.flash > 0) {
@@ -76,8 +77,9 @@ export class Hud {
    * `x0`/`w` span the bar, `fromRight` for bars that drain towards the right.
    */
   private drawExecuteMark(s: GameState, p: Player, x0: number, y: number, w: number, h: number, fromRight: boolean) {
-    const foe = s.players[1 - p.id];
-    if (foe.champ !== CHAMP.ASSASSIN || foe.dummy) return;
+    // Any Shade on the other team.
+    const foe = s.players.find((q) => q.team !== p.team && q.champ === CHAMP.ASSASSIN && !q.dummy && !q.out);
+    if (!foe) return;
     const { ctx } = this;
     const nx = fromRight ? x0 + w - w * EXECUTE.threshold : x0 + w * EXECUTE.threshold;
     const below = p.hp > 0 && p.hp <= maxHp(p) * EXECUTE.threshold;
@@ -124,6 +126,14 @@ export class Hud {
     ctx.fillRect(x, y + 7.5, (w * p.energy) / MAX_ENERGY, 2);
     ctx.fillStyle = 'rgba(5,7,12,0.9)';
     for (let i = 1; i < 4; i++) ctx.fillRect(x + (w * i) / 4 - 0.5, y + 7, 1, 3);
+    // 2v2: say who's who above the bar.
+    if (s.players.length > 2) {
+      ctx.font = `600 10px ${FONT}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = color;
+      ctx.fillText(PLAYER_NAMES[p.id], at.x, y - (p.cast ? 30 : 4));
+    }
 
     if (p.cast) {
       const def = abilityOf(p, p.cast.ability);
@@ -212,40 +222,53 @@ export class Hud {
     ctx.fillText(`ROUND ${s.round}`, cx, y + 30);
   }
 
-  /** Names, score pips (not in training), HP bars. */
+  /**
+   * Names, score pips (not in training) and HP bars: team 0 on the left, team 1 on
+   * the right; in 2v2 the second member of each team gets a smaller row below.
+   */
   private drawNames(s: GameState, cx: number, y: number) {
     const { ctx } = this;
-    for (let i = 0; i < 2; i++) {
-      const dir = i === 0 ? -1 : 1;
-      const color = COLORS.players[i];
-      const p = s.players[i];
+    for (const team of [0, 1]) {
+      const dir = team === 0 ? -1 : 1;
+      const left = team === 0;
+      const color = COLORS.players[team];
       const nameX = cx + dir * 70;
-      ctx.textAlign = i === 0 ? 'right' : 'left';
-      ctx.font = `22px ${DISPLAY}`;
-      ctx.fillStyle = color;
-      const name = p.dummy ? 'TRAINING DUMMY' : `${PLAYER_NAMES[i]} · ${ROSTER[p.champ].hero}`;
-      ctx.fillText(name, nameX, y - 6);
+      s.players
+        .filter((p) => p.team === team)
+        .forEach((p, k) => {
+          const main = k === 0;
+          const yy = y + k * 34;
+          ctx.globalAlpha = p.out ? 0.45 : 1;
+          ctx.textAlign = left ? 'right' : 'left';
+          ctx.font = `${main ? 22 : 17}px ${DISPLAY}`;
+          ctx.fillStyle = color;
+          const name = p.dummy ? 'TRAINING DUMMY' : `${PLAYER_NAMES[p.id]} · ${ROSTER[p.champ].hero}`;
+          ctx.fillText(name, nameX, yy - 6);
 
-      const barW = Math.min(260, this.w / 2 - 110);
-      const bx = i === 0 ? nameX - barW : nameX;
-      ctx.fillStyle = 'rgba(12, 15, 22, 0.85)';
-      roundRect(ctx, bx, y + 6, barW, 10, 3);
-      ctx.fill();
-      const hpW = (barW * p.hp) / maxHp(p);
-      const chipW = (barW * this.chip[i]) / maxHp(p);
-      ctx.fillStyle = 'rgba(255,255,255,0.6)';
-      ctx.fillRect(i === 0 ? bx + barW - chipW : bx, y + 7, chipW, 8);
-      ctx.fillStyle = color;
-      ctx.fillRect(i === 0 ? bx + barW - hpW : bx, y + 7, hpW, 8);
-      this.drawExecuteMark(s, p, bx, y + 7, barW, 8, i === 0);
+          const barW = Math.min(main ? 260 : 200, this.w / 2 - 110);
+          const barH = main ? 8 : 6;
+          const bx = left ? nameX - barW : nameX;
+          ctx.fillStyle = 'rgba(12, 15, 22, 0.85)';
+          roundRect(ctx, bx, yy + 6, barW, barH + 2, 3);
+          ctx.fill();
+          const hpW = (barW * p.hp) / maxHp(p);
+          const chipW = (barW * (this.chip[p.id] ?? p.hp)) / maxHp(p);
+          ctx.fillStyle = 'rgba(255,255,255,0.6)';
+          ctx.fillRect(left ? bx + barW - chipW : bx, yy + 7, chipW, barH);
+          ctx.fillStyle = color;
+          ctx.fillRect(left ? bx + barW - hpW : bx, yy + 7, hpW, barH);
+          this.drawExecuteMark(s, p, bx, yy + 7, barW, barH, left);
+          ctx.globalAlpha = 1;
 
-      const nameW = ctx.measureText(name).width;
-      for (let r = 0; r < (s.training ? 0 : ROUNDS_TO_WIN); r++) {
-        ctx.beginPath();
-        ctx.arc(nameX + dir * (nameW + 14 + r * 16), y - 7, 5, 0, TAU);
-        ctx.fillStyle = r < s.score[i] ? color : 'rgba(255,255,255,0.1)';
-        ctx.fill();
-      }
+          if (!main || s.training) return;
+          const nameW = ctx.measureText(name).width;
+          for (let r = 0; r < ROUNDS_TO_WIN; r++) {
+            ctx.beginPath();
+            ctx.arc(nameX + dir * (nameW + 14 + r * 16), yy - 7, 5, 0, TAU);
+            ctx.fillStyle = r < s.score[team] ? color : 'rgba(255,255,255,0.1)';
+            ctx.fill();
+          }
+        });
     }
   }
 

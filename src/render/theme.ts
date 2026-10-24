@@ -9,7 +9,8 @@ export const COLORS = {
   rim: '#323c52',
   pillarTop: '#3d465c',
   pillarSide: '#232938',
-  players: ['#3be8c8', '#ff4f6d'],
+  /** Indexed by player id: teams alternate (2v2: 0 and 2 are teal, 1 and 3 red). */
+  players: ['#3be8c8', '#ff4f6d', '#3be8c8', '#ff4f6d'],
   blast: '#ffb547',
   frost: '#8fd8ff',
   meteor: '#ff7a33',

@@ -28,20 +28,33 @@ export function pointVisible(viewer: Player, x: number, y: number): boolean {
   return lineClear(viewer.x, viewer.y, x, y);
 }
 
+/** Can anyone on `viewerId`'s team see the floor point (x, y)? Teams share vision. */
+export function teamSees(s: GameState, viewerId: number, x: number, y: number): boolean {
+  const team = s.players[viewerId].team;
+  for (const p of s.players) {
+    // The knocked out stop scouting (the viewer still sees around itself).
+    if (p.team !== team || (p.out && p.id !== viewerId)) continue;
+    if (pointVisible(p, x, y)) return true;
+  }
+  return false;
+}
+
 /** Can player `viewerId` see player `targetId` right now? */
 export function canSee(s: GameState, viewerId: number, targetId: number): boolean {
   if (viewerId === targetId || s.training) return true;
   const target = s.players[targetId];
+  if (target.team === s.players[viewerId].team) return true;
   if (target.stealthT > 0) return false;
   // Sonic arrows see through the fog (not through stealth).
   if (target.revealT > 0 || sensed(s, viewerId, target.x, target.y)) return true;
-  return pointVisible(s.players[viewerId], target.x, target.y);
+  return teamSees(s, viewerId, target.x, target.y);
 }
 
-/** Inside one of `viewerId`'s sonic sensors? */
+/** Inside a sonic sensor of `viewerId`'s team? */
 export function sensed(s: GameState, viewerId: number, x: number, y: number): boolean {
+  const team = s.players[viewerId].team;
   for (const z of s.zones) {
-    if (z.kind !== 'sonic' || z.owner !== viewerId) continue;
+    if (z.kind !== 'sonic' || s.players[z.owner].team !== team) continue;
     const dx = x - z.x;
     const dy = y - z.y;
     if (dx * dx + dy * dy < SONIC.r * SONIC.r) return true;

@@ -40,6 +40,10 @@ export interface Cast {
 
 export interface Player {
   id: number;
+  /** 0 or 1 (= id % 2): players 0 and 2 against 1 and 3. */
+  team: number;
+  /** Knocked out this round (2v2: the ally plays on). */
+  out: boolean;
   /** Training dummy: stands still, can't die (see DUMMY). */
   dummy: boolean;
   /** Training only: ticks since this player last took damage. */
@@ -79,6 +83,8 @@ export interface Player {
   /** Just attacked out of stealth: the next hit within these ticks is an ambush (SMOKE.ambush). */
   ambushT: number;
   poisonT: number;
+  /** Who applied the poison (credited with its ticks). */
+  poisonBy: number;
   /** Rooted by a snare: can't walk or use mobility. */
   rootT: number;
   /** Hit by a sonic arrow: visible to the enemy through the fog. */
@@ -97,6 +103,8 @@ export interface Player {
   soulX: number;
   soulY: number;
   soulDmg: number;
+  /** The enemy last hit during Soul Unbound; the echo lands on them. */
+  soulTarget: number;
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -152,14 +160,15 @@ export interface GameState {
   frame: number;
   /** Training: player 1 is a dummy, nobody dies, no fog, orb, sudden death or countdown. */
   training: boolean;
-  /** Champion picked for each player slot. */
+  /** Champion picked for each player slot: 2 players (1v1) or 4 (2v2, teams by id % 2). */
   champs: number[];
   phase: Phase;
   phaseT: number;
   round: number;
   roundFrame: number;
+  /** Rounds won per team. */
   score: number[];
-  /** Winner of the last finished round, -1 for a draw. */
+  /** Winning team of the last finished round, -1 for a draw. */
   lastRoundWinner: number;
   arenaR: number;
   players: Player[];

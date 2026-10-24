@@ -849,6 +849,24 @@ button {
   margin-top: -36px;
 }
 
+/* 2v2 has three champion pickers: tighten the card so it still fits the screen. */
+#bot-setup.duo-format .setup-wrap {
+  gap: 36px;
+}
+
+#bot-setup.duo-format .setup-card {
+  padding: 36px 40px;
+  gap: 16px;
+}
+
+#bot-setup.duo-format #setup-back {
+  margin-top: -24px;
+}
+
+#bot-setup {
+  overflow-y: auto;
+}
+
 #settings {
   display: grid;
   place-items: center;

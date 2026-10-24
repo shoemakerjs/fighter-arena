@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
-import { canSee, pointVisible } from '../sim/vision';
+import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
@@ -426,8 +426,14 @@ export class World3D implements WorldView {
     this.time += dt;
     for (const l of this.lights) l.intensity = 0;
 
-    // No fog in training (or behind the menus).
-    this.fog.update(opts.localId === null || cur.training ? null : lerpPlayer(prev.players[opts.localId], cur.players[opts.localId], alpha));
+    // No fog in training (or behind the menus); a team shares its vision.
+    const viewers =
+      opts.localId === null || cur.training
+        ? null
+        : cur.players
+            .filter((p) => p.team === cur.players[opts.localId!].team && (!p.out || p.id === opts.localId))
+            .map((p) => lerpPlayer(prev.players[p.id], p, alpha));
+    this.fog.update(viewers);
     this.fogTex.needsUpdate = true;
     this.updateArena(cur);
     this.updateOrb(cur);
@@ -494,7 +500,14 @@ export class World3D implements WorldView {
   // ---------------------------------------------------------------- champions
 
   private ensureRigs(s: GameState) {
-    for (let i = 0; i < 2; i++) {
+    // Drop rigs of players this match doesn't have (2v2 → 1v1).
+    while (this.champions.length > s.players.length) {
+      const old = this.champions.pop()!;
+      this.scene.remove(old.root);
+      this.rigChamps.pop();
+      this.anim.pop();
+    }
+    for (let i = 0; i < s.players.length; i++) {
       // The training dummy gets its own rig (key -2), whatever champion slot it holds.
       const champ = s.players[i].dummy ? -2 : s.players[i].champ;
       if (this.rigChamps[i] === champ) continue;
@@ -516,7 +529,7 @@ export class World3D implements WorldView {
 
   private updateChampions(prev: GameState, cur: GameState, alpha: number, dt: number, localId: number | null) {
     this.ensureRigs(cur);
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < cur.players.length; i++) {
       const rig = this.champions[i];
       const a = this.anim[i];
       const pc = cur.players[i];
@@ -783,7 +796,7 @@ export class World3D implements WorldView {
       const y = old ? old.y + (pr.y - old.y) * alpha : pr.y;
       v.group.position.set(x, PROJ_H, y);
       // Enemy projectiles only show up once they fly into your vision.
-      const seen = localId === null || cur.training || pr.owner === localId || pointVisible(cur.players[localId], x, y);
+      const seen = localId === null || cur.training || cur.players[pr.owner].team === cur.players[localId].team || teamSees(cur, localId, x, y);
       v.group.visible = seen;
       if (v.chain) v.chain.visible = seen;
       if (ARROWS.includes(pr.kind) || pr.kind === 'crescent') {
@@ -920,7 +933,7 @@ export class World3D implements WorldView {
         this.zoneViews.set(z.id, v);
       }
       // Someone else's sensor shows only when you can see where it lies.
-      const seen = localId === null || cur.training || z.owner === localId || z.kind === 'rain' || pointVisible(cur.players[localId], z.x, z.y);
+      const seen = localId === null || cur.training || cur.players[z.owner].team === cur.players[localId].team || z.kind === 'rain' || teamSees(cur, localId, z.x, z.y);
       v.fill.visible = v.ring.visible = seen;
       const fillMat = v.fill.material as THREE.MeshBasicMaterial;
       const ringMat = v.ring.material as THREE.MeshBasicMaterial;
@@ -954,7 +967,8 @@ export class World3D implements WorldView {
   // ---------------------------------------------------------------- soul unbound
 
   private updateSouls(cur: GameState, localId: number | null) {
-    for (let i = 0; i < 2; i++) {
+    for (const mark of this.soulMarks.slice(cur.players.length)) mark.visible = false;
+    for (let i = 0; i < cur.players.length; i++) {
       const p = cur.players[i];
       let mark = this.soulMarks[i];
       if (!mark) {
@@ -970,7 +984,7 @@ export class World3D implements WorldView {
         this.scene.add(mark);
         this.soulMarks[i] = mark;
       }
-      const seen = localId === null || cur.training || i === localId || pointVisible(cur.players[localId], p.soulX, p.soulY);
+      const seen = localId === null || cur.training || p.team === cur.players[localId].team || teamSees(cur, localId, p.soulX, p.soulY);
       mark.visible = p.soulT > 0 && seen;
       if (mark.visible) {
         mark.position.set(p.soulX, 0, p.soulY);

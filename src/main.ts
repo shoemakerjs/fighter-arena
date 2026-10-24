@@ -82,9 +82,8 @@ function newMatch(ctrl: (Controller | null)[], champs: number[], training = fals
   clearTimeout(endTimer);
 }
 
-function setNames(a: string, b: string) {
-  PLAYER_NAMES[0] = a;
-  PLAYER_NAMES[1] = b;
+function setNames(...names: string[]) {
+  names.forEach((n, i) => (PLAYER_NAMES[i] = n));
 }
 
 /** Bots fight behind the menus. */
@@ -196,7 +195,14 @@ function startMatch() {
   sfx.unlock();
   select.close();
   botSetup.close();
-  newMatch([null, new Bot(1, botSetup.difficulty, seed++)], [myChamp, botSetup.pickChampion()]);
+  const d = botSetup.difficulty;
+  if (botSetup.format === '2v2') {
+    // You and a bot ally (ids 0, 2) against two bots (1, 3).
+    newMatch([null, new Bot(1, d, seed++), new Bot(2, d, seed++), new Bot(3, d, seed++)], [myChamp, botSetup.pickChampion(), botSetup.pickAlly(), botSetup.pickSecondEnemy()]);
+    setNames('YOU', 'BOT 1', 'ALLY', 'BOT 2');
+  } else {
+    newMatch([null, new Bot(1, d, seed++)], [myChamp, botSetup.pickChampion()]);
+  }
   fx.silent = false;
   input.clear();
   setMode('play');
@@ -247,11 +253,13 @@ function setMode(m: Mode) {
   (document.activeElement as HTMLElement | null)?.blur();
 }
 
+/** `winner` is a team; your team's score comes first. */
 function showEnd(winner: number) {
+  const team = state.players[localId].team;
   const title = $('end-title');
-  title.textContent = winner === localId ? 'Victory' : 'Defeat';
-  title.className = winner === localId ? 'win' : 'lose';
-  $('end-score').textContent = localId === 0 ? `${state.score[0]} : ${state.score[1]}` : `${state.score[1]} : ${state.score[0]}`;
+  title.textContent = winner === team ? 'Victory' : 'Defeat';
+  title.className = winner === team ? 'win' : 'lose';
+  $('end-score').textContent = `${state.score[team]} : ${state.score[1 - team]}`;
   $('rematch').textContent = session ? 'Back to lobby' : 'Rematch';
   setMode('end');
 }

@@ -46,7 +46,7 @@
             <span class="mode-title">Play vs Bot</span>
             <span class="mode-desc">Test champions and train your abilities with AI</span>
           </span>
-          <span class="tag">1v1</span>
+          <span class="tag">1v1 · 2v2</span>
         </button>
         <button class="mode-card rough" id="play-training">
           <img class="mode-art" src="./art/mode-training.webp" alt="" />
@@ -121,8 +121,23 @@
             <p class="body-text">Setup your bot settings and start a match</p>
           </div>
           <div class="field">
-            <span class="field-label">Bot champion</span>
+            <span class="field-label">Format</span>
+            <div class="segmented" id="bot-format">
+              <button type="button" data-format="1v1" class="active">1v1</button>
+              <button type="button" data-format="2v2">2v2</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label" id="bot-champ-label">Bot champion</span>
             <div id="bot-champ"></div>
+          </div>
+          <div class="field duo hidden">
+            <span class="field-label">Second enemy</span>
+            <div id="bot-champ-2"></div>
+          </div>
+          <div class="field duo hidden">
+            <span class="field-label">Your ally</span>
+            <div id="bot-ally"></div>
           </div>
           <div class="field">
             <span class="field-label">Bot difficulty</span>

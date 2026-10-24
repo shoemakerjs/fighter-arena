@@ -5,6 +5,7 @@ import type { Player } from '../sim/types';
 export const FOG_EXTENT = ARENA_R + 48;
 const SIZE = 512;
 const FOG = 'rgba(4, 6, 11, 0.74)';
+const MASK = '#000';
 
 /**
  * Top-down fog texture: dark where the viewer can't see, clear inside the vision
@@ -20,17 +21,43 @@ export class FogMask {
     this.ctx = this.canvas.getContext('2d')!;
   }
 
-  /** Redraw for this viewer; null clears the fog (attract mode). */
-  update(viewer: Player | null) {
+  private scratch = document.createElement('canvas');
+
+  /** Redraw for these viewers (a team shares its vision); empty or null clears the fog (attract mode). */
+  update(viewers: Player[] | Player | null) {
+    const list = viewers === null ? [] : Array.isArray(viewers) ? viewers : [viewers];
     const g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, SIZE, SIZE);
-    if (!viewer) return;
+    if (list.length === 0) return;
+    // Opaque masks first: fog stays only where every viewer is fogged.
+    this.draw(g, list[0]);
+    if (list.length > 1) {
+      if (this.scratch.width !== SIZE) this.scratch.width = this.scratch.height = SIZE;
+      const sg = this.scratch.getContext('2d')!;
+      for (const v of list.slice(1)) {
+        sg.setTransform(1, 0, 0, 1, 0, 0);
+        sg.clearRect(0, 0, SIZE, SIZE);
+        this.draw(sg, v);
+        g.setTransform(1, 0, 0, 1, 0, 0);
+        g.globalCompositeOperation = 'destination-in';
+        g.drawImage(this.scratch, 0, 0);
+      }
+    }
+    // Then tint the remaining coverage with the fog colour.
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-in';
+    g.fillStyle = FOG;
+    g.fillRect(0, 0, SIZE, SIZE);
+    g.globalCompositeOperation = 'source-over';
+  }
 
+  /** One viewer's fog as an opaque mask: everywhere except its vision circle, plus pillar shadows. */
+  private draw(g: CanvasRenderingContext2D, viewer: Player) {
     const k = SIZE / (2 * FOG_EXTENT);
     g.setTransform(k, 0, 0, k, SIZE / 2, SIZE / 2);
     g.globalCompositeOperation = 'source-over';
-    g.fillStyle = FOG;
+    g.fillStyle = MASK;
     g.fillRect(-FOG_EXTENT, -FOG_EXTENT, FOG_EXTENT * 2, FOG_EXTENT * 2);
 
     // Cut out the vision circle with a soft rim.
@@ -45,7 +72,7 @@ export class FogMask {
 
     // Put the fog back in each pillar's shadow.
     g.globalCompositeOperation = 'source-over';
-    g.fillStyle = FOG;
+    g.fillStyle = MASK;
     for (const pl of PILLARS) {
       const dx = pl.x - viewer.x;
       const dy = pl.y - viewer.y;

@@ -1,6 +1,6 @@
 import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, TEMPEST, WHIRL, type AbilityId } from '../sim/constants';
-import { BTN, type GameState, type Input, type ProjKind } from '../sim/types';
-import { canSee, pointVisible } from '../sim/vision';
+import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
+import { canSee, teamSees } from '../sim/vision';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -57,6 +57,8 @@ export class Bot {
   private seenY = 0;
   /** How long to draw the current longshot (ticks). */
   private drawFor = 0;
+  /** The enemy it's fighting (2v2: picked among the two). */
+  private targetId = -1;
   /** Per-projectile decision: will the bot react to it at all? */
   private judged = new Map<number, boolean>();
 
@@ -71,8 +73,9 @@ export class Bot {
 
   think(s: GameState): Input {
     const me = s.players[this.id];
-    const foe = s.players[1 - this.id];
     const r = this.rng;
+    if (me.out) return { mx: 0, my: 0, ax: Math.round(me.x), ay: Math.round(me.y), buttons: 0 };
+    const foe = this.pickTarget(s, me);
 
     if (s.phase !== 'fight') {
       this.lastTx = this.seenX = foe.x;
@@ -162,7 +165,7 @@ export class Bot {
     let escape = false;
 
     for (const m of s.meteors) {
-      if (m.owner === this.id) continue;
+      if (s.players[m.owner].team === me.team) continue;
       const md = Math.hypot(me.x - m.x, me.y - m.y);
       if (md < METEOR.r + PLAYER_R + 30 && this.decide(m.id)) {
         const k = md < 1 ? 1 : md;
@@ -173,7 +176,7 @@ export class Bot {
     }
 
     for (const z of s.zones) {
-      if (z.kind !== 'rain' || z.owner === this.id) continue;
+      if (z.kind !== 'rain' || s.players[z.owner].team === me.team) continue;
       const zd = Math.hypot(me.x - z.x, me.y - z.y);
       if (zd < RAIN.r + PLAYER_R + 25 && this.decide(z.id)) {
         const k = zd < 1 ? 1 : zd;
@@ -188,7 +191,7 @@ export class Bot {
     let threatX = 0;
     let threatY = 0;
     for (const pr of s.projectiles) {
-      if (pr.owner === this.id || pr.age < this.p.reaction || !pointVisible(me, pr.x, pr.y)) continue;
+      if (s.players[pr.owner].team === me.team || pr.age < this.p.reaction || !teamSees(s, this.id, pr.x, pr.y)) continue;
       const sp = Math.hypot(pr.vx, pr.vy);
       const ux = pr.vx / sp;
       const uy = pr.vy / sp;
@@ -375,6 +378,29 @@ export class Bot {
       ay: Math.round(Math.max(-lim, Math.min(lim, ay))),
       buttons,
     };
+  }
+
+  /**
+   * The enemy to fight: the nearest one it can see (else the nearest), sticking with
+   * the current one unless another is clearly closer. In 1v1 it's simply the opponent.
+   */
+  private pickTarget(s: GameState, me: Player): Player {
+    const foes = s.players.filter((p) => p.team !== me.team && !p.out);
+    if (foes.length === 0) return s.players.find((p) => p.team !== me.team)!;
+    const dist = (p: Player) => Math.hypot(p.x - me.x, p.y - me.y);
+    const visible = foes.filter((p) => canSee(s, this.id, p.id));
+    const pool = visible.length ? visible : foes;
+    let best = pool.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+    const cur = pool.find((p) => p.id === this.targetId);
+    if (cur && dist(cur) < dist(best) / 0.7) best = cur;
+    if (best.id !== this.targetId) {
+      // New target: forget the old one's last position and speed.
+      this.targetId = best.id;
+      this.lastTx = this.seenX = best.x;
+      this.lastTy = this.seenY = best.y;
+      this.tvx = this.tvy = 0;
+    }
+    return best;
   }
 
   private decide(id: number): boolean {

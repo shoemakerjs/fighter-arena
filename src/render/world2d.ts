@@ -1,6 +1,6 @@
 import { ARENA_R, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
 import { abilityOf } from '../sim/step';
-import { canSee, pointVisible } from '../sim/vision';
+import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Player, Projectile, Vec } from '../sim/types';
 import type { Fx } from './fx';
@@ -79,7 +79,8 @@ export class World2D implements WorldView {
     this.drawProjectiles(prev, cur, alpha, opts.localId);
     this.drawFx(fx);
 
-    this.fog.update(opts.localId === null || cur.training ? null : players[opts.localId]);
+    const me = opts.localId === null ? null : cur.players[opts.localId];
+    this.fog.update(!me || cur.training ? null : players.filter((p) => p.team === me.team && (!p.out || p.id === me.id)));
     ctx.drawImage(this.fog.canvas, -FOG_EXTENT, -FOG_EXTENT, FOG_EXTENT * 2, FOG_EXTENT * 2);
 
     ctx.restore();
@@ -499,7 +500,7 @@ export class World2D implements WorldView {
       const old = prevById.get(pr.id);
       const x = old ? old.x + (pr.x - old.x) * alpha : pr.x;
       const y = old ? old.y + (pr.y - old.y) * alpha : pr.y;
-      if (localId !== null && !cur.training && pr.owner !== localId && !pointVisible(cur.players[localId], x, y)) continue;
+      if (localId !== null && !cur.training && cur.players[pr.owner].team !== cur.players[localId].team && !teamSees(cur, localId, x, y)) continue;
       const color = abilityColor(pr.kind, pr.owner);
 
       for (let i = 5; i >= 1; i--) {

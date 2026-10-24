@@ -1,6 +1,6 @@
 import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
-import { pointVisible } from '../sim/vision';
+import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
 import { abilityColor, COLORS } from './theme';
 
@@ -48,7 +48,8 @@ export interface Banner {
   max: number;
 }
 
-export const PLAYER_NAMES = ['YOU', 'BOT'];
+/** Shown name per player id (set per match). */
+export const PLAYER_NAMES = ['YOU', 'BOT', 'ALLY', 'BOT 2'];
 
 /** Cosmetic effects driven by simulation events. Lives outside the deterministic sim. */
 export class Fx {
@@ -81,12 +82,13 @@ export class Fx {
       this.sound('tick');
     }
 
-    // Nothing is hidden in training.
+    // Nothing is hidden in training (or behind the menus).
     const viewer = localId === null || s.training ? null : s.players[localId];
+    const hidden = (player: number, x: number, y: number) => viewer !== null && s.players[player].team !== viewer.team && !teamSees(s, viewer.id, x, y);
     for (const e of events) {
       // Effects of enemy actions inside the fog would give their position away.
       const at = cosmeticPos(e, s);
-      if (viewer && at && at.player !== localId && !pointVisible(viewer, at.x, at.y)) continue;
+      if (at && hidden(at.player, at.x, at.y)) continue;
       switch (e.type) {
         case 'cast':
           if (e.ability === 'meteor' || e.ability === 'rift' || e.ability === 'rain' || e.ability === 'fate') this.sound('meteorCast');
@@ -287,7 +289,7 @@ export class Fx {
 
         case 'sensor':
           // Only the archer learns where their sensor landed.
-          if (localId !== null && e.owner !== localId && viewer && !pointVisible(viewer, e.x, e.y)) break;
+          if (hidden(e.owner, e.x, e.y)) break;
           this.rings.push({ x: e.x, y: e.y, r0: 10, r1: SONIC.r, life: 0.6, max: 0.6, color: COLORS.sonic, width: 3 });
           break;
 
@@ -434,12 +436,15 @@ export class Fx {
         case 'roundEnd': {
           let text = 'DRAW';
           let color = COLORS.text;
+          // `winner` is a team.
           if (e.winner >= 0) {
             color = COLORS.players[e.winner];
-            if (localId === null) text = `ROUND: ${PLAYER_NAMES[e.winner]}`;
-            else text = e.winner === localId ? 'ROUND WON' : 'ROUND LOST';
+            if (localId === null) text = s.players.length > 2 ? `ROUND: TEAM ${e.winner + 1}` : `ROUND: ${PLAYER_NAMES[e.winner]}`;
+            else text = e.winner === s.players[localId].team ? 'ROUND WON' : 'ROUND LOST';
           }
-          this.banner = { text, sub: `${s.score[0]} : ${s.score[1]}`, color, life: 2.2, max: 2.2 };
+          // Your team's score first.
+          const mine = localId === null ? 0 : s.players[localId].team;
+          this.banner = { text, sub: `${s.score[mine]} : ${s.score[1 - mine]}`, color, life: 2.2, max: 2.2 };
           break;
         }
 

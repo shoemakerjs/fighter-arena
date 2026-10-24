@@ -8,6 +8,8 @@ export const ARENA_R = 528;
 export const ARENA_MIN_R = 242;
 export const SUDDEN_DEATH_AT = 60 * TICK_RATE;
 export const ARENA_SHRINK = 0.3;
+/** 2v2: partners spawn this far either side of their team's spawn. */
+export const TEAM_SPREAD = 70;
 export const SPAWNS = [
   { x: -352, y: 0 },
   { x: 352, y: 0 },

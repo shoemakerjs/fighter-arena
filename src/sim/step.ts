@@ -55,6 +55,7 @@ import {
   SONIC,
   SPAWNS,
   SUDDEN_DEATH_AT,
+  TEAM_SPREAD,
   TEMPEST,
   VAULT,
   WHIRL,
@@ -63,7 +64,10 @@ import {
 } from './constants';
 import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
 
-/** `training`: player 1 is a training dummy standing in the middle (champs[1] is ignored). */
+/**
+ * `champs` has one entry per player: two for 1v1, four for 2v2 (teams by id % 2).
+ * `training`: player 1 is a training dummy standing in the middle (champs[1] is ignored).
+ */
 export function createMatch(champs: number[] = [0, 0], training = false): GameState {
   return {
     frame: 0,
@@ -76,7 +80,7 @@ export function createMatch(champs: number[] = [0, 0], training = false): GameSt
     score: [0, 0],
     lastRoundWinner: -1,
     arenaR: ARENA_R,
-    players: [createPlayer(0, champs[0]), createPlayer(1, champs[1], training)],
+    players: champs.map((c, i) => createPlayer(i, c, champs.length, training && i === 1)),
     projectiles: [],
     meteors: [],
     zones: [],
@@ -98,10 +102,19 @@ export function maxHp(p: Player): number {
   return p.dummy ? DUMMY.hp : CHAMPIONS[p.champ].hp;
 }
 
-function createPlayer(id: number, champ: number, dummy = false): Player {
-  const spawn = dummy ? { x: 0, y: 0 } : SPAWNS[id];
+/** Team spawn, with 2v2 partners side by side. */
+function spawnOf(id: number, count: number): { x: number; y: number } {
+  const base = SPAWNS[id % 2];
+  if (count <= 2) return base;
+  return { x: base.x, y: base.y + (id < 2 ? -TEAM_SPREAD : TEAM_SPREAD) };
+}
+
+function createPlayer(id: number, champ: number, count: number, dummy = false): Player {
+  const spawn = dummy ? { x: 0, y: 0 } : spawnOf(id, count);
   return {
     id,
+    team: id % 2,
+    out: false,
     dummy,
     restT: 0,
     champ,
@@ -109,7 +122,7 @@ function createPlayer(id: number, champ: number, dummy = false): Player {
     y: spawn.y,
     vx: 0,
     vy: 0,
-    fx: id === 0 ? 1 : -1,
+    fx: id % 2 === 0 ? 1 : -1,
     fy: 0,
     hp: dummy ? DUMMY.hp : CHAMPIONS[champ].hp,
     energy: 0,
@@ -128,6 +141,7 @@ function createPlayer(id: number, champ: number, dummy = false): Player {
     stealthT: 0,
     ambushT: 0,
     poisonT: 0,
+    poisonBy: 0,
     rootT: 0,
     revealT: 0,
     quickT: 0,
@@ -139,6 +153,7 @@ function createPlayer(id: number, champ: number, dummy = false): Player {
     soulX: 0,
     soulY: 0,
     soulDmg: 0,
+    soulTarget: -1,
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -153,7 +168,7 @@ function resetRound(s: GameState) {
   s.phase = 'countdown';
   s.phaseT = COUNTDOWN_TICKS;
   s.arenaR = ARENA_R;
-  s.players = [createPlayer(0, s.champs[0]), createPlayer(1, s.champs[1])];
+  s.players = s.champs.map((c, i) => createPlayer(i, c, s.champs.length));
   s.projectiles = [];
   s.meteors = [];
   s.zones = [];
@@ -166,7 +181,7 @@ export function step(s: GameState, inputs: Input[]): GameEvent[] {
 
   switch (s.phase) {
     case 'countdown':
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < s.players.length; i++) {
         const p = s.players[i];
         aimAt(p, inputs[i]);
         p.prevButtons = inputs[i].buttons;
@@ -183,13 +198,7 @@ export function step(s: GameState, inputs: Input[]): GameEvent[] {
 
     case 'roundEnd':
       // Let the knocked-out player slide; nothing else moves.
-      for (const p of s.players) {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vx *= KB_DECAY;
-        p.vy *= KB_DECAY;
-        collideWorld(s, p);
-      }
+      for (const p of s.players) slide(s, p);
       if (--s.phaseT <= 0) {
         if (Math.max(s.score[0], s.score[1]) >= ROUNDS_TO_WIN) {
           s.phase = 'matchEnd';
@@ -222,7 +231,12 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
     ev.push({ type: 'orbSpawn' });
   }
 
-  for (let i = 0; i < 2; i++) updatePlayer(s, s.players[i], inputs[i], ev);
+  for (let i = 0; i < s.players.length; i++) {
+    const p = s.players[i];
+    // Knocked out in 2v2: lies there while the ally fights on.
+    if (p.out) slide(s, p);
+    else updatePlayer(s, p, inputs[i], ev);
+  }
   separatePlayers(s);
   updateProjectiles(s, ev);
   updateMeteors(s, ev);
@@ -230,10 +244,17 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
 
   if (s.training) for (const p of s.players) restTraining(p);
 
-  const dead = s.players.filter((p) => p.hp <= 0);
-  if (dead.length > 0) {
-    for (const p of dead) ev.push({ type: 'ko', player: p.id, x: p.x, y: p.y });
-    const winner = dead.length === 2 ? -1 : 1 - dead[0].id;
+  for (const p of s.players) {
+    if (p.hp > 0 || p.out) continue;
+    p.out = true;
+    p.cast = null;
+    p.dashT = 0;
+    ev.push({ type: 'ko', player: p.id, x: p.x, y: p.y });
+  }
+  // The round ends when a whole team is down (both at once is a draw).
+  const standing = [0, 1].map((team) => s.players.some((p) => p.team === team && !p.out));
+  if (!standing[0] || !standing[1]) {
+    const winner = standing[0] ? 0 : standing[1] ? 1 : -1;
     if (winner >= 0) s.score[winner]++;
     s.lastRoundWinner = winner;
     s.projectiles = [];
@@ -247,6 +268,20 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
 
 // ---------------------------------------------------------------------------
 // Players
+
+/** Everyone on the other team still in the round. */
+export function enemiesOf(s: GameState, p: Player): Player[] {
+  return s.players.filter((q) => q.team !== p.team && !q.out);
+}
+
+/** Knockback drift only (between rounds, or while knocked out). */
+function slide(s: GameState, p: Player) {
+  p.x += p.vx;
+  p.y += p.vy;
+  p.vx *= KB_DECAY;
+  p.vy *= KB_DECAY;
+  collideWorld(s, p);
+}
 
 /** In training nobody dies; left alone for a while, a player heals back up. */
 function restTraining(p: Player) {
@@ -301,7 +336,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
       // Damage over time ignores counters and doesn't pop marks.
       p.hp = Math.max(0, p.hp - POISON.dmg);
       p.restT = 0;
-      ev.push({ type: 'hit', target: p.id, source: 1 - p.id, dmg: POISON.dmg, x: p.x, y: p.y, kind: 'poison' });
+      ev.push({ type: 'hit', target: p.id, source: p.poisonBy, dmg: POISON.dmg, x: p.x, y: p.y, kind: 'poison' });
     }
   }
 
@@ -453,13 +488,14 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       p.dashX = -p.fx * VAULT.speed;
       p.dashY = -p.fy * VAULT.speed;
       p.quickT = VAULT.quick;
-      const foe = s.players[1 - p.id];
-      const dx = foe.x - p.x;
-      const dy = foe.y - p.y;
-      const reach = VAULT.r + PLAYER_R;
-      if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
-        foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, VAULT.slowMul) : VAULT.slowMul;
-        foe.slowT = Math.max(foe.slowT, VAULT.slowT);
+      for (const foe of enemiesOf(s, p)) {
+        const dx = foe.x - p.x;
+        const dy = foe.y - p.y;
+        const reach = VAULT.r + PLAYER_R;
+        if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
+          foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, VAULT.slowMul) : VAULT.slowMul;
+          foe.slowT = Math.max(foe.slowT, VAULT.slowT);
+        }
       }
       ev.push({ type: 'vault', player: p.id, x: p.x, y: p.y });
     } else {
@@ -520,7 +556,7 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
   const def = abilityOf(p, slot);
   p.cooldowns[slot] = def.cooldown;
   p.energy -= def.energyCost;
-  const foe = s.players[1 - p.id];
+  const foes = enemiesOf(s, p);
   // Attacking out of stealth reveals you, and the hit it lands is an ambush.
   if (p.stealthT > 0) {
     p.stealthT = 0;
@@ -558,8 +594,8 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
     case 'slash': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: SLASH.reach });
       const reach = 2 * PLAYER_R + SLASH.reach;
-      if (inCone(p, foe.x, foe.y, reach, SLASH.minDot)) {
-        hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+      for (const foe of foes) {
+        if (inCone(p, foe.x, foe.y, reach, SLASH.minDot)) hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       }
       if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + SLASH.reach, SLASH.minDot)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
       return;
@@ -567,8 +603,8 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
 
     case 'katana': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: KATANA.reach });
-      if (inCone(p, foe.x, foe.y, 2 * PLAYER_R + KATANA.reach, KATANA.minDot)) {
-        hit(p, foe, KATANA.dmg, KATANA.energy, 'katana', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+      for (const foe of foes) {
+        if (inCone(p, foe.x, foe.y, 2 * PLAYER_R + KATANA.reach, KATANA.minDot)) hit(p, foe, KATANA.dmg, KATANA.energy, 'katana', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       }
       if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + KATANA.reach, KATANA.minDot)) damageOrb(s, p.id, KATANA.dmg, 0, 0, ev);
       return;
@@ -588,7 +624,12 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       const x1 = x0 + p.fx * TEMPEST.len;
       const y1 = y0 + p.fy * TEMPEST.len;
       const reach = TEMPEST.half + PLAYER_R;
-      if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, TEMPEST.dmg, TEMPEST.energy, 'tempest', foe.x, foe.y, ev)) {
+      let landed = false;
+      for (const foe of foes) {
+        if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, TEMPEST.dmg, TEMPEST.energy, 'tempest', foe.x, foe.y, ev)) landed = true;
+      }
+      // One stack per thrust, however many it hit.
+      if (landed) {
         p.stacks = Math.min(TEMPEST.max, p.stacks + 1);
         p.stackT = TEMPEST.window;
       }
@@ -602,20 +643,21 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       const x1 = x0 + p.fx * FATE.range;
       const y1 = y0 + p.fy * FATE.range;
       const reach = FATE.half + PLAYER_R;
-      const caught = segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, FATE.dmg, 0, 'fate', foe.x, foe.y, ev);
+      const caught = foes.filter((foe) => segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, FATE.dmg, 0, 'fate', foe.x, foe.y, ev));
       if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (FATE.half + ORB_R) * (FATE.half + ORB_R)) damageOrb(s, p.id, FATE.dmg, 0, 0, ev);
       p.x = x1;
       p.y = y1;
       collideWorld(s, p);
-      if (caught) {
-        // Dragged along to the end of the line, right in front of the samurai.
-        foe.x = p.x + p.fx * (2 * PLAYER_R + 2);
-        foe.y = p.y + p.fy * (2 * PLAYER_R + 2);
+      caught.forEach((foe, k) => {
+        // Dragged along to the end of the line, right in front of the samurai (side by side if two).
+        const side = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2 * PLAYER_R;
+        foe.x = p.x + p.fx * (2 * PLAYER_R + 2) - p.fy * side;
+        foe.y = p.y + p.fy * (2 * PLAYER_R + 2) + p.fx * side;
         foe.vx = 0;
         foe.vy = 0;
         collideWorld(s, foe);
         stun(foe, FATE.stun, ev);
-      }
+      });
       ev.push({ type: 'fate', player: p.id, x0, y0, x: p.x, y: p.y });
       return;
     }
@@ -632,7 +674,7 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
 
     case 'cry': {
       ev.push({ type: 'nova', player: p.id, x: p.x, y: p.y });
-      if (areaHit(s, p, p.x, p.y, CRY.r, CRY.dmg, CRY.energy, 0, 'cry', ev)) {
+      for (const foe of areaHit(s, p, p.x, p.y, CRY.r, CRY.dmg, CRY.energy, 0, 'cry', ev)) {
         // An impulse that, decaying, carries the enemy to just in front of the warrior.
         const dx = p.x - foe.x;
         const dy = p.y - foe.y;
@@ -649,8 +691,10 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       const y0 = p.y + p.fy * PLAYER_R;
       const x1 = x0 + p.fx * RIFT.len;
       const y1 = y0 + p.fy * RIFT.len;
-      if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= (RIFT.half + PLAYER_R) * (RIFT.half + PLAYER_R) && hit(p, foe, RIFT.dmg, 0, 'rift', foe.x, foe.y, ev)) {
-        knockback(foe, p.fx, p.fy, RIFT.kb);
+      for (const foe of foes) {
+        if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= (RIFT.half + PLAYER_R) * (RIFT.half + PLAYER_R) && hit(p, foe, RIFT.dmg, 0, 'rift', foe.x, foe.y, ev)) {
+          knockback(foe, p.fx, p.fy, RIFT.kb);
+        }
       }
       if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (RIFT.half + ORB_R) * (RIFT.half + ORB_R)) damageOrb(s, p.id, RIFT.dmg, 0, 0, ev);
       return;
@@ -697,24 +741,30 @@ function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, e
   ev.push({ type: 'release', player: p.id, ability, x, y });
 }
 
+/** The first enemy within `reach` of p (in id order), if any. */
+function touching(s: GameState, p: Player, reach: number): Player | null {
+  for (const foe of enemiesOf(s, p)) {
+    const dx = foe.x - p.x;
+    const dy = foe.y - p.y;
+    if (dx * dx + dy * dy <= reach * reach && foe.hp > 0) return foe;
+  }
+  return null;
+}
+
+/** Execute connects with the first enemy it passes through. */
 function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
-  const foe = s.players[1 - p.id];
-  const dx = foe.x - p.x;
-  const dy = foe.y - p.y;
-  const reach = 2 * PLAYER_R + 8;
-  if (dx * dx + dy * dy > reach * reach || foe.hp <= 0) return;
+  const foe = touching(s, p, 2 * PLAYER_R + 8);
+  if (!foe) return;
   p.dashHit = 1;
   const lethal = foe.hp <= maxHp(foe) * EXECUTE.threshold;
   ev.push({ type: 'execute', player: p.id, x: foe.x, y: foe.y, lethal });
   hit(p, foe, lethal ? EXECUTE.dmg * 2 : EXECUTE.dmg, 0, 'execute', foe.x, foe.y, ev);
 }
 
+/** Sweeping Blade cuts the first enemy it passes through. */
 function bladeContact(s: GameState, p: Player, ev: GameEvent[]) {
-  const foe = s.players[1 - p.id];
-  const dx = foe.x - p.x;
-  const dy = foe.y - p.y;
-  const reach = 2 * PLAYER_R + 6;
-  if (dx * dx + dy * dy > reach * reach || foe.hp <= 0) return;
+  const foe = touching(s, p, 2 * PLAYER_R + 6);
+  if (!foe) return;
   p.dashHit = 1;
   hit(p, foe, BLADE.dmg, BLADE.energy, 'blade', foe.x, foe.y, ev);
 }
@@ -732,8 +782,8 @@ function soulReturn(s: GameState, p: Player, ev: GameEvent[]) {
   p.y = p.soulY;
   collideWorld(s, p);
   ev.push({ type: 'soulReturn', player: p.id, x0, y0, x: p.x, y: p.y });
-  const foe = s.players[1 - p.id];
-  if (echo > 0) hit(p, foe, echo, 0, 'soul', foe.x, foe.y, ev);
+  const foe = p.soulTarget >= 0 ? s.players[p.soulTarget] : null;
+  if (echo > 0 && foe && !foe.out) hit(p, foe, echo, 0, 'soul', foe.x, foe.y, ev);
 }
 
 function whirlPulse(s: GameState, p: Player, ev: GameEvent[]) {
@@ -743,8 +793,7 @@ function whirlPulse(s: GameState, p: Player, ev: GameEvent[]) {
 
 function land(s: GameState, p: Player, ev: GameEvent[]) {
   ev.push({ type: 'land', player: p.id, x: p.x, y: p.y });
-  if (areaHit(s, p, p.x, p.y, LEAP.r, LEAP.dmg, LEAP.energy, 0, 'leap', ev)) {
-    const foe = s.players[1 - p.id];
+  for (const foe of areaHit(s, p, p.x, p.y, LEAP.r, LEAP.dmg, LEAP.energy, 0, 'leap', ev)) {
     foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, LEAP.slowMul) : LEAP.slowMul;
     foe.slowT = Math.max(foe.slowT, LEAP.slowT);
   }
@@ -771,20 +820,23 @@ function segDist2(px: number, py: number, x0: number, y0: number, x1: number, y1
   return cx * cx + cy * cy;
 }
 
-/** Circle around (x, y): hits the enemy (pushed outwards by kb) and the orb. Returns whether the enemy was hit. */
-function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: number, energy: number, kb: number, kind: HitKind, ev: GameEvent[]): boolean {
-  const foe = s.players[1 - p.id];
-  let dx = foe.x - x;
-  let dy = foe.y - y;
-  let d = Math.sqrt(dx * dx + dy * dy);
-  const landed = d < r + PLAYER_R && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev);
-  if (landed && kb > 0) {
-    if (d < 0.0001) {
-      dx = p.fx;
-      dy = p.fy;
-      d = 1;
+/** Circle around (x, y): hits every enemy inside (pushed outwards by kb) and the orb. Returns the enemies hit. */
+function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: number, energy: number, kb: number, kind: HitKind, ev: GameEvent[]): Player[] {
+  const landed: Player[] = [];
+  for (const foe of enemiesOf(s, p)) {
+    let dx = foe.x - x;
+    let dy = foe.y - y;
+    let d = Math.sqrt(dx * dx + dy * dy);
+    if (!(d < r + PLAYER_R && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev))) continue;
+    landed.push(foe);
+    if (kb > 0) {
+      if (d < 0.0001) {
+        dx = p.fx;
+        dy = p.fy;
+        d = 1;
+      }
+      knockback(foe, dx / d, dy / d, kb);
     }
-    knockback(foe, dx / d, dy / d, kb);
   }
   if (s.orb.active && Math.sqrt(x * x + y * y) < r + ORB_R) damageOrb(s, p.id, dmg, 0, 0, ev);
   return landed;
@@ -819,9 +871,15 @@ function clampToArena(s: GameState, p: Player) {
   }
 }
 
+/** Push overlapping champions apart (every pair; the knocked out don't block). */
 function separatePlayers(s: GameState) {
-  const [a, b] = s.players;
-  if (passesThrough(a) || passesThrough(b)) return;
+  for (let i = 0; i < s.players.length; i++) {
+    for (let j = i + 1; j < s.players.length; j++) separatePair(s, s.players[i], s.players[j]);
+  }
+}
+
+function separatePair(s: GameState, a: Player, b: Player) {
+  if (a.out || b.out || passesThrough(a) || passesThrough(b)) return;
   let dx = b.x - a.x;
   let dy = b.y - a.y;
   const min = PLAYER_R * 2;
@@ -865,8 +923,11 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
   target.hp = Math.max(0, target.hp - dmg);
   target.hitT = 8;
   target.restT = 0;
-  // A samurai out of body remembers what it dealt, to echo it on the way back.
-  if (attacker.soulT > 0 && kind !== 'soul') attacker.soulDmg += dmg;
+  // A samurai out of body remembers what it dealt (and to whom), to echo it on the way back.
+  if (attacker.soulT > 0 && kind !== 'soul') {
+    attacker.soulDmg += dmg;
+    attacker.soulTarget = target.id;
+  }
   attacker.energy = Math.min(MAX_ENERGY, attacker.energy + energy);
   ev.push({ type: 'hit', target: target.id, source: attacker.id, dmg, x, y, kind });
   return true;
@@ -940,12 +1001,14 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
       continue;
     }
 
-    const target = s.players[1 - pr.owner];
-    const tdx = target.x - pr.x;
-    const tdy = target.y - pr.y;
+    // The first enemy it touches; untargetable champions let projectiles fly through.
     const tmin = PLAYER_R + pr.r;
-    // Untargetable champions let projectiles fly through.
-    if (!untargetable(target) && tdx * tdx + tdy * tdy < tmin * tmin) {
+    const target = enemiesOf(s, s.players[pr.owner]).find((t) => {
+      const tdx = t.x - pr.x;
+      const tdy = t.y - pr.y;
+      return !untargetable(t) && tdx * tdx + tdy * tdy < tmin * tmin;
+    });
+    if (target) {
       // Deflect: coming at her front, it turns around and becomes hers.
       if (target.deflectT > 0 && pr.vx * target.fx + pr.vy * target.fy < DEFLECT.minDot) {
         pr.owner = target.id;
@@ -968,7 +1031,10 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
           target.slowMul = pd.slowMul;
         }
         if (pr.kind === 'mark') target.markT = MARK.ticks;
-        if (pr.kind === 'poison') target.poisonT = POISON.ticks;
+        if (pr.kind === 'poison') {
+          target.poisonT = POISON.ticks;
+          target.poisonBy = pr.owner;
+        }
         if (pr.kind === 'sonic') target.revealT = SONIC.reveal;
         if (pr.kind === 'crescent') stun(target, TEMPEST.stun, ev);
         if (pr.kind === 'snare') {
@@ -1008,19 +1074,20 @@ function updateZones(s: GameState, ev: GameEvent[]) {
     z.t--;
     if (z.kind === 'rain' && z.t <= RAIN.ticks) {
       const owner = s.players[z.owner];
-      const foe = s.players[1 - z.owner];
       const first = z.t === RAIN.ticks;
       if (first || z.t % RAIN.every === 0) {
         ev.push({ type: 'rain', owner: z.owner, x: z.x, y: z.y, first });
         areaHit(s, owner, z.x, z.y, RAIN.r, first ? RAIN.dmg : RAIN.pulse, 0, 0, 'rain', ev);
       }
       // Standing in the rain slows; the slow lingers a moment after stepping out.
-      const dx = foe.x - z.x;
-      const dy = foe.y - z.y;
-      const reach = RAIN.r + PLAYER_R;
-      if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
-        foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, RAIN.slow) : RAIN.slow;
-        foe.slowT = Math.max(foe.slowT, 10);
+      for (const foe of enemiesOf(s, owner)) {
+        const dx = foe.x - z.x;
+        const dy = foe.y - z.y;
+        const reach = RAIN.r + PLAYER_R;
+        if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
+          foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, RAIN.slow) : RAIN.slow;
+          foe.slowT = Math.max(foe.slowT, 10);
+        }
       }
     }
     if (z.t > 0) left.push(z);
@@ -1037,17 +1104,18 @@ function updateMeteors(s: GameState, ev: GameEvent[]) {
     }
     ev.push({ type: 'meteor', owner: m.owner, x: m.x, y: m.y });
     const owner = s.players[m.owner];
-    const target = s.players[1 - m.owner];
-    let dx = target.x - m.x;
-    let dy = target.y - m.y;
-    let d = Math.sqrt(dx * dx + dy * dy);
-    if (d < METEOR.r + PLAYER_R && hit(owner, target, METEOR.dmg, 0, 'meteor', target.x, target.y, ev)) {
-      if (d < 0.0001) {
-        dx = 1;
-        dy = 0;
-        d = 1;
+    for (const target of enemiesOf(s, owner)) {
+      let dx = target.x - m.x;
+      let dy = target.y - m.y;
+      let d = Math.sqrt(dx * dx + dy * dy);
+      if (d < METEOR.r + PLAYER_R && hit(owner, target, METEOR.dmg, 0, 'meteor', target.x, target.y, ev)) {
+        if (d < 0.0001) {
+          dx = 1;
+          dy = 0;
+          d = 1;
+        }
+        knockback(target, dx / d, dy / d, METEOR.kb);
       }
-      knockback(target, dx / d, dy / d, METEOR.kb);
     }
     if (s.orb.active && Math.sqrt(m.x * m.x + m.y * m.y) < METEOR.r + ORB_R) damageOrb(s, m.owner, METEOR.dmg, 0, 0, ev);
   }
