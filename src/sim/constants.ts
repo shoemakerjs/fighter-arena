@@ -171,7 +171,7 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'step', name: 'Crimson Step', desc: 'dash toward the cursor; enemies you pass through bleed for 2 s, healing you', cooldown: 360, cast: 0, castSlow: 1, energyCost: 0 },
       // Charged: `cast` is the full gathering; letting go early bursts weaker.
       { id: 'tides', name: 'Tides of Blood', desc: 'hold to gather blood, release to burst around you and slow; costs 6 HP', cooldown: 300, cast: 60, castSlow: 0.5, energyCost: 0 },
-      { id: 'drain', name: 'Exsanguinate', desc: 'tether the nearest enemy and drain it for up to 2 s while it stays close', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'drain', name: 'Exsanguinate', desc: 'tether the nearest enemy and drain it for up to 2 s while it stays close; a pillar between you breaks it', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'plague', name: 'Hemoplague', desc: 'curse an area: enemies inside take +15% damage for 3 s, then burst and heal you, 100 energy', cooldown: 60, cast: 16, castSlow: 0.3, energyCost: 100 },
     ],
   },
@@ -276,7 +276,10 @@ export const STEP = { ticks: 10, speed: 17 };
 export const BLEED = { ticks: 120, every: 20, dmg: 2 };
 /** Gather at least `minDraw`; bursts within `r` for `dmg` (+`bonus` at a full gathering) and slows. Costs `cost` HP. */
 export const TIDES = { minDraw: 12, r: 135, dmg: 10, bonus: 14, slowMul: 0.6, slowT: 60, cost: 6 };
-/** Tether the nearest enemy within `range` for up to `ticks`; every `every` ticks deals and heals `dmg`. Moving at `speed`. */
-export const DRAIN = { ticks: 120, range: 300, every: 15, dmg: 5, energy: 4, speed: 0.6 };
+/**
+ * Tether the nearest enemy in sight within `range` for up to `ticks`; every `every` ticks deals
+ * `dmg` and heals `heal`. Moving at `speed`. A pillar between the two breaks it.
+ */
+export const DRAIN = { ticks: 120, range: 300, every: 15, dmg: 5, heal: 4, energy: 4, speed: 0.6 };
 /** Area within `range` of radius `r`: enemies take `amp` times damage for `ticks`, then take `dmg` and heal the caster `heal` each. */
 export const PLAGUE = { range: 450, r: 140, ticks: 180, amp: 1.15, dmg: 22, heal: 14 };

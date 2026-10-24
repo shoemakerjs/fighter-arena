@@ -71,6 +71,7 @@ import {
   type AbilityId,
 } from './constants';
 import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
+import { lineClear } from './vision';
 
 /**
  * `champs` has one entry per player: two for 1v1, four for 2v2 (teams by id % 2).
@@ -564,7 +565,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       const dx = foe.x - p.x;
       const dy = foe.y - p.y;
       const d2 = dx * dx + dy * dy;
-      if (d2 <= bestD && foe.hp > 0 && !untargetable(foe)) {
+      if (d2 <= bestD && foe.hp > 0 && !untargetable(foe) && lineClear(p.x, p.y, foe.x, foe.y)) {
         best = foe;
         bestD = d2;
       }
@@ -1059,17 +1060,17 @@ function stepContact(s: GameState, p: Player, ev: GameEvent[]) {
   }
 }
 
-/** Exsanguinate: drain the tethered enemy while it stays in reach. */
+/** Exsanguinate: drain the tethered enemy while it stays in reach and no pillar is in the way. */
 function drainPulse(s: GameState, p: Player, ev: GameEvent[]) {
   const t = s.players[p.drainTarget];
   const dx = t.x - p.x;
   const dy = t.y - p.y;
   const reach = DRAIN.range * 1.15;
-  if (!t || t.out || t.hp <= 0 || untargetable(t) || dx * dx + dy * dy > reach * reach) {
+  if (!t || t.out || t.hp <= 0 || untargetable(t) || dx * dx + dy * dy > reach * reach || !lineClear(p.x, p.y, t.x, t.y)) {
     p.drainT = 0;
     return;
   }
-  if (--p.drainT % DRAIN.every === 0 && hit(p, t, DRAIN.dmg, DRAIN.energy, 'drain', t.x, t.y, ev)) heal(p, DRAIN.dmg, ev);
+  if (--p.drainT % DRAIN.every === 0 && hit(p, t, DRAIN.dmg, DRAIN.energy, 'drain', t.x, t.y, ev)) heal(p, DRAIN.heal, ev);
 }
 
 /** Hemoplague runs out: the cursed burst, healing the caster. */
