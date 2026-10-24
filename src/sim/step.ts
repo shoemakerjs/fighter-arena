@@ -19,6 +19,8 @@ import {
   BUFFER_TICKS,
   CHAMP,
   CHAMPIONS,
+  CHRONO,
+  CONVERGE,
   COUNTDOWN_TICKS,
   COUNTER,
   CRY,
@@ -28,6 +30,7 @@ import {
   DRAIN,
   EXECUTE,
   FATE,
+  FLICKER,
   HASTE_MUL,
   KATANA,
   KB_DECAY,
@@ -46,7 +49,9 @@ import {
   PLAYER_R,
   POISON,
   PROJ,
+  PULSE,
   RAIN,
+  RECALL,
   RIFT,
   ROUND_END_TICKS,
   ROUNDS_TO_WIN,
@@ -67,6 +72,7 @@ import {
   TRANSFUSION,
   VAULT,
   WHIRL,
+  WINDER,
   type AbilityDef,
   type AbilityId,
 } from './constants';
@@ -168,6 +174,12 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     drainT: 0,
     drainTarget: -1,
     bloodCount: 0,
+    resoN: 0,
+    resoT: 0,
+    resoTarget: -1,
+    charges: FLICKER.charges,
+    chargeT: 0,
+    trail: [],
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -344,6 +356,16 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.stackT > 0 && --p.stackT === 0) p.stacks = 0;
   if (p.soulT > 0 && --p.soulT === 0) soulReturn(s, p, ev);
   if (p.drainT > 0) drainPulse(s, p, ev);
+  if (p.resoT > 0 && --p.resoT === 0) p.resoN = 0;
+  if (p.charges < FLICKER.charges && --p.chargeT <= 0) {
+    p.charges++;
+    if (p.charges < FLICKER.charges) p.chargeT = FLICKER.recharge;
+  }
+  // Chronoblade remembers where it was, for Recall.
+  if (p.champ === CHAMP.CHRONO && s.roundFrame % RECALL.every === 0) {
+    p.trail.push(p.x, p.y, p.hp);
+    if (p.trail.length > 3 * (RECALL.ticks / RECALL.every + 1)) p.trail.splice(0, 3);
+  }
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   if (p.poisonT > 0) {
     p.poisonT--;
@@ -458,8 +480,52 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm';
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall';
   if (p.rootT > 0 && mobility) return false;
+
+  // Flicker: instant short blink along the movement (the aim when standing), on charges. Works mid-cast.
+  if (def.id === 'flicker') {
+    if (p.charges <= 0 || p.dashT > 0) return false;
+    let dx = Math.sign(inp.mx);
+    let dy = Math.sign(inp.my);
+    if (dx === 0 && dy === 0) {
+      dx = p.fx;
+      dy = p.fy;
+    } else if (dx !== 0 && dy !== 0) {
+      dx *= Math.SQRT1_2;
+      dy *= Math.SQRT1_2;
+    }
+    const x0 = p.x;
+    const y0 = p.y;
+    p.cast = null;
+    p.x += dx * FLICKER.range;
+    p.y += dy * FLICKER.range;
+    collideWorld(s, p);
+    if (p.charges === FLICKER.charges) p.chargeT = FLICKER.recharge;
+    p.charges--;
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'flicker', player: p.id, x0, y0, x: p.x, y: p.y });
+    return true;
+  }
+
+  // Recall: back to the oldest remembered spot, getting part of the HP lost since then.
+  if (def.id === 'recall') {
+    if (p.dashT > 0 || p.trail.length < 3) return false;
+    const [x, y, hp] = p.trail;
+    const x0 = p.x;
+    const y0 = p.y;
+    p.cast = null;
+    p.x = x;
+    p.y = y;
+    p.vx = 0;
+    p.vy = 0;
+    collideWorld(s, p);
+    p.trail = [];
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'recall', player: p.id, x0, y0, x: p.x, y: p.y });
+    if (hp > p.hp) heal(p, Math.round((hp - p.hp) * RECALL.heal), ev);
+    return true;
+  }
 
   // Night Swarm: like a leap toward the cursor, but on the ground (pillars still stop it).
   if (def.id === 'swarm') {
@@ -668,8 +734,30 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         tx = (tx / d) * RAIN.range;
         ty = (ty / d) * RAIN.range;
       }
-      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks });
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks, target: -1 });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'converge': {
+      let tx = inp.ax - p.x;
+      let ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      if (d > CONVERGE.range) {
+        tx = (tx / d) * CONVERGE.range;
+        ty = (ty / d) * CONVERGE.range;
+      }
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'converge', x: p.x + tx, y: p.y + ty, t: CONVERGE.delay, target: -1 });
+      ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'chrono': {
+      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: CHRONO.reach });
+      for (const foe of foes) {
+        if (inCone(p, foe.x, foe.y, 2 * PLAYER_R + CHRONO.reach, CHRONO.minDot) && hit(p, foe, CHRONO.dmg, CHRONO.energy, 'chrono', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) resonate(p, foe, ev);
+      }
+      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + CHRONO.reach, CHRONO.minDot)) damageOrb(s, p.id, CHRONO.dmg, 0, 0, ev);
       return;
     }
 
@@ -832,6 +920,8 @@ function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, e
     age: 0,
     dmg,
     kb,
+    back: 0,
+    hitMask: 0,
   });
   ev.push({ type: 'release', player: p.id, ability, x, y });
 }
@@ -1087,6 +1177,24 @@ function swarmContact(s: GameState, p: Player, ev: GameEvent[]) {
   }
 }
 
+/** Chronoblade's hits in a row on one enemy; every CHRONO.hits-th resonates. */
+function resonate(p: Player, foe: Player, ev: GameEvent[]) {
+  if (p.resoTarget !== foe.id || p.resoT === 0) {
+    p.resoTarget = foe.id;
+    p.resoN = 0;
+  }
+  p.resoN++;
+  p.resoT = CHRONO.window;
+  if (p.resoN < CHRONO.hits) return;
+  p.resoN = 0;
+  p.resoT = 0;
+  ev.push({ type: 'resonance', player: foe.id, x: foe.x, y: foe.y });
+  if (!hit(p, foe, CHRONO.bonus, 0, 'resonance', foe.x, foe.y, ev)) return;
+  foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, CHRONO.slowMul) : CHRONO.slowMul;
+  foe.slowT = Math.max(foe.slowT, CHRONO.slowT);
+  p.hasteT = Math.max(p.hasteT, CHRONO.haste);
+}
+
 function stun(target: Player, ticks: number, ev: GameEvent[]) {
   target.stunT = Math.max(target.stunT, ticks);
   target.cast = null;
@@ -1136,6 +1244,10 @@ function hitsPillar(x: number, y: number, r: number): boolean {
 function updateProjectiles(s: GameState, ev: GameEvent[]) {
   const alive = [];
   for (const pr of s.projectiles) {
+    if (pr.kind === 'winder') {
+      if (winderTick(s, pr, ev)) alive.push(pr);
+      continue;
+    }
     pr.x += pr.vx;
     pr.y += pr.vy;
     pr.age++;
@@ -1167,6 +1279,15 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         target.energy = Math.min(MAX_ENERGY, target.energy + DEFLECT.energy);
         ev.push({ type: 'deflect', player: target.id, x: pr.x, y: pr.y });
         alive.push(pr);
+        continue;
+      }
+      // A Pulse Bomb doesn't hurt on contact: it sticks (a counter knocks it away).
+      if (pr.kind === 'pulse') {
+        if (target.counterT > 0) block(target, pr.x, pr.y, ev);
+        else {
+          s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'pulse', x: target.x, y: target.y, t: PULSE.fuse, target: target.id });
+          ev.push({ type: 'stick', player: target.id, x: target.x, y: target.y });
+        }
         continue;
       }
       const pd = PROJ[pr.kind];
@@ -1222,9 +1343,59 @@ function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
     if (lost > 0) ev.push({ type: 'bloodloss', player: owner.id, amount: lost, x: owner.x, y: owner.y });
   }
   if (pr.kind === 'sonic') {
-    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks });
+    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks, target: -1 });
     ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });
   }
+  // A Pulse Bomb that hit nothing lies where it stopped, still ticking.
+  if (pr.kind === 'pulse') s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'pulse', x: pr.x, y: pr.y, t: PULSE.fuse, target: -1 });
+}
+
+/**
+ * Timewinder: flies out, then homes back to its thrower (over pillars), hitting each enemy
+ * once per way. Returns false once caught (or its thrower is gone).
+ */
+function winderTick(s: GameState, pr: Projectile, ev: GameEvent[]): boolean {
+  const owner = s.players[pr.owner];
+  if (owner.out) return false;
+  if (pr.back) {
+    const dx = owner.x - pr.x;
+    const dy = owner.y - pr.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < PLAYER_R + pr.r || pr.age > pr.life * 4) return false;
+    pr.vx = (dx / d) * WINDER.returnSpeed;
+    pr.vy = (dy / d) * WINDER.returnSpeed;
+  }
+  pr.x += pr.vx;
+  pr.y += pr.vy;
+  pr.age++;
+  if (!pr.back) {
+    const ad = Math.sqrt(pr.x * pr.x + pr.y * pr.y);
+    if (pr.age >= pr.life || ad > s.arenaR - pr.r * 0.5 || hitsPillar(pr.x, pr.y, pr.r)) {
+      pr.back = 1;
+      pr.hitMask = 0;
+      ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+    }
+  }
+  const reach = PLAYER_R + pr.r;
+  for (const foe of enemiesOf(s, owner)) {
+    const bit = 1 << foe.id;
+    const dx = foe.x - pr.x;
+    const dy = foe.y - pr.y;
+    if (pr.hitMask & bit || dx * dx + dy * dy >= reach * reach || untargetable(foe)) continue;
+    pr.hitMask |= bit;
+    if (!hit(owner, foe, pr.dmg, PROJ.winder.energy, 'winder', pr.x, pr.y, ev)) continue;
+    if (!pr.back) {
+      foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, PROJ.winder.slowMul) : PROJ.winder.slowMul;
+      foe.slowT = Math.max(foe.slowT, PROJ.winder.slowT);
+    }
+    resonate(owner, foe, ev);
+  }
+  const omin = ORB_R + pr.r;
+  if (s.orb.active && !(pr.hitMask & 16) && pr.x * pr.x + pr.y * pr.y < omin * omin) {
+    pr.hitMask |= 16;
+    damageOrb(s, pr.owner, pr.dmg, pr.x, pr.y, ev);
+  }
+  return true;
 }
 
 function updateZones(s: GameState, ev: GameEvent[]) {
@@ -1248,6 +1419,22 @@ function updateZones(s: GameState, ev: GameEvent[]) {
           foe.slowT = Math.max(foe.slowT, 10);
         }
       }
+    }
+    if (z.kind === 'pulse' && z.target >= 0) {
+      const t = s.players[z.target];
+      if (t.out) z.target = -1;
+      else {
+        z.x = t.x;
+        z.y = t.y;
+      }
+    }
+    if (z.t === 0 && z.kind === 'converge') {
+      ev.push({ type: 'converge', owner: z.owner, x: z.x, y: z.y });
+      for (const foe of areaHit(s, s.players[z.owner], z.x, z.y, CONVERGE.r, CONVERGE.dmg, 0, 0, 'converge', ev)) stun(foe, CONVERGE.stun, ev);
+    }
+    if (z.t === 0 && z.kind === 'pulse') {
+      ev.push({ type: 'pulse', owner: z.owner, x: z.x, y: z.y });
+      areaHit(s, s.players[z.owner], z.x, z.y, PULSE.r, PULSE.dmg, 0, PULSE.kb, 'pulse', ev);
     }
     if (z.t > 0) left.push(z);
   }

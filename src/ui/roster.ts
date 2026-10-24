@@ -82,4 +82,14 @@ export const ROSTER: RosterEntry[] = [
     artY: 'top',
     lore: 'A lone high vampire who never leaves his castle. Mourning his wife without end, he kills everyone who comes close, in a rage that never cools.',
   },
+  {
+    hero: 'Kairo',
+    category: 'Assassin',
+    // Stand-in until the painted art arrives.
+    art: './art/placeholder.svg',
+    flip: false,
+    portrait: '68% 12%',
+    focus: 0.65,
+    lore: 'A drifter who slips between seconds: strikes, blinks out of reach before the blow lands, and rewinds every wound.',
+  },
 ];

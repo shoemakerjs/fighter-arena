@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'winder' | 'pulse';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -115,6 +115,15 @@ export interface Player {
   drainTarget: number;
   /** Transfusions cast this round (every third is empowered). */
   bloodCount: number;
+  /** Chronoblade: hits in a row on `resoTarget`, and ticks left to land the next one. */
+  resoN: number;
+  resoT: number;
+  resoTarget: number;
+  /** Chronoblade: Flicker charges, and ticks until the next one comes back. */
+  charges: number;
+  chargeT: number;
+  /** Chronoblade: recent [x, y, hp] samples, oldest first, for Recall. */
+  trail: number[];
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -136,17 +145,22 @@ export interface Projectile {
   /** Damage and knockback on hit (fixed per kind, except a drawn longshot or a quick arrow). */
   dmg: number;
   kb: number;
+  /** Timewinder: 1 once it turns back; `hitMask` has a bit per enemy id hit on the current way (16 = the orb). */
+  back: number;
+  hitMask: number;
 }
 
-/** Lingering area on the floor: an archer's arrow rain or sonic sensor. */
+/** Something on the floor: arrow rain, a sonic sensor, a Parallel Convergence field or a Pulse Bomb. */
 export interface Zone {
   id: number;
   owner: number;
-  kind: 'rain' | 'sonic';
+  kind: 'rain' | 'sonic' | 'converge' | 'pulse';
   x: number;
   y: number;
-  /** Ticks left. Rain is still falling while t > RAIN.ticks. */
+  /** Ticks left. Rain is still falling while t > RAIN.ticks; a field or a bomb goes off at 0. */
   t: number;
+  /** Pulse Bomb: the player it's stuck to (it moves with them), -1 if on the floor. */
+  target: number;
 }
 
 export interface Meteor {
@@ -229,6 +243,15 @@ export type GameEvent =
   | { type: 'bleed'; player: number; x: number; y: number }
   /** A missed Transfusion costs its caster HP. */
   | { type: 'bloodloss'; player: number; amount: number; x: number; y: number }
+  /** Chronoblade: Flicker and Recall jumps. */
+  | { type: 'flicker'; player: number; x0: number; y0: number; x: number; y: number }
+  | { type: 'recall'; player: number; x0: number; y0: number; x: number; y: number }
+  /** Resonance going off on `player`. */
+  | { type: 'resonance'; player: number; x: number; y: number }
+  | { type: 'converge'; owner: number; x: number; y: number }
+  /** A Pulse Bomb sticking to `player`, and bursting. */
+  | { type: 'stick'; player: number; x: number; y: number }
+  | { type: 'pulse'; owner: number; x: number; y: number }
   /** Romulus scatters into bats (Night Swarm). */
   | { type: 'swarm'; player: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */

@@ -24,6 +24,8 @@ export const COLORS = {
   /** Sozuki's steel: katana cuts, the crescent and the deflect. */
   edge: '#c9d6f2',
   spirit: '#8f8cff',
+  /** Kairo's time magic. */
+  chrono: '#ffa63d',
   /** The blood mage's crimson, and green for heals. */
   crimson: '#d4203f',
   heal: '#5dff8f',
@@ -55,5 +57,6 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'tempest' || id === 'crescent' || id === 'blade' || id === 'deflect') return COLORS.edge;
   if (id === 'soul' || id === 'fate') return COLORS.spirit;
   if (id === 'transfusion' || id === 'step' || id === 'bleed' || id === 'tides' || id === 'drain' || id === 'swarm') return COLORS.crimson;
+  if (id === 'winder' || id === 'flicker' || id === 'converge' || id === 'recall' || id === 'pulse' || id === 'resonance') return COLORS.chrono;
   return COLORS.players[owner];
 }

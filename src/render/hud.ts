@@ -1,4 +1,4 @@
-import { CHAMP, CHAMPIONS, EXECUTE, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, type AbilityId } from '../sim/constants';
+import { CHAMP, CHAMPIONS, CHRONO, EXECUTE, FLICKER, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, type AbilityId } from '../sim/constants';
 import { abilityOf, maxHp } from '../sim/step';
 import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
@@ -302,7 +302,10 @@ export class Hud {
     for (let i = 0; i < n; i++) {
       const def = kit[i];
       const x = x0 + i * (slot + gap);
-      const cd = p.cooldowns[i];
+      // Flicker is limited by its charges (its own cooldown is just a short lockout).
+      const outOfCharges = def.id === 'flicker' && p.charges === 0;
+      const cd = outOfCharges ? p.chargeT : p.cooldowns[i];
+      const cdMax = outOfCharges ? FLICKER.recharge : def.cooldown;
       const noEnergy = p.energy < def.energyCost;
       const active =
         p.cast?.ability === i ||
@@ -332,18 +335,23 @@ export class Hud {
       drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'crescent' : def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
       ctx.restore();
 
-      // Steel Tempest stacks
-      if (def.id === 'tempest') {
-        for (let k = 0; k < TEMPEST.max; k++) {
+      // Pips under the icon: Steel Tempest stacks, Flicker charges, hits towards Resonance.
+      const pips =
+        def.id === 'tempest' ? { n: TEMPEST.max, on: p.stacks, color: COLORS.edge }
+        : def.id === 'flicker' ? { n: FLICKER.charges, on: p.charges, color: COLORS.chrono }
+        : def.id === 'chrono' ? { n: CHRONO.hits - 1, on: p.resoN, color: COLORS.chrono }
+        : null;
+      if (pips) {
+        for (let k = 0; k < pips.n; k++) {
           ctx.beginPath();
-          ctx.arc(x + slot / 2 + (k - (TEMPEST.max - 1) / 2) * 10, y0 + slot - 7, 3, 0, TAU);
-          ctx.fillStyle = k < p.stacks ? COLORS.edge : 'rgba(255,255,255,0.15)';
+          ctx.arc(x + slot / 2 + (k - (pips.n - 1) / 2) * 10, y0 + slot - 7, 3, 0, TAU);
+          ctx.fillStyle = k < pips.on ? pips.color : 'rgba(255,255,255,0.15)';
           ctx.fill();
         }
       }
 
-      if (cd > 0 && def.cooldown > 30) {
-        const k = cd / def.cooldown;
+      if (cd > 0 && cdMax > 30) {
+        const k = cd / cdMax;
         ctx.save();
         roundRect(ctx, x, y0, slot, slot, 10);
         ctx.clip();
@@ -459,6 +467,117 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   switch (ability) {
+    case 'chrono':
+      // A short blade with a clock-hand notch
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(-12, 12);
+      ctx.lineTo(10, -10);
+      ctx.stroke();
+      ctx.strokeStyle = COLORS.chrono;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-14, 4);
+      ctx.lineTo(-6, 12);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(10, -10, 3, 0, TAU);
+      ctx.stroke();
+      break;
+    case 'winder':
+      // A spinning ring with a return arrow
+      ctx.strokeStyle = COLORS.chrono;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(4, -2, 7, 0, TAU);
+      ctx.stroke();
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 15, Math.PI * 0.65, Math.PI * 1.25);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-14, -9);
+      ctx.lineTo(-9, -12);
+      ctx.lineTo(-8, -6);
+      ctx.stroke();
+      break;
+    case 'flicker':
+      // Afterimages streaking right
+      ctx.fillStyle = COLORS.chrono;
+      for (const [ox, a] of [[-12, 0.25], [-5, 0.5], [3, 1]]) {
+        ctx.globalAlpha = a;
+        ctx.beginPath();
+        ctx.arc(ox, 0, 6, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(10, -8);
+      ctx.lineTo(15, 0);
+      ctx.lineTo(10, 8);
+      ctx.stroke();
+      break;
+    case 'converge':
+      // Rings closing in on a point
+      ctx.strokeStyle = COLORS.chrono;
+      for (const [r, w] of [[15, 1.5], [10, 2], [5, 2.5]]) {
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 2, 0, TAU);
+      ctx.fill();
+      break;
+    case 'recall':
+      // A clock face with a hand turning back
+      ctx.strokeStyle = COLORS.chrono;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, -Math.PI * 0.35, Math.PI * 1.45);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-6, -15);
+      ctx.lineTo(-3, -10);
+      ctx.lineTo(-9, -9);
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(0, -8);
+      ctx.moveTo(0, 0);
+      ctx.lineTo(-6, 3);
+      ctx.stroke();
+      break;
+    case 'pulse':
+      // A round bomb with a blinking core
+      ctx.fillStyle = '#3a3f4f';
+      ctx.beginPath();
+      ctx.arc(0, 2, 11, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.chrono;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = COLORS.chrono;
+      ctx.beginPath();
+      ctx.arc(0, 2, 4, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.chrono;
+      ctx.beginPath();
+      ctx.moveTo(-12, -12);
+      ctx.lineTo(-8, -8);
+      ctx.moveTo(12, -12);
+      ctx.lineTo(8, -8);
+      ctx.moveTo(0, -15);
+      ctx.lineTo(0, -10);
+      ctx.stroke();
+      break;
     case 'bolt':
       ctx.fillStyle = color;
       ctx.beginPath();

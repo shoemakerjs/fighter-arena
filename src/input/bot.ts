@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, DRAIN, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, teamSees } from '../sim/vision';
 
@@ -115,9 +115,10 @@ export class Bot {
     const mage = me.champ === CHAMP.MAGE;
     const samurai = me.champ === CHAMP.SAMURAI;
     const blood = me.champ === CHAMP.BLOOD;
+    const chrono = me.champ === CHAMP.CHRONO;
     // Champions that fight up close and walk in rather than kite.
-    const melee = warrior || samurai;
-    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI;
+    const melee = warrior || samurai || chrono;
+    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO;
     const foeLow = foe.hp <= CHAMPIONS[foe.champ].hp * EXECUTE.threshold;
     const kit = CHAMPIONS[me.champ].abilities;
     const ready = (slot: number) => me.cooldowns[slot] === 0 && me.energy >= kit[slot].energyCost;
@@ -177,9 +178,9 @@ export class Bot {
     }
 
     for (const z of s.zones) {
-      if (z.kind !== 'rain' || s.players[z.owner].team === me.team) continue;
+      if ((z.kind !== 'rain' && z.kind !== 'converge') || s.players[z.owner].team === me.team) continue;
       const zd = Math.hypot(me.x - z.x, me.y - z.y);
-      if (zd < RAIN.r + PLAYER_R + 25 && this.decide(z.id)) {
+      if (zd < (z.kind === 'rain' ? RAIN.r : CONVERGE.r) + PLAYER_R + 25 && this.decide(z.id)) {
         const k = zd < 1 ? 1 : zd;
         wx = ((me.x - z.x) / k) * 3;
         wy = ((me.y - z.y) / k) * 3;
@@ -280,6 +281,20 @@ export class Bot {
           engage = true;
         } else if (ready(SLOT.M2) && los && dist < (crescent ? PROJ.crescent.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
         else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
+      } else if (chrono) {
+        const reach = 2 * PLAYER_R + CHRONO.reach;
+        // Recall after a bad trade (it lost a lot over the last two seconds), or when low and cornered.
+        const lost = me.trail.length >= 3 ? me.trail[2] - me.hp : 0;
+        const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.35;
+        const pinned = foe.stunT > 0 || foe.slowT > 0 || foe.rootT > 0 || foe.cast !== null;
+        if (ready(SLOT.E) && (lost >= 30 || (lowMe && dist < 150)) && r() < 0.2) press(SLOT.E);
+        else if (ready(SLOT.R) && !hidden && los && dist < PROJ.pulse.range - 30 && r() < (pinned ? 0.3 : 0.03)) press(SLOT.R);
+        else if (ready(SLOT.Q) && !hidden && dist < CONVERGE.range && (pinned || dist < reach + 20) && r() < 0.06 * a) press(SLOT.Q);
+        else if (me.charges > 0 && ready(SLOT.SPACE) && !hidden && dist > 170 && dist < 170 + FLICKER.range && r() < 0.08 * a) {
+          press(SLOT.SPACE);
+          engage = true;
+        } else if (ready(SLOT.M2) && los && dist < PROJ.winder.range - 20 && r() < 0.08 * a) press(SLOT.M2);
+        else if (dist < reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (blood) {
         const hurt = me.hp < CHAMPIONS[me.champ].hp * 0.75;
         // Night Swarm: through a weakened target, or away from a melee one when low.
@@ -368,6 +383,10 @@ export class Bot {
       const ey = (escape ? -ny : dodgeY) * flip;
       ax = me.x + ex * 200;
       ay = me.y + ey * 200;
+    } else if (aimId === 'converge') {
+      // Where the target will be when the field collapses (roughly).
+      ax = tx + this.tvx * CONVERGE.delay * this.p.lead * 0.4;
+      ay = ty + this.tvy * CONVERGE.delay * this.p.lead * 0.4;
     } else if (aimId === 'swarm') {
       // Fly through the target, or away from it when low.
       const away = me.hp < CHAMPIONS[me.champ].hp * 0.3 && foe.hp >= CHAMPIONS[foe.champ].hp * 0.4;

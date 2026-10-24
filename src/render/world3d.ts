@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CONVERGE, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -52,6 +52,10 @@ interface ZoneView {
 
 /** Projectiles drawn as an arrow pointing along their flight instead of a spinning gem. */
 const ARROWS: ProjKind[] = ['arrow', 'longshot', 'sonic', 'snare'];
+
+function zoneRadius(kind: Zone['kind']): number {
+  return kind === 'rain' ? RAIN.r : kind === 'converge' ? CONVERGE.r : kind === 'pulse' ? PULSE.r : SONIC.r;
+}
 
 interface KindLook {
   core: THREE.BufferGeometry;
@@ -111,6 +115,8 @@ export class World3D implements WorldView {
   private aimLane: THREE.Group;
   private aimLaneMesh: THREE.Mesh;
   private aimCircle: THREE.Mesh;
+  /** Where Recall would land (shown to Kairo's own player). */
+  private recallMark: THREE.Mesh;
 
   constructor(canvas: HTMLCanvasElement) {
     const r = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -328,6 +334,13 @@ export class World3D implements WorldView {
     this.aimCircle.position.y = 1.4;
     this.aimCircle.visible = false;
     scene.add(this.aimCircle);
+    this.recallMark = new THREE.Mesh(
+      new THREE.RingGeometry(PLAYER_R - 4, PLAYER_R, 40),
+      new THREE.MeshBasicMaterial({ color: COLORS.chrono, transparent: true, opacity: 0.65, depthWrite: false, toneMapped: false }),
+    );
+    this.recallMark.rotation.x = -Math.PI / 2;
+    this.recallMark.visible = false;
+    scene.add(this.recallMark);
   }
 
   // ---------------------------------------------------------------- view
@@ -761,9 +774,11 @@ export class World3D implements WorldView {
         ? new THREE.IcosahedronGeometry(size * 0.75, 0)
         : kind === 'frost' || kind === 'hook'
           ? new THREE.OctahedronGeometry(size * 0.85, 0)
-          : kind === 'transfusion'
+          : kind === 'transfusion' || kind === 'pulse'
             ? new THREE.IcosahedronGeometry(size * 0.7, 0)
-            : new THREE.SphereGeometry(size * 0.6, 12, 8);
+            : kind === 'winder'
+              ? new THREE.TorusGeometry(size * 0.7, size * 0.22, 6, 16)
+              : new THREE.SphereGeometry(size * 0.6, 12, 8);
     const sprite = (opacity: number) =>
       new THREE.SpriteMaterial({ map: this.glowTex, color, opacity, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     l = {
@@ -923,7 +938,7 @@ export class World3D implements WorldView {
 
   private createZoneView(z: Zone): ZoneView {
     const color = abilityColor(z.kind, z.owner);
-    const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
+    const r = zoneRadius(z.kind);
     const fill = new THREE.Mesh(
       new THREE.CircleGeometry(r, 48),
       new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
@@ -960,11 +975,25 @@ export class World3D implements WorldView {
         this.zoneViews.set(z.id, v);
       }
       // Someone else's sensor shows only when you can see where it lies.
-      const seen = localId === null || cur.training || cur.players[z.owner].team === cur.players[localId].team || z.kind === 'rain' || teamSees(cur, localId, z.x, z.y);
+      // Rain, fields and bombs are meant to be seen and dodged.
+      const seen = localId === null || cur.training || cur.players[z.owner].team === cur.players[localId].team || z.kind !== 'sonic' || teamSees(cur, localId, z.x, z.y);
       v.fill.visible = v.ring.visible = seen;
       const fillMat = v.fill.material as THREE.MeshBasicMaterial;
       const ringMat = v.ring.material as THREE.MeshBasicMaterial;
-      if (z.kind === 'rain') {
+      if (z.kind === 'converge') {
+        // The field closes in as the moment comes.
+        const k = z.t / CONVERGE.delay;
+        v.ring.scale.setScalar(Math.max(0.05, k));
+        fillMat.opacity = 0.1 + 0.15 * (1 - k);
+        ringMat.opacity = 0.9;
+      } else if (z.kind === 'pulse') {
+        // Follows whoever it's stuck to, blinking faster towards the burst.
+        v.fill.position.set(z.x, 1.25, z.y);
+        v.ring.position.set(z.x, 1.35, z.y);
+        const k = 1 - z.t / PULSE.fuse;
+        fillMat.opacity = 0.08 + 0.18 * Math.abs(Math.sin(this.time * (6 + 24 * k)));
+        ringMat.opacity = 0.9;
+      } else if (z.kind === 'rain') {
         const falling = z.t > RAIN.ticks;
         // While the volley is in the air the fill grows like a meteor warning.
         const k = falling ? 1 - (z.t - RAIN.ticks) / RAIN.delay : 1;
@@ -1050,11 +1079,18 @@ export class World3D implements WorldView {
   private updateAim(s: GameState, opts: DrawOptions) {
     this.aimLane.visible = false;
     this.aimCircle.visible = false;
+    this.recallMark.visible = false;
     if (opts.localId === null || s.phase !== 'fight') return;
     const p = s.players[opts.localId];
+    // Kairo sees where Recall would take it.
+    if (p.champ === CHAMP.CHRONO && p.trail.length >= 3 && !p.out) {
+      this.recallMark.visible = true;
+      this.recallMark.position.set(p.trail[0], 1.5, p.trail[1]);
+      (this.recallMark.material as THREE.MeshBasicMaterial).opacity = p.cooldowns[SLOT.E] === 0 ? 0.65 : 0.2;
+    }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'winder', 'pulse'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1081,8 +1117,8 @@ export class World3D implements WorldView {
       this.aimCircle.position.set(p.x, 1.4, p.y);
       this.aimCircle.scale.setScalar((TIDES.r / METEOR.r) * (0.5 + 0.5 * draw));
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.crimson);
-    } else if ((id === 'meteor' || id === 'rain') && opts.cursor) {
-      const range = id === 'rain' ? RAIN.range : METEOR.range;
+    } else if ((id === 'meteor' || id === 'rain' || id === 'converge') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
@@ -1093,7 +1129,7 @@ export class World3D implements WorldView {
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
-      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : 1);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : 1);
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }

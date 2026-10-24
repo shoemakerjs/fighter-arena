@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, TIDES, WHIRL } from '../sim/constants';
+import { CONVERGE, COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -91,7 +91,7 @@ export class Fx {
       if (at && hidden(at.player, at.x, at.y)) continue;
       switch (e.type) {
         case 'cast':
-          if (e.ability === 'meteor' || e.ability === 'rift' || e.ability === 'rain' || e.ability === 'fate') this.sound('meteorCast');
+          if (e.ability === 'meteor' || e.ability === 'rift' || e.ability === 'rain' || e.ability === 'fate' || e.ability === 'pulse') this.sound('meteorCast');
           break;
 
         case 'release': {
@@ -128,6 +128,9 @@ export class Fx {
           } else if (e.ability === 'bloodbolt' || e.ability === 'transfusion') {
             this.burst(e.x, e.y, e.ability === 'transfusion' ? 10 : 4, COLORS.crimson, 150, 2.6, 0.25);
             this.sound(e.ability === 'transfusion' ? 'frost' : 'bolt');
+          } else if (e.ability === 'winder' || e.ability === 'pulse' || e.ability === 'converge') {
+            this.burst(e.x, e.y, e.ability === 'winder' ? 6 : 10, COLORS.chrono, 160, 2.6, 0.28);
+            this.sound(e.ability === 'winder' ? 'whirl' : 'frost');
           } else if (e.ability === 'rain') {
             // Volley loosed into the sky.
             for (let i = 0; i < 12; i++) this.particles.push(spark(e.x, e.y, COLORS.vine, 900));
@@ -153,6 +156,8 @@ export class Fx {
             e.kind === 'execute' ||
             e.kind === 'fate' ||
             e.kind === 'crescent' ||
+            e.kind === 'pulse' ||
+            e.kind === 'resonance' ||
             (e.kind === 'tides' && e.dmg >= TIDES.dmg + TIDES.bonus * 0.8) ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
@@ -359,6 +364,53 @@ export class Fx {
           this.sound('slash');
           break;
         }
+
+        case 'flicker': {
+          // A blur from where it was to where it is.
+          for (let i = 0; i <= 4; i++) {
+            const k = i / 4;
+            this.burst(e.x0 + (e.x - e.x0) * k, e.y0 + (e.y - e.y0) * k, 3, COLORS.chrono, 70, 2.6, 0.3, 30);
+          }
+          this.sound('dash');
+          break;
+        }
+
+        case 'recall': {
+          // Rewinding: a trail of clock-colored motes back to the old spot.
+          for (let i = 0; i <= 8; i++) {
+            const k = i / 8;
+            this.burst(e.x0 + (e.x - e.x0) * k, e.y0 + (e.y - e.y0) * k, 2, i % 2 ? '#ffffff' : COLORS.chrono, 60, 2.4, 0.5, 30);
+          }
+          this.rings.push({ x: e.x, y: e.y, r0: 60, r1: 18, life: 0.35, max: 0.35, color: COLORS.chrono, width: 4 });
+          this.sound('counter');
+          break;
+        }
+
+        case 'resonance':
+          this.rings.push({ x: e.x, y: e.y, r0: 12, r1: 60, life: 0.3, max: 0.3, color: COLORS.chrono, width: 4 });
+          break;
+
+        case 'converge':
+          this.rings.push({ x: e.x, y: e.y, r0: CONVERGE.r + 30, r1: 10, life: 0.3, max: 0.3, color: COLORS.chrono, width: 7 });
+          this.burst(e.x, e.y, 24, COLORS.chrono, 220, 3, 0.4, 10);
+          this.shake += 4;
+          this.sound('boom');
+          break;
+
+        case 'stick':
+          this.rings.push({ x: e.x, y: e.y, r0: 30, r1: 12, life: 0.25, max: 0.25, color: COLORS.chrono, width: 3 });
+          this.sound('tick');
+          break;
+
+        case 'pulse':
+          this.rings.push({ x: e.x, y: e.y, r0: 16, r1: PULSE.r + 30, life: 0.45, max: 0.45, color: COLORS.chrono, width: 9 });
+          this.burst(e.x, e.y, 40, COLORS.chrono, 380, 4.5, 0.6, 15);
+          this.burst(e.x, e.y, 16, '#fff3c4', 240, 3, 0.35, 15);
+          this.shake += 10;
+          this.flash = 0.12;
+          this.flashColor = COLORS.chrono;
+          this.sound('boom');
+          break;
 
         case 'blink': {
           this.burst(e.x0, e.y0, 18, COLORS.shadow, 160, 3.5, 0.45, 25);
@@ -595,7 +647,14 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'fate':
       return { x: e.x, y: e.y, player: e.player };
     case 'swarm':
+    case 'flicker':
+    case 'recall':
+    case 'resonance':
+    case 'stick':
       return { x: e.x, y: e.y, player: e.player };
+    case 'converge':
+    case 'pulse':
+      return { x: e.x, y: e.y, player: e.owner };
     case 'impact':
       return { x: e.x, y: e.y, player: e.owner };
     default:

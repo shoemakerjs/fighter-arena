@@ -64,7 +64,8 @@ export type AbilityId =
   | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute'
   | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain'
   | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
-  | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm';
+  | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm'
+  | 'chrono' | 'winder' | 'flicker' | 'converge' | 'recall' | 'pulse';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -86,7 +87,7 @@ export interface ChampionDef {
   abilities: AbilityDef[];
 }
 
-export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4, BLOOD: 5 } as const;
+export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4, BLOOD: 5, CHRONO: 6 } as const;
 
 export const CHAMPIONS: ChampionDef[] = [
   {
@@ -175,6 +176,21 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'swarm', name: 'Night Swarm', desc: 'scatter into bats and fly toward the cursor, untargetable; enemies you pass through take damage and are slowed, healing you, 100 energy', cooldown: 60, cast: 0, castSlow: 1, energyCost: 100 },
     ],
   },
+  {
+    name: 'Chronoblade',
+    role: 'rewind and skirmish',
+    hp: 130,
+    speed: 3.5,
+    abilities: [
+      { id: 'chrono', name: 'Chrono Blade', desc: 'quick slash, hold to keep slashing; every third hit in a row on one enemy resonates: bonus damage, slows it and hastes you', cooldown: 5, cast: 9, castSlow: 0.6, energyCost: 0 },
+      { id: 'winder', name: 'Timewinder', desc: 'throw a device that flies out and comes back to you, hitting on both ways; the way out slows', cooldown: 270, cast: 14, castSlow: 0.5, energyCost: 0 },
+      // The cooldown is only a short lockout between blinks; charges do the limiting.
+      { id: 'flicker', name: 'Flicker', desc: 'short blink where you are moving (or aiming), two charges', cooldown: 12, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'converge', name: 'Parallel Convergence', desc: 'place a field that collapses after 1.5 s, stunning enemies inside', cooldown: 600, cast: 10, castSlow: 0.5, energyCost: 0 },
+      { id: 'recall', name: 'Recall', desc: 'jump back to where you were 2 s ago, regaining a quarter of the HP you lost since', cooldown: 720, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'pulse', name: 'Pulse Bomb', desc: 'throw a bomb that sticks to the first enemy it hits (or lands) and bursts after 1 s, 100 energy', cooldown: 60, cast: 12, castSlow: 0.4, energyCost: 100 },
+    ],
+  },
 ];
 
 export interface ProjDef {
@@ -207,6 +223,10 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   crescent: { speed: 12, r: 22, range: 440, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
   bloodbolt: { speed: 12, r: 9, range: 440, dmg: 7, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
   transfusion: { speed: 15, r: 11, range: 420, dmg: 13, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
+  // Flies out `range`, then homes back (WINDER); hits each enemy once per way, the way out slows.
+  winder: { speed: 11, r: 12, range: 340, dmg: 7, energy: 8, kb: 0, slowMul: 0.6, slowT: 45 },
+  // Deals nothing itself: it sticks and bursts (PULSE).
+  pulse: { speed: 11, r: 10, range: 300, dmg: 0, energy: 0, kb: 0, slowMul: 1, slowT: 0 },
 };
 
 // Mage
@@ -281,9 +301,25 @@ export const TIDES = { minDraw: 12, r: 135, dmg: 10, bonus: 14, slowMul: 0.6, sl
  * `dmg` and heals `heal`. Moving at `speed`. A pillar between the two breaks it.
  */
 export const DRAIN = { ticks: 120, range: 300, every: 15, dmg: 5, heal: 4, energy: 4, speed: 0.6 };
-/** Area within `range` of radius `r`: enemies take `amp` times damage for `ticks`, then take `dmg` and heal the caster `heal` each. */
 /**
  * Night Swarm: fly up to `range` toward the cursor over `ticks` as bats, untargetable. Every enemy
  * passed through takes `dmg`, is slowed to `slowMul` for `slowT` and heals you `heal`.
  */
 export const SWARM = { range: 260, ticks: 20, dmg: 10, heal: 5, slowMul: 0.75, slowT: 45 };
+
+// Chronoblade
+/**
+ * Like KATANA but shorter. `hits` hits in a row on one enemy (each within `window` of the last,
+ * from Chrono Blade or Timewinder) resonate: +`bonus`, a slow, and haste for the attacker.
+ */
+export const CHRONO = { reach: 48, minDot: 0.5, dmg: 6, energy: 9, hits: 3, window: 150, bonus: 12, slowMul: 0.65, slowT: 50, haste: 60 };
+/** Timewinder's speed on the way back to its thrower. */
+export const WINDER = { returnSpeed: 13 };
+/** Blink `range` along your movement (or the aim when standing); `charges` charges, each back after `recharge`. */
+export const FLICKER = { range: 125, charges: 2, recharge: 180 };
+/** A field of radius `r` up to `range` away; after `delay` it stuns enemies inside for `stun` and deals `dmg`. */
+export const CONVERGE = { range: 420, r: 90, delay: 90, stun: 50, dmg: 6 };
+/** Back to where you were `ticks` ago (positions sampled every `every`), regaining `heal` of the HP lost since. */
+export const RECALL = { ticks: 120, every: 6, heal: 0.25 };
+/** Sticks to the first enemy hit (or lies where it stops) and bursts `fuse` later within `r`. */
+export const PULSE = { fuse: 60, r: 90, dmg: 30, kb: 6 };
