@@ -25,11 +25,16 @@ export function rosterThumb(r: RosterEntry): string {
   return `background-image: url(${r.art}); background-size: 560% auto; background-position: ${r.portrait};${r.flip ? ' transform: scaleX(-1);' : ''}`;
 }
 
+/** Key art URL, versioned per build so a repainted file isn't served stale from the browser cache. */
+function art(file: string): string {
+  return `./art/${file}?v=${__BUILD__}`;
+}
+
 export const ROSTER: RosterEntry[] = [
   {
     hero: 'Perrie',
     category: 'Mage',
-    art: './art/mage.webp',
+    art: art('mage.webp'),
     flip: false,
     portrait: '74% 9%',
     focus: 0.67,
@@ -38,7 +43,7 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Bogo Boga',
     category: 'Close combat',
-    art: './art/warrior.webp',
+    art: art('warrior.webp'),
     flip: false,
     portrait: '62% 3%',
     artShift: '16vw',
@@ -48,7 +53,7 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Shade',
     category: 'Assassin',
-    art: './art/assassin.webp',
+    art: art('assassin.webp'),
     flip: true,
     portrait: '22% 4%',
     focus: 0.37,
@@ -57,7 +62,7 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Elianis',
     category: 'Marksman',
-    art: './art/archer.webp',
+    art: art('archer.webp'),
     flip: true,
     portrait: '45% 20%',
     focus: 0.46,
@@ -66,7 +71,7 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Sozuki',
     category: 'Close combat',
-    art: './art/samurai.webp',
+    art: art('samurai.webp'),
     flip: true,
     portrait: '38% 12%',
     focus: 0.34,
@@ -75,7 +80,7 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Romulus',
     category: 'Mage',
-    art: './art/vampire.webp',
+    art: art('vampire.webp'),
     flip: true,
     portrait: '47% 0%',
     focus: 0.47,
@@ -85,7 +90,7 @@ export const ROSTER: RosterEntry[] = [
   {
     hero: 'Rustic',
     category: 'Assassin',
-    art: './art/rustic.webp',
+    art: art('rustic.webp'),
     flip: true,
     portrait: '61% 35%',
     artShift: '10vw',
