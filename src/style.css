@@ -160,6 +160,11 @@ button {
   color: var(--text);
 }
 
+.tags {
+  display: flex;
+  gap: 8px;
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
