@@ -338,6 +338,11 @@ export class Fx {
           this.burst(e.x, e.y, 10, COLORS.shadow, 140, 2.5, 0.3, 25);
           break;
 
+        case 'ambush':
+          this.texts.push({ x: e.x, y: e.y - 62, text: 'AMBUSH', color: COLORS.shadow, life: 1, max: 1, size: 19 });
+          this.burst(e.x, e.y, 16, COLORS.shadow, 240, 3, 0.35, 30);
+          break;
+
         case 'markPop': {
           this.rings.push({ x: e.x, y: e.y, r0: 10, r1: 60, life: 0.35, max: 0.35, color: COLORS.shadow, width: 6 });
           this.burst(e.x, e.y, 20, COLORS.shadow, 280, 3.5, 0.4, 40);

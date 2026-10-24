@@ -126,6 +126,7 @@ function createPlayer(id: number, champ: number, dummy = false): Player {
     whirlT: 0,
     markT: 0,
     stealthT: 0,
+    ambushT: 0,
     poisonT: 0,
     rootT: 0,
     revealT: 0,
@@ -285,6 +286,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.counterT > 0) p.counterT--;
   if (p.hitT > 0) p.hitT--;
   if (p.markT > 0) p.markT--;
+  if (p.ambushT > 0) p.ambushT--;
   if (p.rootT > 0) p.rootT--;
   if (p.revealT > 0) p.revealT--;
   if (p.quickT > 0) p.quickT--;
@@ -519,9 +521,10 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
   p.cooldowns[slot] = def.cooldown;
   p.energy -= def.energyCost;
   const foe = s.players[1 - p.id];
-  // Attacking out of stealth reveals you.
+  // Attacking out of stealth reveals you, and the hit it lands is an ambush.
   if (p.stealthT > 0) {
     p.stealthT = 0;
+    p.ambushT = SMOKE.window;
     ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   }
 
@@ -848,6 +851,11 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
   if (target.counterT > 0) {
     block(target, x, y, ev);
     return false;
+  }
+  if (attacker.ambushT > 0) {
+    attacker.ambushT = 0;
+    dmg = Math.round(dmg * SMOKE.ambush);
+    ev.push({ type: 'ambush', player: target.id, x: target.x, y: target.y });
   }
   if (target.markT > 0 && kind !== 'mark') {
     target.markT = 0;

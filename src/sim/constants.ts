@@ -123,9 +123,9 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'dagger', name: 'Dagger', desc: 'quick short-range throws, hold to keep throwing', cooldown: 8, cast: 8, castSlow: 0.7, energyCost: 0 },
       { id: 'mark', name: 'Mark', desc: 'marks the enemy; your next hit deals +10', cooldown: 300, cast: 16, castSlow: 0.5, energyCost: 0 },
       { id: 'blink', name: 'Shadow Step', desc: 'instant teleport to the cursor', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'smoke', name: 'Veil', desc: 'stealth and haste for 2 s; attacking reveals you', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'smoke', name: 'Veil', desc: 'stealth and haste for 3 s; attacking reveals you, and that first hit deals +50%', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'poison', name: 'Venom', desc: 'poisoned dagger: damage over 2 s', cooldown: 420, cast: 12, castSlow: 0.6, energyCost: 0 },
-      { id: 'execute', name: 'Execute', desc: 'dash through the enemy; double damage under 25% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
+      { id: 'execute', name: 'Execute', desc: 'dash through the enemy; double damage under 35% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
     ],
   },
   {
@@ -207,10 +207,11 @@ export const RIFT = { len: 360, half: 42, dmg: 30, kb: 11 };
 // Assassin
 export const MARK = { ticks: 180, bonus: 10 };
 export const BLINK = { range: 230 };
-export const SMOKE = { ticks: 120, speed: 1.3 };
+/** Stealth; attacking out of it makes the first hit within `window` ticks deal `ambush` times damage. */
+export const SMOKE = { ticks: 180, speed: 1.3, ambush: 1.5, window: 45 };
 export const POISON = { ticks: 120, every: 20, dmg: 2 };
 /** Dash through the target; double damage if it's at or below `threshold` of max HP. */
-export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.25 };
+export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.35 };
 
 // Archer
 /** Draw at least `minDraw` ticks; a full draw adds these on top of PROJ.longshot. */

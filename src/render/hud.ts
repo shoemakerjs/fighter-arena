@@ -1,4 +1,4 @@
-import { CHAMPIONS, MAX_ENERGY, ROUNDS_TO_WIN, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, type AbilityId } from '../sim/constants';
+import { CHAMP, CHAMPIONS, EXECUTE, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, type AbilityId } from '../sim/constants';
 import { abilityOf, maxHp } from '../sim/step';
 import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
@@ -58,7 +58,7 @@ export class Hud {
     for (const p of players) {
       // An enemy in fog or stealth has no bars to give it away.
       if (opts.localId !== null && p.id !== opts.localId && !canSee(cur, opts.localId, p.id)) continue;
-      this.drawOverhead(p, view.worldToScreen(p.x, p.y, OVERHEAD_H));
+      this.drawOverhead(p, view.worldToScreen(p.x, p.y, OVERHEAD_H), cur);
     }
     this.drawTexts(fx, view);
 
@@ -70,7 +70,40 @@ export class Hud {
     if (opts.cursor) this.drawCursor(opts.cursor, opts.localId ?? 0);
   }
 
-  private drawOverhead(p: Player, at: Vec) {
+  /**
+   * Execute marker for a bar of `p` facing a Shade: a notch at the threshold; below it the
+   * fill turns blood red and pulses, and a blade mark shows when Execute is ready to use.
+   * `x0`/`w` span the bar, `fromRight` for bars that drain towards the right.
+   */
+  private drawExecuteMark(s: GameState, p: Player, x0: number, y: number, w: number, h: number, fromRight: boolean) {
+    const foe = s.players[1 - p.id];
+    if (foe.champ !== CHAMP.ASSASSIN || foe.dummy) return;
+    const { ctx } = this;
+    const nx = fromRight ? x0 + w - w * EXECUTE.threshold : x0 + w * EXECUTE.threshold;
+    const below = p.hp > 0 && p.hp <= maxHp(p) * EXECUTE.threshold;
+    if (below) {
+      const hpW = (w * p.hp) / maxHp(p);
+      ctx.globalAlpha = 0.65 + 0.35 * Math.sin(this.time * 10);
+      ctx.fillStyle = COLORS.blood;
+      ctx.fillRect(fromRight ? x0 + w - hpW : x0, y, hpW, h);
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = below ? '#ffffff' : 'rgba(255, 45, 85, 0.9)';
+    ctx.fillRect(Math.round(nx) - 1, y - 2, 2, h + 4);
+    const ready = below && foe.energy >= CHAMPIONS[foe.champ].abilities[SLOT.R].energyCost && foe.cooldowns[SLOT.R] === 0;
+    if (ready) {
+      // Little downward blade above the notch
+      ctx.fillStyle = COLORS.blood;
+      ctx.beginPath();
+      ctx.moveTo(nx, y - 3);
+      ctx.lineTo(nx - 4, y - 11);
+      ctx.lineTo(nx + 4, y - 11);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  private drawOverhead(p: Player, at: Vec, s: GameState) {
     if (p.hp <= 0) return;
     const { ctx } = this;
     const color = COLORS.players[p.id];
@@ -85,6 +118,7 @@ export class Hud {
     ctx.fillRect(x, y, (w * this.chip[p.id]) / maxHp(p), 6);
     ctx.fillStyle = color;
     ctx.fillRect(x, y, (w * p.hp) / maxHp(p), 6);
+    this.drawExecuteMark(s, p, x, y, w, 6, false);
     // Energy, split in quarters
     ctx.fillStyle = COLORS.energy;
     ctx.fillRect(x, y + 7.5, (w * p.energy) / MAX_ENERGY, 2);
@@ -203,6 +237,7 @@ export class Hud {
       ctx.fillRect(i === 0 ? bx + barW - chipW : bx, y + 7, chipW, 8);
       ctx.fillStyle = color;
       ctx.fillRect(i === 0 ? bx + barW - hpW : bx, y + 7, hpW, 8);
+      this.drawExecuteMark(s, p, bx, y + 7, barW, 8, i === 0);
 
       const nameW = ctx.measureText(name).width;
       for (let r = 0; r < (s.training ? 0 : ROUNDS_TO_WIN); r++) {

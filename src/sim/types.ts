@@ -76,6 +76,8 @@ export interface Player {
   /** Marked by the enemy assassin: the next hit pops it for bonus damage. */
   markT: number;
   stealthT: number;
+  /** Just attacked out of stealth: the next hit within these ticks is an ambush (SMOKE.ambush). */
+  ambushT: number;
   poisonT: number;
   /** Rooted by a snare: can't walk or use mobility. */
   rootT: number;
@@ -190,6 +192,8 @@ export type GameEvent =
   | { type: 'stealth'; player: number; x: number; y: number }
   | { type: 'reveal'; player: number; x: number; y: number }
   | { type: 'markPop'; player: number; x: number; y: number }
+  /** A hit boosted by attacking out of stealth; `player` is the one hit. */
+  | { type: 'ambush'; player: number; x: number; y: number }
   | { type: 'execute'; player: number; x: number; y: number; lethal: boolean }
   | { type: 'counter'; player: number }
   | { type: 'vault'; player: number; x: number; y: number }
