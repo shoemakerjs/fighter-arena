@@ -115,14 +115,14 @@ export interface Player {
   drainTarget: number;
   /** Transfusions cast this round (every third is empowered). */
   bloodCount: number;
-  /** Chronoblade: hits in a row on `resoTarget`, and ticks left to land the next one. */
+  /** Time kobold: hits in a row on `resoTarget`, and ticks left to land the next one. */
   resoN: number;
   resoT: number;
   resoTarget: number;
-  /** Chronoblade: Flicker charges, and ticks until the next one comes back. */
+  /** Time kobold: Flicker charges, and ticks until the next one comes back. */
   charges: number;
   chargeT: number;
-  /** Chronoblade: recent [x, y, hp] samples, oldest first, for Recall. */
+  /** Time kobold: recent [x, y, hp] samples, oldest first, for Recall. */
   trail: number[];
   counterT: number;
   slowT: number;
@@ -242,7 +242,7 @@ export type GameEvent =
   | { type: 'bleed'; player: number; x: number; y: number }
   /** A missed Transfusion costs its caster HP. */
   | { type: 'bloodloss'; player: number; amount: number; x: number; y: number }
-  /** Chronoblade: Flicker and Recall jumps. */
+  /** Time kobold: Flicker and Recall jumps. */
   | { type: 'flicker'; player: number; x0: number; y0: number; x: number; y: number }
   | { type: 'recall'; player: number; x0: number; y0: number; x: number; y: number }
   /** Resonance going off on `player`. */

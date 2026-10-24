@@ -361,7 +361,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     p.charges++;
     if (p.charges < FLICKER.charges) p.chargeT = FLICKER.recharge;
   }
-  // Chronoblade remembers where it was, for Recall.
+  // The time kobold remembers where it was, for Recall.
   if (p.champ === CHAMP.CHRONO && s.roundFrame % RECALL.every === 0) {
     p.trail.push(p.x, p.y, p.hp);
     if (p.trail.length > 3 * (RECALL.ticks / RECALL.every + 1)) p.trail.splice(0, 3);
@@ -1191,7 +1191,7 @@ function swarmContact(s: GameState, p: Player, ev: GameEvent[]) {
   }
 }
 
-/** Chronoblade's hits in a row on one enemy; every CHRONO.hits-th resonates. */
+/** The time kobold's hits in a row on one enemy; every CHRONO.hits-th resonates. */
 function resonate(p: Player, foe: Player, ev: GameEvent[]) {
   if (p.resoTarget !== foe.id || p.resoT === 0) {
     p.resoTarget = foe.id;

@@ -329,6 +329,7 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   if (champ === CHAMP.ARCHER) return buildArcher(color, glowTex);
   if (champ === CHAMP.SAMURAI) return buildSamurai(color, glowTex);
   if (champ === CHAMP.BLOOD) return buildVampire(color, glowTex);
+  if (champ === CHAMP.CHRONO) return buildRustic(color, glowTex);
   // No modeled skin yet: the test mannequin.
   return buildDummy(color, glowTex);
 }
@@ -2267,4 +2268,221 @@ function buildVampire(color: string, glowTex: THREE.Texture): ChampionRig {
 
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon: orb, tip, tipGlow, mats: [matTeam, matCoat, matCoatBack, matLinen, matLeather, matSkin, matHair], ...markers };
+}
+
+/**
+ * Rustic — time kobold (from the concept sheet), toon style: a hunched grey rat with a
+ * long pink tail, red eyes and a snout full of teeth, a riveted miner's helmet with a
+ * glowing green clock for a lamp, a torn red scarf and brown rags, wrapped shins, a
+ * backpack with scrolls and an hourglass, and a clockwork bomb in each claw.
+ * The right arm (with its bomb) is the weapon. Team color: armband and scarf knot.
+ */
+function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team);
+  const matFur = toonSoft('#8f8486');
+  const matBelly = toonSoft('#d8cfc6');
+  const matPink = toonSoft('#c98a8e');
+  const matRags = toon('#4f3b2d', { side: THREE.DoubleSide });
+  const matScarf = toon('#7c2026', { side: THREE.DoubleSide });
+  const matWrap = toon('#5c4c3e');
+  const matLeather = toon('#3d3129');
+  const matBronze = toon('#8a6a3c');
+  const matIron = toon('#3a3631');
+  const matParch = toon('#cdb88e');
+  const matIvory = toon('#e8dcc0');
+  const matTooth = new THREE.MeshBasicMaterial({ color: '#efe6d2' });
+  const matEye = new THREE.MeshBasicMaterial({ color: '#ff3b3b', toneMapped: false });
+  const matTime = new THREE.MeshBasicMaterial({ color: COLORS.chrono, toneMapped: false });
+  const matGlass = new THREE.MeshBasicMaterial({ color: '#cfe8d4', transparent: true, opacity: 0.35, depthWrite: false });
+  const matSand = toon('#d9b46a');
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Digitigrade rat legs: thigh forward, shin back, wrapped, clawed pink feet
+  for (const side of [-1, 1]) {
+    const hip = v(-1, 21, side * 5);
+    const knee = v(4, 13, side * 5.6);
+    const ankle = v(-0.5, 4.5, side * 5.8);
+    keep(limb(body, hip, knee, 3, matFur));
+    keep(limb(body, knee, ankle, 2.3, matFur));
+    wraps(body, knee.clone().lerp(ankle, 0.15), ankle, 2.6, 4, matWrap);
+    keep(add(new THREE.BoxGeometry(8, 2.4, 4.4), matPink, 2.6, 1.3, side * 5.8));
+    for (let k = -1; k <= 1; k++) {
+      const claw = add(new THREE.ConeGeometry(0.45, 2.6, 4), matIvory, 7.2, 1, side * 5.8 + k * 1.3);
+      claw.rotation.z = -Math.PI / 2;
+    }
+  }
+
+  // Tail: a long pink rope curling out behind and up
+  const tailCurve = new THREE.CatmullRomCurve3([v(-6, 18, 0), v(-13, 12, 1), v(-20, 7, 2.5), v(-27, 5, 3), v(-33, 8, 2), v(-36, 15, 0), v(-34, 22, -1.5), v(-28, 26, -2.5)]);
+  keep(add(new THREE.TubeGeometry(tailCurve, 40, 1.5, 8), matPink, 0, 0, 0));
+  const tailTip = add(new THREE.ConeGeometry(1.5, 4, 8), matPink, -26.2, 26.6, -2.7);
+  tailTip.quaternion.setFromUnitVectors(v(0, 1, 0), tailCurve.getTangent(1));
+  keep(add(new THREE.SphereGeometry(2.6, 10, 8), matPink, -6, 18, 0));
+
+  // Torn rags around the hips
+  keep(add(raggedLathe([[9.6, 13], [9, 17], [8.2, 21], [7.6, 24]], 26, 5, 17), matRags, 0, 0, 0));
+  keep(add(new THREE.SphereGeometry(7.2, 16, 12), matLeather, 0, 23, 0)).scale.set(1, 0.65, 1.1);
+  const belt = add(new THREE.TorusGeometry(8, 0.9, 6, 24), matLeather, 0, 24, 0);
+  belt.rotation.x = Math.PI / 2;
+  for (const [z, s] of [[-5, 1], [4, 0.8]] as const) {
+    add(new THREE.CylinderGeometry(2.1 * s, 2.1 * s, 1.2, 14), matBronze, 6.6, 22, z).rotation.z = Math.PI / 2;
+  }
+
+  // Hunched torso: everything above the hips leans forward from here
+  const torso = new THREE.Group();
+  torso.position.set(0, 24, 0);
+  torso.rotation.z = -0.5;
+  body.add(torso);
+  keep(add(new THREE.CapsuleGeometry(8, 9, 4, 16), matFur, 0, 9, 0, torso)).scale.set(0.95, 1, 1.12);
+  keep(add(new THREE.SphereGeometry(6.4, 14, 10), matBelly, 3.6, 8, 0, torso)).scale.set(0.7, 1.15, 1.1);
+  // Ragged red scarf around the neck, ends flapping on the chest
+  const scarf = keep(add(new THREE.TorusGeometry(6.6, 2.4, 8, 20), matScarf, 0.6, 17, 0, torso));
+  scarf.rotation.x = Math.PI / 2;
+  scarf.scale.set(1, 1.1, 0.8);
+  const tails = add(raggedPanel(7, 12, 4, 29), matScarf, 6.4, 16, 2, torso);
+  tails.rotation.y = Math.PI / 2 - 0.3;
+  add(new THREE.OctahedronGeometry(1.6, 0), matTeam, 7.2, 15.5, -2.4, torso);
+  // Harness straps over the shoulders
+  for (const side of [-1, 1]) limb(torso, v(6.5, 15, side * 5), v(5.5, 2, -side * 4), 0.7, matLeather);
+
+  // Backpack with scroll rolls and a brass hourglass hanging off its side
+  keep(add(new THREE.BoxGeometry(9, 13, 15), matLeather, -9.5, 11, 0, torso));
+  keep(add(new THREE.BoxGeometry(2, 9, 12), matRags, -14.4, 10, 0, torso));
+  for (const [z, h, t] of [[-4, 11, 0.2], [0.5, 13, -0.1], [4.5, 9, 0.3]] as const) {
+    const roll = keep(add(new THREE.CylinderGeometry(1.9, 1.9, h, 10), matParch, -10 + t * 4, 19 + h / 2 - 2, z, torso));
+    roll.rotation.z = t;
+  }
+  const hourglass = new THREE.Group();
+  hourglass.position.set(-9, 9, 9.5);
+  torso.add(hourglass);
+  add(new THREE.CylinderGeometry(2.4, 2.4, 0.8, 10), matBronze, 0, 4.4, 0, hourglass);
+  add(new THREE.CylinderGeometry(2.4, 2.4, 0.8, 10), matBronze, 0, -4.4, 0, hourglass);
+  for (const a of [0, 2.1, 4.2]) add(new THREE.CylinderGeometry(0.3, 0.3, 8.8, 4), matBronze, Math.cos(a) * 2.2, 0, Math.sin(a) * 2.2, hourglass);
+  add(new THREE.ConeGeometry(1.8, 4, 10), matGlass, 0, 2, 0, hourglass).rotation.x = Math.PI;
+  add(new THREE.ConeGeometry(1.8, 4, 10), matGlass, 0, -2, 0, hourglass);
+  add(new THREE.ConeGeometry(1.3, 2, 10), matSand, 0, -3, 0, hourglass);
+
+  // Head, held forward on the hunch: long snout, red eyes, big pink-lined ears, teeth
+  const head = new THREE.Group();
+  head.position.set(4, 20, 0);
+  head.rotation.z = 0.55;
+  torso.add(head);
+  keep(add(new THREE.SphereGeometry(5.4, 18, 14), matFur, 0, 2, 0, head)).scale.set(1.05, 0.95, 0.95);
+  const snout = keep(add(new THREE.ConeGeometry(3.6, 10, 14), matFur, 7, 0.4, 0, head));
+  snout.rotation.z = -Math.PI / 2;
+  snout.scale.set(1, 1, 0.85);
+  keep(add(new THREE.SphereGeometry(1.2, 10, 8), matPink, 12, 0.5, 0, head));
+  for (const side of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.6, 1, 1.6), matEye, 4.4, 3.4, side * 2.9, head).rotation.x = side * 0.3;
+    const eyeGlow = glowSprite(glowTex, '#ff3b3b', 4, 0.8);
+    eyeGlow.position.set(4.8, 3.4, side * 3);
+    head.add(eyeGlow);
+    const ear = keep(add(new THREE.SphereGeometry(3.4, 12, 10), matFur, -1.5, 7, side * 5.4, head));
+    ear.scale.set(0.45, 1.25, 1);
+    ear.rotation.x = side * 0.5;
+    const inner = add(new THREE.SphereGeometry(2.6, 12, 10), matPink, -0.9, 7, side * 5.6, head);
+    inner.scale.set(0.3, 1.1, 0.85);
+    inner.rotation.x = side * 0.5;
+    // Teeth along the jaw, and whiskers
+    for (let k = 0; k < 3; k++) {
+      const tooth = add(new THREE.ConeGeometry(0.4, 1.6, 4), matTooth, 7 + k * 1.6, -1.6, side * (1.8 - k * 0.3), head);
+      tooth.rotation.x = Math.PI;
+    }
+    for (let k = -1; k <= 1; k++) limb(head, v(10, 0.8, side * 1.6), v(11, 0.8 + k * 1.6, side * 7), 0.1, matIvory);
+  }
+
+  // Miner's helmet, riveted, with a glowing clock for a lamp
+  const helmet = new THREE.Group();
+  helmet.position.set(-0.4, 4.4, 0);
+  head.add(helmet);
+  keep(add(new THREE.SphereGeometry(6.2, 18, 10, 0, TAU, 0, Math.PI * 0.5), matBronze, 0, 0, 0, helmet));
+  keep(add(new THREE.CylinderGeometry(8.2, 8.4, 0.9, 22), matBronze, 1.2, 0, 0, helmet));
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * TAU;
+    add(new THREE.SphereGeometry(0.45, 6, 4), matIron, Math.cos(a) * 5, 3.3, Math.sin(a) * 5, helmet);
+  }
+  const lamp = new THREE.Group();
+  lamp.position.set(5.6, 2.4, 0);
+  lamp.rotation.z = -Math.PI / 2;
+  helmet.add(lamp);
+  keep(add(new THREE.CylinderGeometry(3, 3, 2, 18), matBronze, 0, 0, 0, lamp));
+  const face = add(new THREE.CircleGeometry(2.5, 18), matTime, 0, 1.05, 0, lamp);
+  face.rotation.x = -Math.PI / 2;
+  add(new THREE.BoxGeometry(0.3, 0.2, 1.8), matIron, 0, 1.15, -0.7, lamp);
+  add(new THREE.BoxGeometry(1.3, 0.2, 0.3), matIron, 0.5, 1.15, 0, lamp);
+  const lampGlow = glowSprite(glowTex, COLORS.chrono, 18, 0.75);
+  lampGlow.position.set(7.5, 2.4, 0);
+  helmet.add(lampGlow);
+
+  // A clockwork bomb: dark scaled iron, a bronze rim and an ivory clock face
+  const bomb = (parent: THREE.Object3D, x: number, y: number, z: number) => {
+    const g = new THREE.Group();
+    g.position.set(x, y, z);
+    parent.add(g);
+    keep(add(new THREE.SphereGeometry(4, 16, 12), matIron, 0, 0, 0, g));
+    const rim = add(new THREE.TorusGeometry(2.9, 0.45, 6, 18), matBronze, 2.9, 0, 0, g);
+    rim.rotation.y = Math.PI / 2;
+    const dial = add(new THREE.CircleGeometry(2.6, 18), matIvory, 3.3, 0, 0, g);
+    dial.rotation.y = Math.PI / 2;
+    add(new THREE.TorusGeometry(1.2, 0.35, 4, 10), matBronze, 0, 4.6, 0, g);
+    return g;
+  };
+
+  // Left arm hangs forward with a bomb in its claw
+  const lShoulder = v(1, 15, -8.6);
+  const lElbow = v(5, 7, -11);
+  const lHand = v(10, 1, -10);
+  keep(limb(torso, lShoulder, lElbow, 2.4, matFur));
+  keep(limb(torso, lElbow, lHand, 2.1, matFur));
+  wraps(torso, lElbow.clone().lerp(lHand, 0.25), lHand, 2.4, 3, matWrap);
+  keep(add(new THREE.SphereGeometry(2, 10, 8), matPink, lHand.x, lHand.y, lHand.z, torso));
+  bomb(torso, lHand.x + 3.5, lHand.y - 2, lHand.z);
+
+  // Right arm: the weapon, swinging from the shoulder
+  const weapon = new THREE.Group();
+  weapon.position.set(1, 15, 8.6);
+  torso.add(weapon);
+  const rElbow = v(4, -8, 2.4);
+  const rHand = v(9, -14, 1.4);
+  keep(limb(weapon, v(0, 0, 0), rElbow, 2.4, matFur));
+  keep(limb(weapon, rElbow, rHand, 2.1, matFur));
+  wraps(weapon, rElbow.clone().lerp(rHand, 0.25), rHand, 2.4, 3, matWrap);
+  const band = add(new THREE.TorusGeometry(2.6, 0.7, 6, 14), matTeam, 2, -4, 1.2, weapon);
+  band.quaternion.setFromUnitVectors(v(0, 0, 1), rElbow.clone().normalize());
+  keep(add(new THREE.SphereGeometry(2, 10, 8), matPink, rHand.x, rHand.y, rHand.z, weapon));
+  const held = bomb(weapon, rHand.x + 3.5, rHand.y - 1.5, rHand.z);
+  const tip = add(new THREE.SphereGeometry(0.9, 8, 6), matTime, 3.5, 0, 0, held);
+  const tipGlow = glowSprite(glowTex, COLORS.chrono, 18, 0.8);
+  tipGlow.position.set(3.8, 0, 0);
+  held.add(tipGlow);
+
+  shadowed(body);
+  tip.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matEye || m === matTime || m === matGlass || m === matTooth) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matFur, matBelly, matPink, matRags, matScarf, matLeather, matBronze, matIron], ...markers };
 }

@@ -24,8 +24,8 @@ export const COLORS = {
   /** Sozuki's steel: katana cuts, the crescent and the deflect. */
   edge: '#c9d6f2',
   spirit: '#8f8cff',
-  /** Kairo's time magic. */
-  chrono: '#ffa63d',
+  /** Rustic's time magic. */
+  chrono: '#a8ff4a',
   /** The blood mage's crimson, and green for heals. */
   crimson: '#d4203f',
   heal: '#5dff8f',

@@ -117,7 +117,7 @@ export class World3D implements WorldView {
   private aimLane: THREE.Group;
   private aimLaneMesh: THREE.Mesh;
   private aimCircle: THREE.Mesh;
-  /** Where Recall would land (shown to Kairo's own player). */
+  /** Where Recall would land (shown to Rustic's own player). */
   private recallMark: THREE.Mesh;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -685,6 +685,14 @@ export class World3D implements WorldView {
         const kick = !pc.cast && pc.cooldowns[SLOT.M1] > 0 ? pc.cooldowns[SLOT.M1] / kitCd(pc.champ, SLOT.M1) : 0;
         rig.weapon.rotation.z = kick * 0.35;
         twist = def ? -ck * 0.25 : 0;
+      } else if (pc.champ === CHAMP.CHRONO) {
+        // The bomb arm winds back for a throw or a cut, then whips forward after it.
+        const cutCd = pc.cooldowns[SLOT.M1];
+        let swing = 0;
+        if (def) swing = -ck * (def.id === 'chrono' ? 1.1 : 1.5);
+        else if (cutCd > 0) swing = 1.1 * (cutCd / kitCd(pc.champ, SLOT.M1));
+        rig.weapon.rotation.z = swing;
+        twist = def ? ck * 0.25 : 0;
       } else {
         rig.weapon.rotation.z = -0.22 - ck * 0.95;
       }
@@ -1100,7 +1108,7 @@ export class World3D implements WorldView {
     this.recallMark.visible = false;
     if (opts.localId === null || s.phase !== 'fight') return;
     const p = s.players[opts.localId];
-    // Kairo sees where Recall would take it.
+    // Rustic sees where Recall would take it.
     if (p.champ === CHAMP.CHRONO && p.trail.length >= 3 && !p.out) {
       this.recallMark.visible = true;
       this.recallMark.position.set(p.trail[0], 1.5, p.trail[1]);

@@ -177,7 +177,7 @@ export const CHAMPIONS: ChampionDef[] = [
     ],
   },
   {
-    name: 'Chronoblade',
+    name: 'Time Kobold',
     role: 'rewind and skirmish',
     hp: 130,
     speed: 3.5,
@@ -307,7 +307,7 @@ export const DRAIN = { ticks: 120, range: 300, every: 15, dmg: 5, heal: 4, energ
  */
 export const SWARM = { range: 260, ticks: 20, dmg: 10, heal: 5, slowMul: 0.75, slowT: 45 };
 
-// Chronoblade
+// Time kobold
 /**
  * Like KATANA but shorter. `hits` hits in a row on one enemy (each within `window` of the last,
  * from Chrono Blade or Clockwork Bomb) resonate: +`bonus`, a slow, and haste for the attacker.
