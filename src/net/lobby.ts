@@ -26,6 +26,10 @@ export class Lobby {
   private myReady = false;
   private foeChamp = -1;
   private foeReady = false;
+  /** The opponent's build, once it said hello. */
+  private foeBuild: string | null = null;
+  /** Matches started in this lobby; in-match messages from an older one are ignored. */
+  private match = 0;
   session: RollbackSession | null = null;
 
   constructor(
@@ -41,7 +45,7 @@ export class Lobby {
     });
     $('invite-leave').addEventListener('click', () => this.leave());
     $('lobby-start').addEventListener('click', () => {
-      if (!this.isHost || !this.link?.connected) return;
+      if (!this.isHost || !this.link?.connected || !this.sameBuild) return;
       this.link.send({ t: 'go' });
       this.openSelect();
     });
@@ -53,6 +57,11 @@ export class Lobby {
 
   get active() {
     return this.link !== null;
+  }
+
+  /** Both sides run the same build (different ones would drift apart mid-match). */
+  private get sameBuild() {
+    return this.foeBuild === __BUILD__;
   }
 
   async host(champ: number) {
@@ -115,12 +124,17 @@ export class Lobby {
     this.myReady = false;
     this.foeChamp = -1;
     this.foeReady = false;
+    this.foeBuild = null;
     this.session = null;
     $('invite-share').classList.add('hidden');
 
     const link = new NetLink();
     this.link = link;
-    link.onConnect = () => this.showLobby();
+    link.onConnect = () => {
+      this.foeBuild = null;
+      link.send({ t: 'hello', build: __BUILD__ });
+      this.showLobby();
+    };
     this.showLobby();
     link.onMessage = (msg) => this.onMessage(msg);
     link.onClose = (reason) => {
@@ -132,6 +146,10 @@ export class Lobby {
 
   private onMessage(msg: NetMsg) {
     switch (msg.t) {
+      case 'hello':
+        this.foeBuild = msg.build;
+        if (!this.session) this.showLobby();
+        break;
       case 'lobby':
         this.foeChamp = msg.champ;
         this.foeReady = msg.ready;
@@ -145,10 +163,13 @@ export class Lobby {
         if (!this.isHost) this.begin(msg.champs);
         break;
       case 'input':
-        this.session?.onRemoteInput(msg.frame, msg.input, msg.adv);
+        if (msg.m === this.match) this.session?.onRemoteInput(msg.frame, msg.input, msg.adv);
         break;
       case 'hash':
-        this.session?.onRemoteHash(msg.frame, msg.hash);
+        if (msg.m === this.match) this.session?.onRemoteHash(msg.frame, msg.hash);
+        break;
+      case 'sync':
+        if (msg.m === this.match) this.session?.onRemoteSync(msg.frame, msg.state);
         break;
       case 'back':
         if (this.session) {
@@ -163,6 +184,7 @@ export class Lobby {
   private guestLeft() {
     const inMatch = !!this.session;
     this.foeChamp = -1;
+    this.foeBuild = null;
     this.backToLobby(false);
     if (inMatch) this.hooks.onBack();
     this.status('Your opponent left. The link still works for someone new.');
@@ -177,10 +199,12 @@ export class Lobby {
 
   private begin(champs: number[]) {
     const link = this.link!;
+    const m = ++this.match;
     this.session = new RollbackSession(this.localId, champs, {
-      sendInput: (frame, input, adv) => link.send({ t: 'input', frame, input, adv }),
-      sendHash: (frame, hash) => link.send({ t: 'hash', frame, hash }),
-      onDesync: (frame) => console.error(`Desync at frame ${frame}`),
+      sendInput: (frame, input, adv) => link.send({ t: 'input', m, frame, input, adv }),
+      sendHash: (frame, hash) => link.send({ t: 'hash', m, frame, hash }),
+      sendSync: (frame, state) => link.send({ t: 'sync', m, frame, state }),
+      onDesync: (frame) => console.warn(`Desync at frame ${frame}${this.isHost ? ', sending our state' : ', waiting for the host'}`),
     });
     this.select.close();
     this.hooks.onStart(this.session);
@@ -197,9 +221,15 @@ export class Lobby {
     $('slot-foe-sub').textContent = joined ? (this.isHost ? 'Joined' : 'Host') : this.isHost ? 'Waiting for a player…' : 'Connecting…';
     const start = $('lobby-start') as HTMLButtonElement;
     start.classList.toggle('hidden', !this.isHost);
-    start.disabled = !joined;
-    $('lobby-wait').classList.toggle('hidden', this.isHost || !joined);
-    if (joined) this.status(this.isHost ? 'Your friend is here. Press Start to pick champions.' : 'You are in. The host starts the champion pick.');
+    start.disabled = !joined || !this.sameBuild;
+    $('lobby-wait').classList.toggle('hidden', this.isHost || !joined || !this.sameBuild);
+    if (joined && this.foeBuild !== null && !this.sameBuild) {
+      this.status('You are on different versions of the game. Both refresh the page (Ctrl/Cmd + Shift + R) and join again.');
+    } else if (joined && this.foeBuild !== null) {
+      this.status(this.isHost ? 'Your friend is here. Press Start to pick champions.' : 'You are in. The host starts the champion pick.');
+    } else if (joined) {
+      this.status('Checking game versions… If this stays, your friend has an older version: both refresh the page (Ctrl/Cmd + Shift + R).');
+    }
   }
 
   private openSelect() {

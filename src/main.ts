@@ -359,6 +359,7 @@ if (import.meta.env.DEV) {
       get state() { return state; },
       get mode() { return mode; },
       get session() { return session; },
+      lobby,
       view,
       startMatch,
       /** Run n ticks immediately (rAF is paused in background tabs). */

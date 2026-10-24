@@ -1,13 +1,20 @@
 import { Peer, type DataConnection } from 'peerjs';
-import type { Input } from '../sim/types';
+import type { GameState, Input } from '../sim/types';
 
 /** Everything the two players say to each other. */
 export type NetMsg =
+  /** First thing each side says: which build it runs (they must match). */
+  | { t: 'hello'; build: string }
   | { t: 'lobby'; champ: number; ready: boolean }
   | { t: 'start'; champs: number[] }
-  /** Input for `frame`; `adv` is the sender's frame advantage, used for time sync. */
-  | { t: 'input'; frame: number; input: Input; adv: number }
-  | { t: 'hash'; frame: number; hash: number }
+  /**
+   * In-match messages carry `m`, the match number in this lobby, so late packets
+   * from a previous match are ignored. `adv` is the sender's frame advantage (time sync).
+   */
+  | { t: 'input'; m: number; frame: number; input: Input; adv: number }
+  | { t: 'hash'; m: number; frame: number; hash: number }
+  /** Host → guest after a hash mismatch: the host's state before `frame`, to adopt. */
+  | { t: 'sync'; m: number; frame: number; state: GameState }
   | { t: 'back' }
   /** Host → guest: leave the lobby for champion select. */
   | { t: 'go' }

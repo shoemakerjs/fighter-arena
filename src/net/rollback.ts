@@ -16,6 +16,8 @@ const INPUT_DELAY = 2;
 const MAX_ROLLBACK = 15;
 /** Compare state hashes this often to detect desyncs. */
 const HASH_EVERY = 120;
+/** Keep snapshots and inputs this many frames back, so a resync from the host can be replayed. */
+const RETAIN = 600;
 
 const NO_INPUT: Input = { mx: 0, my: 0, ax: 0, ay: 0, buttons: 0 };
 
@@ -37,6 +39,8 @@ export function hashState(s: GameState): number {
 export interface SessionCallbacks {
   sendInput(frame: number, input: Input, adv: number): void;
   sendHash(frame: number, hash: number): void;
+  /** Host only: send our state before `frame` for the guest to adopt. */
+  sendSync(frame: number, state: GameState): void;
   onDesync(frame: number): void;
 }
 
@@ -58,7 +62,10 @@ export class RollbackSession {
   private remoteFrame = -1;
   private myHashes = new Map<number, number>();
   private theirHashes = new Map<number, number>();
+  private synced = new Set<number>();
   rollbacks = 0;
+  /** Times the guest adopted the host's state after a desync. */
+  resyncs = 0;
 
   constructor(
     readonly localId: number,
@@ -108,6 +115,18 @@ export class RollbackSession {
     this.checkHash(frame);
   }
 
+  /**
+   * Guest: the host's state before `frame` after a desync. Adopt it and replay our
+   * recorded inputs from there; the host is the authority.
+   */
+  onRemoteSync(frame: number, state: GameState) {
+    if (frame >= this.frame || !this.snapshots.has(frame)) return;
+    this.snapshots.set(frame, cloneState(state));
+    this.myHashes.set(frame, hashState(state));
+    this.rollbackFrom = Math.min(this.rollbackFrom, frame);
+    this.resyncs++;
+  }
+
   /** Simulate one frame with our freshly read input. Returns its events. */
   tick(input: Input): GameEvent[] {
     this.resolveRollback();
@@ -152,7 +171,7 @@ export class RollbackSession {
   }
 
   private prune() {
-    const keep = Math.min(this.confirmed, this.frame - 2) - 1;
+    const keep = Math.min(this.confirmed, this.frame - RETAIN) - 1;
     for (const k of this.snapshots.keys()) if (k < keep) this.snapshots.delete(k);
     for (const k of this.predicted.keys()) if (k <= this.confirmed) this.predicted.delete(k);
     for (const m of [this.local, this.remote]) for (const k of m.keys()) if (k < keep - 4) m.delete(k);
@@ -173,6 +192,13 @@ export class RollbackSession {
   private checkHash(frame: number) {
     const a = this.myHashes.get(frame);
     const b = this.theirHashes.get(frame);
-    if (a !== undefined && b !== undefined && a !== b) this.cb.onDesync(frame);
+    if (a === undefined || b === undefined || a === b) return;
+    this.cb.onDesync(frame);
+    // The host is the authority: hand the guest our state from that frame.
+    const snap = frame === this.frame ? this.state : this.snapshots.get(frame);
+    if (this.localId === 0 && snap && !this.synced.has(frame)) {
+      this.synced.add(frame);
+      this.cb.sendSync(frame, snap);
+    }
   }
 }
