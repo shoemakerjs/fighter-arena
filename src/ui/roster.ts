@@ -86,9 +86,10 @@ export const ROSTER: RosterEntry[] = [
     hero: 'Rustic',
     category: 'Assassin',
     art: './art/rustic.webp',
-    flip: false,
-    portrait: '58% 31%',
-    focus: 0.62,
+    flip: true,
+    portrait: '61% 35%',
+    artShift: '10vw',
+    focus: 0.6,
     lore: 'A kobold miner who dug up crystals that turn old tunnels into gateways to other moments. Armed with chronobombs and a clock fused to his helmet, Rustic steals treasures before they are found and settles grudges history forgot.',
   },
 ];

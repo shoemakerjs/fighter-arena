@@ -361,7 +361,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     p.charges++;
     if (p.charges < FLICKER.charges) p.chargeT = FLICKER.recharge;
   }
-  // The time kobold remembers where it was, for Recall.
+  // The time kobold remembers where it was, for Rewind.
   if (p.champ === CHAMP.CHRONO && s.roundFrame % RECALL.every === 0) {
     p.trail.push(p.x, p.y, p.hp);
     if (p.trail.length > 3 * (RECALL.ticks / RECALL.every + 1)) p.trail.splice(0, 3);
@@ -483,7 +483,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall';
   if (p.rootT > 0 && mobility) return false;
 
-  // Flicker: instant short blink along the movement (the aim when standing), on charges. Works mid-cast.
+  // Time Skip: instant short blink along the movement (the aim when standing), on charges. Works mid-cast.
   if (def.id === 'flicker') {
     if (p.charges <= 0 || p.dashT > 0) return false;
     let dx = Math.sign(inp.mx);
@@ -508,7 +508,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     return true;
   }
 
-  // Recall: back to the oldest remembered spot, getting part of the HP lost since then.
+  // Rewind: back to the oldest remembered spot, getting part of the HP lost since then.
   if (def.id === 'recall') {
     if (p.dashT > 0 || p.trail.length < 3) return false;
     const [x, y, hp] = p.trail;
@@ -1295,7 +1295,7 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         alive.push(pr);
         continue;
       }
-      // A Pulse Bomb doesn't hurt on contact: it sticks (a counter knocks it away).
+      // A Blasting Charge doesn't hurt on contact: it sticks (a counter knocks it away).
       if (pr.kind === 'pulse') {
         if (target.counterT > 0) block(target, pr.x, pr.y, ev);
         else {
@@ -1360,12 +1360,12 @@ function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
     s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks, target: -1 });
     ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });
   }
-  // A Pulse Bomb that hit nothing lies where it stopped, still ticking.
+  // A Blasting Charge that hit nothing lies where it stopped, still ticking.
   if (pr.kind === 'pulse') s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'pulse', x: pr.x, y: pr.y, t: PULSE.fuse, target: -1 });
 }
 
 /**
- * Clockwork Bomb: hops over pillars to each landing spot. Lands next to an enemy (or the
+ * Chronobomb: hops over pillars to each landing spot. Lands next to an enemy (or the
  * orb), on a pillar or with no bounces left: bursts. Otherwise it bounces on, shorter.
  */
 function clockTick(s: GameState, pr: Projectile, ev: GameEvent[]): boolean {

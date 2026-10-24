@@ -283,7 +283,7 @@ export class Bot {
         else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (chrono) {
         const reach = 2 * PLAYER_R + CHRONO.reach;
-        // Recall after a bad trade (it lost a lot over the last two seconds), or when low and cornered.
+        // Rewind after a bad trade (it lost a lot over the last three seconds), or when low and cornered.
         const lost = me.trail.length >= 3 ? me.trail[2] - me.hp : 0;
         const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.35;
         const pinned = foe.stunT > 0 || foe.slowT > 0 || foe.rootT > 0 || foe.cast !== null;

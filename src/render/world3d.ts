@@ -117,7 +117,7 @@ export class World3D implements WorldView {
   private aimLane: THREE.Group;
   private aimLaneMesh: THREE.Mesh;
   private aimCircle: THREE.Mesh;
-  /** Where Recall would land (shown to Rustic's own player). */
+  /** Where Rewind would land (shown to Rustic's own player). */
   private recallMark: THREE.Mesh;
 
   constructor(canvas: HTMLCanvasElement) {
@@ -686,11 +686,13 @@ export class World3D implements WorldView {
         rig.weapon.rotation.z = kick * 0.35;
         twist = def ? -ck * 0.25 : 0;
       } else if (pc.champ === CHAMP.CHRONO) {
-        // The bomb arm winds back for a throw or a cut, then whips forward after it.
+        // The pick rises overhead during the windup and chops down after the hit;
+        // for throws the arm winds back instead.
         const cutCd = pc.cooldowns[SLOT.M1];
         let swing = 0;
-        if (def) swing = -ck * (def.id === 'chrono' ? 1.1 : 1.5);
-        else if (cutCd > 0) swing = 1.1 * (cutCd / kitCd(pc.champ, SLOT.M1));
+        if (def?.id === 'chrono') swing = ck * 1.8;
+        else if (def) swing = -ck * 1.5;
+        else if (cutCd > 0) swing = -0.5 * (cutCd / kitCd(pc.champ, SLOT.M1));
         rig.weapon.rotation.z = swing;
         twist = def ? ck * 0.25 : 0;
       } else {
@@ -856,7 +858,7 @@ export class World3D implements WorldView {
       const old = prevById.get(pr.id);
       const x = old ? old.x + (pr.x - old.x) * alpha : pr.x;
       const y = old ? old.y + (pr.y - old.y) * alpha : pr.y;
-      // A Clockwork Bomb arcs up and down on every hop.
+      // A Chronobomb arcs up and down on every hop.
       const hop = pr.kind === 'clock' ? Math.sin(Math.PI * Math.min(1, (pr.age + alpha) / pr.life)) * Math.min(110, pr.life * 3.2) : 0;
       v.group.position.set(x, PROJ_H + hop, y);
       v.decal.position.y = -PROJ_H - hop + 1;
@@ -1108,7 +1110,7 @@ export class World3D implements WorldView {
     this.recallMark.visible = false;
     if (opts.localId === null || s.phase !== 'fight') return;
     const p = s.players[opts.localId];
-    // Rustic sees where Recall would take it.
+    // Rustic sees where Rewind would take it.
     if (p.champ === CHAMP.CHRONO && p.trail.length >= 3 && !p.out) {
       this.recallMark.visible = true;
       this.recallMark.position.set(p.trail[0], 1.5, p.trail[1]);

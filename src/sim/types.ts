@@ -119,10 +119,10 @@ export interface Player {
   resoN: number;
   resoT: number;
   resoTarget: number;
-  /** Time kobold: Flicker charges, and ticks until the next one comes back. */
+  /** Time kobold: Time Skip charges, and ticks until the next one comes back. */
   charges: number;
   chargeT: number;
-  /** Time kobold: recent [x, y, hp] samples, oldest first, for Recall. */
+  /** Time kobold: recent [x, y, hp] samples, oldest first, for Rewind. */
   trail: number[];
   counterT: number;
   slowT: number;
@@ -145,11 +145,11 @@ export interface Projectile {
   /** Damage and knockback on hit (fixed per kind, except a drawn longshot or a quick arrow). */
   dmg: number;
   kb: number;
-  /** Clockwork Bomb: bounces left; `life` is the current hop's length and `age` restarts every hop. */
+  /** Chronobomb: bounces left; `life` is the current hop's length and `age` restarts every hop. */
   bounces: number;
 }
 
-/** Something on the floor: arrow rain, a sonic sensor, a Parallel Convergence field or a Pulse Bomb. */
+/** Something on the floor: arrow rain, a sonic sensor, a Cave-In field or a Blasting Charge. */
 export interface Zone {
   id: number;
   owner: number;
@@ -158,7 +158,7 @@ export interface Zone {
   y: number;
   /** Ticks left. Rain is still falling while t > RAIN.ticks; a field or a bomb goes off at 0. */
   t: number;
-  /** Pulse Bomb: the player it's stuck to (it moves with them), -1 if on the floor. */
+  /** Blasting Charge: the player it's stuck to (it moves with them), -1 if on the floor. */
   target: number;
 }
 
@@ -242,16 +242,16 @@ export type GameEvent =
   | { type: 'bleed'; player: number; x: number; y: number }
   /** A missed Transfusion costs its caster HP. */
   | { type: 'bloodloss'; player: number; amount: number; x: number; y: number }
-  /** Time kobold: Flicker and Recall jumps. */
+  /** Time kobold: Time Skip and Rewind jumps. */
   | { type: 'flicker'; player: number; x0: number; y0: number; x: number; y: number }
   | { type: 'recall'; player: number; x0: number; y0: number; x: number; y: number }
   /** Resonance going off on `player`. */
   | { type: 'resonance'; player: number; x: number; y: number }
   | { type: 'converge'; owner: number; x: number; y: number }
-  /** A Pulse Bomb sticking to `player`, and bursting. */
+  /** A Blasting Charge sticking to `player`, and bursting. */
   | { type: 'stick'; player: number; x: number; y: number }
   | { type: 'pulse'; owner: number; x: number; y: number }
-  /** A Clockwork Bomb bouncing on, and bursting. */
+  /** A Chronobomb bouncing on, and bursting. */
   | { type: 'bounce'; owner: number; x: number; y: number }
   | { type: 'clockBurst'; owner: number; x: number; y: number }
   /** Romulus scatters into bats (Night Swarm). */

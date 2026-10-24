@@ -182,13 +182,13 @@ export const CHAMPIONS: ChampionDef[] = [
     hp: 130,
     speed: 3.5,
     abilities: [
-      { id: 'chrono', name: 'Chrono Blade', desc: 'quick slash, hold to keep slashing; every third hit in a row on one enemy resonates: bonus damage, slows it and hastes you', cooldown: 5, cast: 9, castSlow: 0.6, energyCost: 0 },
-      { id: 'clock', name: 'Clockwork Bomb', desc: 'lob a ticking bomb at the cursor that bounces on twice; it bursts when it lands next to an enemy (or at the last bounce), slowing time around it', cooldown: 270, cast: 14, castSlow: 0.5, energyCost: 0 },
+      { id: 'chrono', name: 'Chrono Pick', desc: 'pickaxe swing, hold to keep swinging; every third hit in a row on one enemy cracks time: bonus damage, slows it and hastes you', cooldown: 5, cast: 9, castSlow: 0.6, energyCost: 0 },
+      { id: 'clock', name: 'Chronobomb', desc: 'lob a ticking bomb at the cursor that bounces on twice; it bursts when it lands next to an enemy (or at the last bounce), slowing time around it', cooldown: 270, cast: 14, castSlow: 0.5, energyCost: 0 },
       // The cooldown is only a short lockout between blinks; charges do the limiting.
-      { id: 'flicker', name: 'Flicker', desc: 'short blink where you are moving (or aiming), two charges', cooldown: 12, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'converge', name: 'Parallel Convergence', desc: 'place a field that collapses after 1.5 s, stunning enemies inside', cooldown: 600, cast: 10, castSlow: 0.5, energyCost: 0 },
-      { id: 'recall', name: 'Recall', desc: 'jump back to where you were 3 s ago, regaining a third of the HP you lost since', cooldown: 720, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'pulse', name: 'Pulse Bomb', desc: 'throw a bomb that sticks to the first enemy it hits (or lands) and bursts after 1 s, 100 energy', cooldown: 60, cast: 12, castSlow: 0.4, energyCost: 100 },
+      { id: 'flicker', name: 'Time Skip', desc: 'short blink where you are moving (or aiming), two charges', cooldown: 12, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'converge', name: 'Cave-In', desc: 'mark an area; after 1.5 s time caves in on it, stunning enemies inside', cooldown: 600, cast: 10, castSlow: 0.5, energyCost: 0 },
+      { id: 'recall', name: 'Rewind', desc: 'jump back to where you were 3 s ago, regaining a third of the HP you lost since', cooldown: 720, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'pulse', name: 'Blasting Charge', desc: 'throw a charge that sticks to the first enemy it hits (or lands) and blows up after 1 s, 100 energy', cooldown: 60, cast: 12, castSlow: 0.4, energyCost: 100 },
     ],
   },
 ];
@@ -310,11 +310,11 @@ export const SWARM = { range: 260, ticks: 20, dmg: 10, heal: 5, slowMul: 0.75, s
 // Time kobold
 /**
  * Like KATANA but shorter. `hits` hits in a row on one enemy (each within `window` of the last,
- * from Chrono Blade or Clockwork Bomb) resonate: +`bonus`, a slow, and haste for the attacker.
+ * from Chrono Pick or Chronobomb) resonate: +`bonus`, a slow, and haste for the attacker.
  */
 export const CHRONO = { reach: 48, minDot: 0.5, dmg: 6, energy: 9, hits: 3, window: 150, bonus: 12, slowMul: 0.65, slowT: 50, haste: 60 };
 /**
- * Clockwork Bomb: `bounces` bounces, each hop `hop` times the last (at least `minHop`). It bursts
+ * Chronobomb: `bounces` bounces, each hop `hop` times the last (at least `minHop`). It bursts
  * within `r` when it lands next to an enemy (or the orb), on a pillar or the wall, or at the last landing.
  */
 export const CLOCK = { bounces: 2, hop: 0.45, minHop: 40, r: 75 };

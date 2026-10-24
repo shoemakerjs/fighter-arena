@@ -302,7 +302,7 @@ export class Hud {
     for (let i = 0; i < n; i++) {
       const def = kit[i];
       const x = x0 + i * (slot + gap);
-      // Flicker is limited by its charges (its own cooldown is just a short lockout).
+      // Time Skip is limited by its charges (its own cooldown is just a short lockout).
       const outOfCharges = def.id === 'flicker' && p.charges === 0;
       const cd = outOfCharges ? p.chargeT : p.cooldowns[i];
       const cdMax = outOfCharges ? FLICKER.recharge : def.cooldown;
@@ -335,7 +335,7 @@ export class Hud {
       drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'crescent' : def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
       ctx.restore();
 
-      // Pips under the icon: Steel Tempest stacks, Flicker charges, hits towards Resonance.
+      // Pips under the icon: Steel Tempest stacks, Time Skip charges, hits towards Resonance.
       const pips =
         def.id === 'tempest' ? { n: TEMPEST.max, on: p.stacks, color: COLORS.edge }
         : def.id === 'flicker' ? { n: FLICKER.charges, on: p.charges, color: COLORS.chrono }
@@ -468,21 +468,26 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
   ctx.lineJoin = 'round';
   switch (ability) {
     case 'chrono':
-      // A short blade with a clock-hand notch
+      // A pickaxe with a green crack of time at its point
+      ctx.strokeStyle = '#8a6a48';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-10, 13);
+      ctx.lineTo(6, -7);
+      ctx.stroke();
       ctx.strokeStyle = color;
       ctx.lineWidth = 3.5;
       ctx.beginPath();
-      ctx.moveTo(-12, 12);
-      ctx.lineTo(10, -10);
+      ctx.moveTo(-4, -14);
+      ctx.quadraticCurveTo(7, -11, 14, -1);
       ctx.stroke();
       ctx.strokeStyle = COLORS.chrono;
-      ctx.lineWidth = 2.5;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(-14, 4);
-      ctx.lineTo(-6, 12);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(10, -10, 3, 0, TAU);
+      ctx.moveTo(14, 3);
+      ctx.lineTo(11, 7);
+      ctx.lineTo(15, 9);
+      ctx.lineTo(12, 13);
       ctx.stroke();
       break;
     case 'clock':

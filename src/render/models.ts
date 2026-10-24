@@ -2274,8 +2274,9 @@ function buildVampire(color: string, glowTex: THREE.Texture): ChampionRig {
  * Rustic — time kobold (from the concept sheet), toon style: a hunched grey rat with a
  * long pink tail, red eyes and a snout full of teeth, a riveted miner's helmet with a
  * glowing green clock for a lamp, a torn red scarf and brown rags, wrapped shins, a
- * backpack with scrolls and an hourglass, and a clockwork bomb in each claw.
- * The right arm (with its bomb) is the weapon. Team color: armband and scarf knot.
+ * backpack with scroll rolls, time crystals and an hourglass, a pickaxe in the right
+ * claw and a clockwork bomb in the left. The right arm (with the pick) is the weapon.
+ * Team color: armband and scarf knot.
  */
 function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
   const team = new THREE.Color(color);
@@ -2297,6 +2298,9 @@ function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
   const matTime = new THREE.MeshBasicMaterial({ color: COLORS.chrono, toneMapped: false });
   const matGlass = new THREE.MeshBasicMaterial({ color: '#cfe8d4', transparent: true, opacity: 0.35, depthWrite: false });
   const matSand = toon('#d9b46a');
+  const matCrystal = new THREE.MeshBasicMaterial({ color: '#7dff8a', transparent: true, opacity: 0.8, toneMapped: false });
+  const matSteel = toon('#a9a49a');
+  const matHaft = toon('#5a4330');
 
   const root = new THREE.Group();
   const lean = new THREE.Group();
@@ -2364,13 +2368,19 @@ function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
   // Harness straps over the shoulders
   for (const side of [-1, 1]) limb(torso, v(6.5, 15, side * 5), v(5.5, 2, -side * 4), 0.7, matLeather);
 
-  // Backpack with scroll rolls and a brass hourglass hanging off its side
+  // Backpack with a bedroll, glowing time crystals and a brass hourglass hanging off its side
   keep(add(new THREE.BoxGeometry(9, 13, 15), matLeather, -9.5, 11, 0, torso));
   keep(add(new THREE.BoxGeometry(2, 9, 12), matRags, -14.4, 10, 0, torso));
-  for (const [z, h, t] of [[-4, 11, 0.2], [0.5, 13, -0.1], [4.5, 9, 0.3]] as const) {
-    const roll = keep(add(new THREE.CylinderGeometry(1.9, 1.9, h, 10), matParch, -10 + t * 4, 19 + h / 2 - 2, z, torso));
-    roll.rotation.z = t;
+  const bedroll = keep(add(new THREE.CylinderGeometry(2.6, 2.6, 15, 12), matParch, -9.5, 19.5, 0, torso));
+  bedroll.rotation.x = Math.PI / 2;
+  for (const [x, z, h, t] of [[-8, -4, 9, 0.25], [-11, 0, 12, -0.1], [-7.5, 3.5, 8, 0.35], [-12, 5, 6, -0.3]] as const) {
+    const crystal = add(new THREE.OctahedronGeometry(2, 0), matCrystal, x, 21 + h / 3, z, torso);
+    crystal.scale.set(0.8, h / 4, 0.8);
+    crystal.rotation.set(t, t * 2, t);
   }
+  const packGlow = glowSprite(glowTex, COLORS.chrono, 20, 0.45);
+  packGlow.position.set(-9.5, 24, 0);
+  torso.add(packGlow);
   const hourglass = new THREE.Group();
   hourglass.position.set(-9, 9, 9.5);
   torso.add(hourglass);
@@ -2457,7 +2467,7 @@ function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
   keep(add(new THREE.SphereGeometry(2, 10, 8), matPink, lHand.x, lHand.y, lHand.z, torso));
   bomb(torso, lHand.x + 3.5, lHand.y - 2, lHand.z);
 
-  // Right arm: the weapon, swinging from the shoulder
+  // Right arm: the weapon, swinging the pickaxe from the shoulder
   const weapon = new THREE.Group();
   weapon.position.set(1, 15, 8.6);
   torso.add(weapon);
@@ -2469,20 +2479,33 @@ function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
   const band = add(new THREE.TorusGeometry(2.6, 0.7, 6, 14), matTeam, 2, -4, 1.2, weapon);
   band.quaternion.setFromUnitVectors(v(0, 0, 1), rElbow.clone().normalize());
   keep(add(new THREE.SphereGeometry(2, 10, 8), matPink, rHand.x, rHand.y, rHand.z, weapon));
-  const held = bomb(weapon, rHand.x + 3.5, rHand.y - 1.5, rHand.z);
-  const tip = add(new THREE.SphereGeometry(0.9, 8, 6), matTime, 3.5, 0, 0, held);
-  const tipGlow = glowSprite(glowTex, COLORS.chrono, 18, 0.8);
-  tipGlow.position.set(3.8, 0, 0);
-  held.add(tipGlow);
+  // Pickaxe gripped near the top of the haft, the head hanging forward and down
+  const pick = new THREE.Group();
+  pick.position.copy(rHand);
+  pick.rotation.z = 1.05;
+  weapon.add(pick);
+  keep(add(new THREE.CylinderGeometry(0.8, 0.9, 20, 8), matHaft, 0, -5, 0, pick));
+  wraps(pick, v(0, 3, 0), v(0, -2, 0), 1.1, 3, matLeather);
+  keep(add(new THREE.BoxGeometry(3, 3.4, 2.6), matIron, 0, -14.5, 0, pick));
+  const blade = keep(add(new THREE.ConeGeometry(1.4, 12, 6), matSteel, 6.4, -15.6, 0, pick));
+  blade.rotation.z = -Math.PI / 2 - 0.35;
+  blade.scale.set(1, 1, 0.6);
+  const back = keep(add(new THREE.ConeGeometry(1.2, 8, 6), matSteel, -5, -15, 0, pick));
+  back.rotation.z = Math.PI / 2 + 0.3;
+  back.scale.set(1, 1, 0.6);
+  const tip = add(new THREE.SphereGeometry(0.7, 8, 6), matTime, 11.8, -17.6, 0, pick);
+  const tipGlow = glowSprite(glowTex, COLORS.chrono, 14, 0.8);
+  tipGlow.position.copy(tip.position);
+  pick.add(tipGlow);
 
   shadowed(body);
   tip.castShadow = false;
   body.traverse((o) => {
     const m = (o as THREE.Mesh).material;
-    if (m === matEye || m === matTime || m === matGlass || m === matTooth) o.castShadow = false;
+    if (m === matEye || m === matTime || m === matGlass || m === matTooth || m === matCrystal) o.castShadow = false;
   });
   for (const m of outlined) outline(m);
 
   const markers = addMarkers(root, team, bright);
-  return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matFur, matBelly, matPink, matRags, matScarf, matLeather, matBronze, matIron], ...markers };
+  return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matFur, matBelly, matPink, matRags, matScarf, matLeather, matBronze, matIron, matSteel, matHaft], ...markers };
 }
