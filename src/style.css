@@ -721,6 +721,11 @@ button {
   display: none;
 }
 
+/* Training: nobody to wait for. */
+#select.training .enemy {
+  visibility: hidden;
+}
+
 #select.browse .select-art {
   bottom: 0;
 }

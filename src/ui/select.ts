@@ -4,8 +4,8 @@ import { CHAMPIONS } from '../sim/constants';
 import { ROSTER } from './roster';
 import { brushRing } from './rough';
 
-/** `browse` is the Characters page from the home nav: look around, no picking. */
-export type SelectMode = 'bot' | 'online' | 'browse';
+/** `browse` is the Characters page from the home nav: look around, no picking. `training` has no enemy. */
+export type SelectMode = 'bot' | 'online' | 'browse' | 'training';
 export type EnemyState = 'waiting' | 'locked';
 
 export interface SelectHooks {
@@ -64,6 +64,7 @@ export class ChampionSelect {
     this.locked = false;
     $('select').classList.remove('hidden');
     $('select').classList.toggle('browse', mode === 'browse');
+    $('select').classList.toggle('training', mode === 'training');
     $('select-title').textContent = mode === 'browse' ? 'Characters' : 'Select your character';
     $('select-timer').classList.toggle('hidden', mode !== 'online');
     this.setEnemy(mode === 'bot' ? 'locked' : 'waiting');

@@ -1947,3 +1947,67 @@ function buildSamurai(color: string, glowTex: THREE.Texture): ChampionRig {
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon: katana, tip, tipGlow, mats: [matTeam, matKimono, matHakama, matBlack, matSkin, matHair], ...markers };
 }
+
+/** Training dummy: a lashed wooden post with a crossbar for arms, a blocky head and a tripod foot. */
+export function buildTrainingDummy(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matWood = toon('#8a6a48');
+  const matWoodDark = toon('#5c442e');
+  const matRope = toon('#c9b48a');
+  const matTeam = toon(team);
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Tripod foot and the post, made of a few lashed logs
+  for (let i = 0; i < 3; i++) {
+    const a = (i / 3) * TAU + 0.5;
+    keep(limb(body, v(Math.cos(a) * 3, 16, Math.sin(a) * 3), v(Math.cos(a) * 15, 0.5, Math.sin(a) * 15), 1.6, matWoodDark));
+  }
+  for (const [x, z] of [[1.6, 0], [-1, 1.6], [-1, -1.6]]) keep(add(new THREE.CylinderGeometry(2.6, 2.9, 50, 8), matWood, x, 27, z));
+  for (const y of [12, 22, 36, 46]) add(new THREE.TorusGeometry(5, 0.8, 5, 16), matRope, 0, y, 0).rotation.x = Math.PI / 2;
+
+  // Crossbar arms with rope wraps; the right end is the "weapon" so the rig contract holds
+  const arms = new THREE.Group();
+  arms.position.set(1, 41, 0);
+  body.add(arms);
+  const bar = keep(add(new THREE.CylinderGeometry(2.2, 2.2, 34, 8), matWood, 0, 0, 0, arms));
+  bar.rotation.x = Math.PI / 2;
+  for (const z of [-11, 11]) add(new THREE.TorusGeometry(2.5, 0.6, 4, 12), matRope, 0, 0, z, arms);
+
+  // Blocky head: a sawn log end with two carved eye slits
+  keep(add(new THREE.CylinderGeometry(6, 6.4, 12, 10), matWood, 0.5, 57, 0));
+  add(new THREE.CylinderGeometry(6.1, 6.1, 0.6, 10), matWoodDark, 0.5, 63.2, 0);
+  for (const side of [-1, 1]) add(new THREE.BoxGeometry(1, 0.8, 2.2), matWoodDark, 6.4, 58, side * 2.2);
+  // Team colored sash so you can tell the sides apart
+  const sash = add(new THREE.TorusGeometry(5.4, 1.2, 5, 18), matTeam, 0, 30, 0);
+  sash.rotation.x = Math.PI / 2;
+
+  const tip = add(new THREE.OctahedronGeometry(0.5, 0), matTeam, 0, 0, 17, arms);
+  tip.visible = false;
+  const tipGlow = glowSprite(glowTex, team, 1, 0);
+  tipGlow.visible = false;
+  arms.add(tipGlow);
+
+  shadowed(body);
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: arms, tip, tipGlow, mats: [matWood, matWoodDark, matRope, matTeam], ...markers };
+}

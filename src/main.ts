@@ -58,15 +58,23 @@ let mode: Mode = 'home';
 let myChamp = 0;
 let state: GameState = createMatch();
 let prev: GameState = cloneState(state);
-/** Who controls each player slot: a bot, or null for the local human. */
-let controllers: (Bot | null)[] = [];
+/** Anything that produces a player's input from the state (a bot, the idle dummy). */
+interface Controller {
+  think(s: GameState): Input;
+}
+
+/** The training dummy: never presses anything. */
+const IDLE: Controller = { think: () => ({ mx: 0, my: 0, ax: 0, ay: 0, buttons: 0 }) };
+
+/** Who controls each player slot: a bot or the dummy, or null for the local human. */
+let controllers: (Controller | null)[] = [];
 let seed = 1;
 let endTimer = 0;
 /** Online match in progress (null when playing the bot). */
 let session: RollbackSession | null = null;
 
-function newMatch(ctrl: (Bot | null)[], champs: number[]) {
-  state = createMatch(champs);
+function newMatch(ctrl: (Controller | null)[], champs: number[], training = false) {
+  state = createMatch(champs, training);
   prev = cloneState(state);
   controllers = ctrl;
   session = null;
@@ -102,10 +110,11 @@ const select = new ChampionSelect({
   onLock(champ) {
     myChamp = champ;
     if (select.mode === 'bot') startMatch();
+    else if (select.mode === 'training') startTraining();
     else lobby.lockIn(champ);
   },
   onBack() {
-    if (select.mode === 'browse') goHome();
+    if (select.mode === 'browse' || select.mode === 'training') goHome();
     else if (lobby.active) lobby.leave();
     else openBotSetup();
   },
@@ -189,6 +198,24 @@ function startMatch() {
   select.close();
   botSetup.close();
   newMatch([null, new Bot(1, botSetup.difficulty, seed++)], [myChamp, botSetup.pickChampion()]);
+  fx.silent = false;
+  input.clear();
+  setMode('play');
+}
+
+/** Training: pick a champion, then hit the dummy in the middle as long as you like. */
+function openTraining() {
+  sfx.unlock();
+  $('menu-note').classList.add('hidden');
+  select.open('training', myChamp);
+  setMode('select');
+}
+
+function startTraining() {
+  sfx.unlock();
+  select.close();
+  newMatch([null, IDLE], [myChamp, 0], true);
+  setNames('YOU', 'DUMMY');
   fx.silent = false;
   input.clear();
   setMode('play');
@@ -287,6 +314,7 @@ function draw(dt: number) {
 // ------------------------------------------------------------------ UI wiring
 
 $('play').addEventListener('click', openBotSetup);
+$('play-training').addEventListener('click', openTraining);
 $('play-online').addEventListener('click', () => openLobby());
 $('nav-characters').addEventListener('click', openCharacters);
 $('nav-settings').addEventListener('click', openSettings);

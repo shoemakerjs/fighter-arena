@@ -30,7 +30,7 @@ export function pointVisible(viewer: Player, x: number, y: number): boolean {
 
 /** Can player `viewerId` see player `targetId` right now? */
 export function canSee(s: GameState, viewerId: number, targetId: number): boolean {
-  if (viewerId === targetId) return true;
+  if (viewerId === targetId || s.training) return true;
   const target = s.players[targetId];
   if (target.stealthT > 0) return false;
   // Sonic arrows see through the fog (not through stealth).

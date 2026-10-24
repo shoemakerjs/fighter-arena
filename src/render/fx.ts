@@ -81,7 +81,8 @@ export class Fx {
       this.sound('tick');
     }
 
-    const viewer = localId === null ? null : s.players[localId];
+    // Nothing is hidden in training.
+    const viewer = localId === null || s.training ? null : s.players[localId];
     for (const e of events) {
       // Effects of enemy actions inside the fog would give their position away.
       const at = cosmeticPos(e, s);

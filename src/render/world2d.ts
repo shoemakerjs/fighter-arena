@@ -79,7 +79,7 @@ export class World2D implements WorldView {
     this.drawProjectiles(prev, cur, alpha, opts.localId);
     this.drawFx(fx);
 
-    this.fog.update(opts.localId === null ? null : players[opts.localId]);
+    this.fog.update(opts.localId === null || cur.training ? null : players[opts.localId]);
     ctx.drawImage(this.fog.canvas, -FOG_EXTENT, -FOG_EXTENT, FOG_EXTENT * 2, FOG_EXTENT * 2);
 
     ctx.restore();
@@ -499,7 +499,7 @@ export class World2D implements WorldView {
       const old = prevById.get(pr.id);
       const x = old ? old.x + (pr.x - old.x) * alpha : pr.x;
       const y = old ? old.y + (pr.y - old.y) * alpha : pr.y;
-      if (localId !== null && pr.owner !== localId && !pointVisible(cur.players[localId], x, y)) continue;
+      if (localId !== null && !cur.training && pr.owner !== localId && !pointVisible(cur.players[localId], x, y)) continue;
       const color = abilityColor(pr.kind, pr.owner);
 
       for (let i = 5; i >= 1; i--) {

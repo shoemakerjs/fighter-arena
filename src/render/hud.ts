@@ -171,7 +171,7 @@ export class Hud {
       ctx.textAlign = i === 0 ? 'right' : 'left';
       ctx.font = `22px ${DISPLAY}`;
       ctx.fillStyle = color;
-      const name = `${PLAYER_NAMES[i]} · ${ROSTER[p.champ].hero}`;
+      const name = p.dummy ? 'TRAINING DUMMY' : `${PLAYER_NAMES[i]} · ${ROSTER[p.champ].hero}`;
       ctx.fillText(name, nameX, y - 6);
 
       const barW = Math.min(260, this.w / 2 - 110);

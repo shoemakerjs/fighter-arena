@@ -239,3 +239,7 @@ export const DEFLECT = { ticks: 180, minDot: 0, energy: 10 };
 export const SOUL = { ticks: 150, dashTicks: 10, speed: 16, echo: 0.3 };
 /** Blink up to `range` along the aim; an enemy in the line is pulled to the end and stunned. */
 export const FATE = { range: 320, half: 40, dmg: 18, stun: 45 };
+
+// Training
+/** The dummy in the middle: it never dies, and after `rest` ticks without damage it heals up and returns to the center. */
+export const DUMMY = { hp: 1000, rest: 150 };

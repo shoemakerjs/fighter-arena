@@ -20,6 +20,7 @@ import {
   COUNTER,
   CRY,
   DASH,
+  DUMMY,
   DEFLECT,
   EXECUTE,
   FATE,
@@ -62,22 +63,25 @@ import {
 } from './constants';
 import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
 
-export function createMatch(champs: number[] = [0, 0]): GameState {
+/** `training`: player 1 is a training dummy standing in the middle (champs[1] is ignored). */
+export function createMatch(champs: number[] = [0, 0], training = false): GameState {
   return {
     frame: 0,
+    training,
     champs: champs.slice(),
-    phase: 'countdown',
-    phaseT: COUNTDOWN_TICKS,
+    phase: training ? 'fight' : 'countdown',
+    phaseT: training ? 0 : COUNTDOWN_TICKS,
     round: 1,
     roundFrame: 0,
     score: [0, 0],
     lastRoundWinner: -1,
     arenaR: ARENA_R,
-    players: [createPlayer(0, champs[0]), createPlayer(1, champs[1])],
+    players: [createPlayer(0, champs[0]), createPlayer(1, champs[1], training)],
     projectiles: [],
     meteors: [],
     zones: [],
-    orb: { active: false, hp: ORB_HP, timer: ORB_SPAWN_AT },
+    // No orb in training: it would sit right under the dummy.
+    orb: { active: false, hp: ORB_HP, timer: training ? Number.MAX_SAFE_INTEGER : ORB_SPAWN_AT },
     nextId: 1,
   };
 }
@@ -91,13 +95,15 @@ export function abilityOf(p: Player, slot: number): AbilityDef {
 }
 
 export function maxHp(p: Player): number {
-  return CHAMPIONS[p.champ].hp;
+  return p.dummy ? DUMMY.hp : CHAMPIONS[p.champ].hp;
 }
 
-function createPlayer(id: number, champ: number): Player {
-  const spawn = SPAWNS[id];
+function createPlayer(id: number, champ: number, dummy = false): Player {
+  const spawn = dummy ? { x: 0, y: 0 } : SPAWNS[id];
   return {
     id,
+    dummy,
+    restT: 0,
     champ,
     x: spawn.x,
     y: spawn.y,
@@ -105,7 +111,7 @@ function createPlayer(id: number, champ: number): Player {
     vy: 0,
     fx: id === 0 ? 1 : -1,
     fy: 0,
-    hp: CHAMPIONS[champ].hp,
+    hp: dummy ? DUMMY.hp : CHAMPIONS[champ].hp,
     energy: 0,
     cooldowns: [0, 0, 0, 0, 0, 0],
     cast: null,
@@ -203,8 +209,8 @@ export function step(s: GameState, inputs: Input[]): GameEvent[] {
 function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
   s.roundFrame++;
 
-  if (s.roundFrame === SUDDEN_DEATH_AT) ev.push({ type: 'suddenDeath' });
-  if (s.roundFrame > SUDDEN_DEATH_AT && s.arenaR > ARENA_MIN_R) {
+  if (s.roundFrame === SUDDEN_DEATH_AT && !s.training) ev.push({ type: 'suddenDeath' });
+  if (s.roundFrame > SUDDEN_DEATH_AT && s.arenaR > ARENA_MIN_R && !s.training) {
     s.arenaR = Math.max(ARENA_MIN_R, s.arenaR - ARENA_SHRINK);
   }
 
@@ -220,6 +226,8 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
   updateProjectiles(s, ev);
   updateMeteors(s, ev);
   updateZones(s, ev);
+
+  for (const p of s.players) if (p.dummy) restDummy(p);
 
   const dead = s.players.filter((p) => p.hp <= 0);
   if (dead.length > 0) {
@@ -238,6 +246,19 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
 
 // ---------------------------------------------------------------------------
 // Players
+
+/** The training dummy can't die; left alone for a while it heals up and goes back to the middle. */
+function restDummy(p: Player) {
+  if (p.hp < 1) p.hp = 1;
+  if (++p.restT < DUMMY.rest) return;
+  p.hp = DUMMY.hp;
+  if (p.dashT === 0) {
+    p.x = 0;
+    p.y = 0;
+    p.vx = 0;
+    p.vy = 0;
+  }
+}
 
 function aimAt(p: Player, inp: Input) {
   const dx = inp.ax - p.x;
@@ -284,6 +305,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     if (p.poisonT % POISON.every === 0 && p.hp > 0) {
       // Damage over time ignores counters and doesn't pop marks.
       p.hp = Math.max(0, p.hp - POISON.dmg);
+      p.restT = 0;
       ev.push({ type: 'hit', target: p.id, source: 1 - p.id, dmg: POISON.dmg, x: p.x, y: p.y, kind: 'poison' });
     }
   }
@@ -841,6 +863,7 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
   }
   target.hp = Math.max(0, target.hp - dmg);
   target.hitT = 8;
+  target.restT = 0;
   // A samurai out of body remembers what it dealt, to echo it on the way back.
   if (attacker.soulT > 0 && kind !== 'soul') attacker.soulDmg += dmg;
   attacker.energy = Math.min(MAX_ENERGY, attacker.energy + energy);
