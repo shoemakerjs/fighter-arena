@@ -328,6 +328,7 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   if (champ === CHAMP.ASSASSIN) return buildAssassin(color, glowTex);
   if (champ === CHAMP.ARCHER) return buildArcher(color, glowTex);
   if (champ === CHAMP.SAMURAI) return buildSamurai(color, glowTex);
+  if (champ === CHAMP.BLOOD) return buildVampire(color, glowTex);
   // No modeled skin yet: the test mannequin.
   return buildDummy(color, glowTex);
 }
@@ -2021,4 +2022,228 @@ export function buildTrainingDummy(color: string, glowTex: THREE.Texture): Champ
 
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon: arms, tip, tipGlow, mats: [matWood, matWoodDark, matRope, matTeam], ...markers };
+}
+
+/** Off-white linen splashed with blood, darker towards the hem. u around, v bottom→top. */
+function makeBloodClothTexture(): THREE.CanvasTexture {
+  const W = 256;
+  const H = 256;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#e4ddd2';
+  g.fillRect(0, 0, W, H);
+  let seed = 17;
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  // Long vertical folds
+  for (let x = 0; x < W; x += 18) {
+    g.fillStyle = 'rgba(0,0,0,0.06)';
+    g.fillRect(x + r() * 6, 0, 3, H);
+  }
+  // Blood: splats with drips running down
+  for (let i = 0; i < 26; i++) {
+    const x = r() * W;
+    const y = H * 0.25 + r() * H * 0.75;
+    const size = 2 + r() * 7;
+    g.fillStyle = r() < 0.5 ? '#8f1020' : '#b3192d';
+    g.beginPath();
+    g.arc(x, y, size, 0, TAU);
+    g.fill();
+    g.fillRect(x - 1, y, 2, 6 + r() * 26);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+/** Black coat cloth with broad blood-red bands down the back and sides. u around (lathe phi), v bottom→top. */
+function makeVampireCoatTexture(): THREE.CanvasTexture {
+  const W = 512;
+  const H = 128;
+  const c = document.createElement('canvas');
+  c.width = W;
+  c.height = H;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#1d181c';
+  g.fillRect(0, 0, W, H);
+  // Bands (u = 0.5 is the back of a lathe opened at the front)
+  for (const [u, w] of [[0.32, 0.07], [0.44, 0.05], [0.56, 0.05], [0.68, 0.07]]) {
+    const grad = g.createLinearGradient((u - w) * W, 0, (u + w) * W, 0);
+    grad.addColorStop(0, 'rgba(126,16,32,0)');
+    grad.addColorStop(0.3, '#7e1020');
+    grad.addColorStop(0.7, '#8e1424');
+    grad.addColorStop(1, 'rgba(126,16,32,0)');
+    g.fillStyle = grad;
+    g.fillRect((u - w) * W, 0, 2 * w * W, H);
+  }
+  // Fine scale pattern
+  g.strokeStyle = 'rgba(255,255,255,0.05)';
+  for (let y = 0; y < H; y += 8) {
+    for (let x = (y / 8) % 2 ? 4 : 0; x < W; x += 8) {
+      g.beginPath();
+      g.arc(x, y, 4, 0, Math.PI);
+      g.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/**
+ * Romulus, high vampire: tall and pale, long white hair, ram horns and pointed ears,
+ * a high red collar, spiked scale pauldrons, a long torn black coat lined in red
+ * over a blood-splashed white tunic, clawed hands with a blood orb, pointed boots.
+ */
+function buildVampire(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team);
+  const matCoat = toon('#1d181c', { side: THREE.FrontSide });
+  const matCoatBack = toon('#ffffff', { map: makeVampireCoatTexture() });
+  const matLining = toon('#7c1020', { side: THREE.BackSide });
+  const matRed = toon('#8e1424', { side: THREE.DoubleSide });
+  const matLinen = toon('#ffffff', { map: makeBloodClothTexture(), side: THREE.DoubleSide });
+  const matLeather = toon('#2a1f1c');
+  const matGold = toon('#b08a4a');
+  const matSkin = toonSoft('#c9c0bd');
+  const matHair = toonSoft('#ede4d2');
+  const matHorn = toon('#5a4636');
+  const matEye = new THREE.MeshBasicMaterial({ color: '#ff2a3d', toneMapped: false });
+  const matBlood = new THREE.MeshBasicMaterial({ color: '#d4203f', toneMapped: false });
+  const matGlow = new THREE.MeshBasicMaterial({ color: bright, toneMapped: false });
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Legs: dark trousers, tall pointed boots with gold-edged greaves
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0, 27, side * 4.4), v(1.4, 13, side * 4.8), 2.6, matLeather));
+    keep(limb(body, v(1.4, 14, side * 4.8), v(0.8, 3, side * 5), 2.6, matLeather));
+    const toe = keep(add(new THREE.ConeGeometry(2.2, 10, 6), matLeather, 4.6, 1.6, side * 5));
+    toe.rotation.z = -Math.PI / 2;
+    toe.scale.set(1, 1, 0.8);
+    add(new THREE.TorusGeometry(2.8, 0.4, 4, 12), matGold, 1.2, 12, side * 4.9).rotation.x = Math.PI / 2;
+  }
+
+  // Long coat: black outside, red lining, torn to the floor at the back and sides, open in front
+  const coatGeo = raggedLathe([[19, 0.5], [16, 10], [13, 22], [10.5, 34], [9.6, 42], [9, 47]], 30, 9, 61, Math.PI / 2 + 0.6, TAU - 1.2);
+  keep(add(coatGeo, matCoatBack, 0, 0, 0));
+  add(coatGeo, matLining, 0, 0, 0);
+  // White tunic falling in front, splashed with blood
+  const tunic = add(raggedPanel(11, 30, 4, 83), matLinen, 9.4, 4, 0);
+  tunic.rotation.y = Math.PI / 2;
+  tunic.rotation.x = -0.12;
+
+  // Torso: white shirt, black waistcoat front, wide belt with a gold clasp, gold chains
+  keep(add(lathe([[8.6, 28], [9.2, 34], [9.8, 40], [9.8, 44], [8.8, 47], [6, 49.5], [2.6, 51]]), matCoat, 0, 0, 0));
+  const shirt = add(new THREE.PlaneGeometry(6, 18), matLinen, 9.9, 39, 0);
+  shirt.rotation.y = Math.PI / 2;
+  const belt = keep(add(new THREE.CylinderGeometry(9.2, 9, 4, 24), matLeather, 0, 29.5, 0));
+  belt.castShadow = true;
+  add(new THREE.BoxGeometry(1.2, 3.2, 4), matGold, 9.2, 29.5, 0);
+  for (const side of [-1, 1]) limb(body, v(9.6, 46, side * 4.5), v(9.9, 31, -side * 3), 0.35, matGold);
+  add(new THREE.OctahedronGeometry(1, 0), matTeam, 10.2, 44, 0);
+
+  // Spiked scale pauldrons and the high red collar behind the head
+  for (const side of [-1, 1]) {
+    const pad = keep(add(new THREE.SphereGeometry(5.4, 12, 8, 0, TAU, 0, Math.PI * 0.55), matCoat, 0, 46, side * 9.6));
+    pad.rotation.x = side * 0.5;
+    for (let k = 0; k < 4; k++) {
+      const spike = add(new THREE.ConeGeometry(0.9, 5 + k, 4), matGold, -2 + k * 1.6, 49 + k * 0.4, side * (10 + k * 0.6));
+      spike.rotation.x = side * (0.6 + k * 0.15);
+      spike.rotation.z = 0.3;
+    }
+  }
+  const collar = keep(add(new THREE.CylinderGeometry(7.5, 5.5, 13, 20, 1, true, Math.PI * 0.75, Math.PI * 1.5), matRed, -0.5, 55, 0));
+  collar.castShadow = false;
+
+  // Arms in long black sleeves with torn cuffs; pale clawed hands. The right reaches out.
+  const rElbow = v(4.5, 39, 12.8);
+  const rHand = v(12, 37, 12);
+  const lElbow = v(1, 37, -12);
+  const lHand = v(3.5, 29, -12);
+  keep(limb(body, v(0, 46, 9.6), rElbow, 2.3, matCoat));
+  keep(limb(body, rElbow, rHand, 2.1, matCoat));
+  keep(limb(body, v(0, 46, -9.6), lElbow, 2.3, matCoat));
+  keep(limb(body, lElbow, lHand, 2.1, matCoat));
+  for (const [elbow, hand, side] of [[rElbow, rHand, 1], [lElbow, lHand, -1]] as const) {
+    const cuff = add(raggedLathe([[4, -6], [3.4, -3], [2.6, 0]], 14, 2.5, side + 40), matCoat, 0, 0, 0);
+    cuff.position.copy(elbow.clone().lerp(hand, 0.75));
+    cuff.quaternion.setFromUnitVectors(v(0, -1, 0), hand.clone().sub(elbow).normalize().negate());
+    keep(add(new THREE.SphereGeometry(1.9, 10, 8), matSkin, hand.x, hand.y, hand.z));
+    for (let k = -1; k <= 1; k++) {
+      const claw = add(new THREE.ConeGeometry(0.35, 3.2, 4), matSkin, hand.x + 2, hand.y - 0.6, hand.z + k * 0.9);
+      claw.rotation.z = -Math.PI / 2 - 0.4;
+    }
+  }
+
+  // Head: gaunt, pale, red eyes, pointed ears, long white hair, ram horns
+  keep(add(new THREE.CylinderGeometry(2, 2.5, 5, 12), matSkin, 0, 51.5, 0));
+  keep(add(new THREE.SphereGeometry(5.8, 22, 16), matSkin, 0.7, 58, 0)).scale.set(1, 1.18, 0.88);
+  keep(add(new THREE.SphereGeometry(2.1, 12, 10), matSkin, 2.6, 54.2, 0)).scale.set(1, 0.9, 1.15);
+  for (const side of [-1, 1]) {
+    add(new THREE.BoxGeometry(0.5, 0.55, 1.6), matEye, 5.8, 58.4, side * 2.2);
+    const eyeGlow = glowSprite(glowTex, '#ff2a3d', 4, 0.8);
+    eyeGlow.position.set(6.2, 58.4, side * 2.2);
+    body.add(eyeGlow);
+    const brow = add(new THREE.BoxGeometry(0.5, 0.45, 2.6), matHair, 5.7, 59.8, side * 2.4);
+    brow.rotation.x = side * 0.25;
+    const ear = keep(add(new THREE.ConeGeometry(1.1, 7, 8), matSkin, -0.8, 59, side * 6));
+    ear.scale.set(0.5, 1, 1);
+    ear.rotation.x = side * (Math.PI / 2 - 0.7);
+    ear.rotation.z = 0.6;
+    // Ram horn: a thick arc curling back and down from the temple
+    const horn = keep(add(new THREE.TorusGeometry(4.2, 1.2, 6, 14, Math.PI * 1.4), matHorn, -1, 64, side * 4.6));
+    horn.rotation.set(0, side * 0.3, Math.PI * 0.35);
+    horn.scale.set(1, 1, 0.9);
+  }
+  const crown = keep(add(new THREE.SphereGeometry(6.3, 22, 12, 0, TAU, 0, Math.PI * 0.55), matHair, -0.6, 59, 0));
+  crown.rotation.z = 0.32;
+  for (let i = 0; i < 7; i++) {
+    const z = -6.4 + i * 2.1;
+    keep(limb(body, v(-4.4, 60, z * 0.85), v(-8.4 + (i % 2) * 0.6, 36 + Math.abs(z) * 0.5, z * 1.1), 1.8, matHair));
+  }
+  for (const side of [-1, 1]) keep(limb(body, v(2.4, 57, side * 5.8), v(3.4, 43, side * 8), 1.4, matHair));
+
+  // Blood orb in the outstretched claw: the "weapon" that rises when casting
+  const orb = new THREE.Group();
+  orb.position.copy(rHand);
+  body.add(orb);
+  const tip = add(new THREE.SphereGeometry(2.2, 14, 10), matBlood, 4.5, 1.5, 0, orb);
+  const tipGlow = glowSprite(glowTex, '#d4203f', 22, 0.9);
+  tipGlow.position.copy(tip.position);
+  orb.add(tipGlow);
+  for (let k = 0; k < 3; k++) {
+    const drop = add(new THREE.SphereGeometry(0.7, 8, 6), matBlood, 4.5 + Math.cos(k * 2.1) * 4, 1.5 + Math.sin(k * 2.1) * 3, Math.sin(k * 1.3) * 3, orb);
+    drop.castShadow = false;
+  }
+
+  shadowed(body);
+  tip.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matLining || m === matEye || m === matBlood || m === matGlow) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon: orb, tip, tipGlow, mats: [matTeam, matCoat, matCoatBack, matLinen, matLeather, matSkin, matHair], ...markers };
 }

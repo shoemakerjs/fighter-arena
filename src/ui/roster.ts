@@ -71,13 +71,12 @@ export const ROSTER: RosterEntry[] = [
     lore: 'A wandering swordswoman from the land in the east. Her blade turns arrows aside, cuts through her foes before they can react, and her spirit strikes twice.',
   },
   {
-    hero: 'Morvane',
+    hero: 'Romulus',
     category: 'Mage',
-    // Stand-in until the painted art arrives.
-    art: './art/placeholder.svg',
-    flip: false,
-    portrait: '68% 12%',
-    focus: 0.65,
-    lore: 'A noble of the old blood who learned to drink the life of others. Every wound dealt is a sip taken, and pain only sharpens the thirst.',
+    art: './art/vampire.webp',
+    flip: true,
+    portrait: '47% 0%',
+    focus: 0.47,
+    lore: 'A lone high vampire who never leaves his castle. Mourning his wife without end, he kills everyone who comes close, in a rage that never cools.',
   },
 ];

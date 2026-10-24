@@ -661,6 +661,10 @@ export class World3D implements WorldView {
           twist = 0.5;
         }
         rig.weapon.rotation.z = swing;
+      } else if (pc.champ === CHAMP.BLOOD) {
+        // The blood orb lifts in the outstretched claw as the spell gathers.
+        rig.weapon.rotation.z = 0.1 + ck * 0.5;
+        twist = def ? -ck * 0.2 : 0;
       } else if (pc.champ === CHAMP.ARCHER) {
         // Bow held level; it kicks up a little right after a shot.
         const kick = !pc.cast && pc.cooldowns[SLOT.M1] > 0 ? pc.cooldowns[SLOT.M1] / kitCd(pc.champ, SLOT.M1) : 0;
