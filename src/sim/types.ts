@@ -42,7 +42,7 @@ export interface Player {
   id: number;
   /** Training dummy: stands still, can't die (see DUMMY). */
   dummy: boolean;
-  /** Dummy only: ticks since it last took damage. */
+  /** Training only: ticks since this player last took damage. */
   restT: number;
   /** Index into CHAMPIONS. */
   champ: number;
@@ -148,7 +148,7 @@ export type Phase = 'countdown' | 'fight' | 'roundEnd' | 'matchEnd';
 
 export interface GameState {
   frame: number;
-  /** Training: player 1 is a dummy, no fog, no orb, no sudden death, no countdown. */
+  /** Training: player 1 is a dummy, nobody dies, no fog, orb, sudden death or countdown. */
   training: boolean;
   /** Champion picked for each player slot. */
   champs: number[];

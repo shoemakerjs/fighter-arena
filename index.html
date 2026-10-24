@@ -172,6 +172,32 @@
       </div>
     </div>
 
+    <!-- Training overlay: exit, the champion's skills, training settings -->
+    <div id="training-ui" class="hidden">
+      <button class="link-btn training-exit" id="training-exit">← Exit</button>
+      <aside class="training-skills" id="training-skills"></aside>
+      <section class="training-panel rough">
+        <h3 class="display">Training</h3>
+        <div class="field">
+          <span class="field-label">Champion</span>
+          <div id="training-champ"></div>
+        </div>
+        <div class="field">
+          <span class="field-label">Dummy movement</span>
+          <div class="segmented" id="training-move">
+            <button type="button" data-move="still" class="active">Stand</button>
+            <button type="button" data-move="flee">Flee</button>
+            <button type="button" data-move="chase">Chase</button>
+          </div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="training-shoot" />
+          <span class="toggle-track" aria-hidden="true"></span>
+          <span>Dummy shoots at you</span>
+        </label>
+      </section>
+    </div>
+
     <div id="hint-bar" class="hidden">Esc — pause · M — sound: <span id="sound-state">on</span></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

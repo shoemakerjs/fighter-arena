@@ -458,7 +458,7 @@ export class World3D implements WorldView {
       b.glow.scale.setScalar(115 + 30 * f);
     }
 
-    const sudden = s.roundFrame >= SUDDEN_DEATH_AT && s.phase !== 'countdown';
+    const sudden = s.roundFrame >= SUDDEN_DEATH_AT && s.phase !== 'countdown' && !s.training;
     this.suddenWall.visible = sudden;
     this.outside.visible = sudden;
     if (sudden) {

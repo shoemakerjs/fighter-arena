@@ -227,7 +227,7 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
   updateMeteors(s, ev);
   updateZones(s, ev);
 
-  for (const p of s.players) if (p.dummy) restDummy(p);
+  if (s.training) for (const p of s.players) restTraining(p);
 
   const dead = s.players.filter((p) => p.hp <= 0);
   if (dead.length > 0) {
@@ -247,17 +247,10 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
 // ---------------------------------------------------------------------------
 // Players
 
-/** The training dummy can't die; left alone for a while it heals up and goes back to the middle. */
-function restDummy(p: Player) {
+/** In training nobody dies; left alone for a while, a player heals back up. */
+function restTraining(p: Player) {
   if (p.hp < 1) p.hp = 1;
-  if (++p.restT < DUMMY.rest) return;
-  p.hp = DUMMY.hp;
-  if (p.dashT === 0) {
-    p.x = 0;
-    p.y = 0;
-    p.vx = 0;
-    p.vy = 0;
-  }
+  if (++p.restT >= DUMMY.rest) p.hp = maxHp(p);
 }
 
 function aimAt(p: Player, inp: Input) {

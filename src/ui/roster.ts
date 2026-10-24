@@ -18,6 +18,11 @@ export interface RosterEntry {
   focus: number;
 }
 
+/** Inline style for a small round thumbnail of a champion's face (dropdowns). */
+export function rosterThumb(r: RosterEntry): string {
+  return `background-image: url(${r.art}); background-size: 560% auto; background-position: ${r.portrait};${r.flip ? ' transform: scaleX(-1);' : ''}`;
+}
+
 export const ROSTER: RosterEntry[] = [
   {
     hero: 'Perrie',

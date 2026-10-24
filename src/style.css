@@ -984,6 +984,12 @@ button {
   transition: transform 0.15s;
 }
 
+/* Opens upwards (see Dropdown openUp) */
+.dd-up .dd-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
 .dd-menu {
   position: absolute;
   z-index: 5;
@@ -1094,5 +1100,153 @@ button {
   .mode-card {
     width: min(345px, 100%);
     height: 300px;
+  }
+}
+
+/* ------------------------------------------------------------ training */
+
+#training-ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+#training-ui > * {
+  pointer-events: auto;
+}
+
+.training-exit {
+  position: absolute;
+  left: 24px;
+  top: 20px;
+  font-size: 18px;
+}
+
+/* The champion's skills, top right below the HUD bars */
+.training-skills {
+  position: absolute;
+  right: 24px;
+  top: 84px;
+  width: 340px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  text-align: right;
+}
+
+.training-skills .hero {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.training-skills .abilities {
+  margin-top: 0;
+}
+
+.training-panel {
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  width: 300px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.training-panel h3 {
+  font-size: 26px;
+  font-weight: 400;
+}
+
+/* Segmented buttons: one of three */
+.segmented {
+  display: flex;
+  border: 1px solid var(--tag);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.segmented button {
+  flex: 1;
+  height: 40px;
+  font-size: 15px;
+  color: var(--muted);
+  transition: background 0.15s, color 0.15s;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--tag);
+}
+
+.segmented button:hover {
+  color: var(--text);
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+/* Toggle switch */
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-track {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: #3a3a40;
+  transition: background 0.15s;
+}
+
+.toggle-track::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--text);
+  transition: transform 0.15s;
+}
+
+.toggle input:checked + .toggle-track {
+  background: var(--accent);
+}
+
+.toggle input:checked + .toggle-track::after {
+  transform: translateX(20px);
+}
+
+.toggle input:focus-visible + .toggle-track {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+
+@media (max-width: 900px) {
+  .training-skills {
+    display: none;
+  }
+  .training-panel {
+    right: 12px;
+    bottom: 12px;
+    width: 260px;
+    padding: 18px;
   }
 }

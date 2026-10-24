@@ -241,5 +241,5 @@ export const SOUL = { ticks: 150, dashTicks: 10, speed: 16, echo: 0.3 };
 export const FATE = { range: 320, half: 40, dmg: 18, stun: 45 };
 
 // Training
-/** The dummy in the middle: it never dies, and after `rest` ticks without damage it heals up and returns to the center. */
+/** Training: nobody dies, and after `rest` ticks without damage a player heals up. The dummy has `hp`. */
 export const DUMMY = { hp: 1000, rest: 150 };

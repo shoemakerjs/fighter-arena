@@ -20,9 +20,12 @@ export class Dropdown {
     private options: DropdownOption[],
     initial: string,
     private onChange: (value: string) => void = () => {},
+    /** Open the list above the field (for dropdowns near the bottom of the screen). */
+    openUp = false,
   ) {
     this.value = initial;
     root.classList.add('dropdown');
+    root.classList.toggle('dd-up', openUp);
     this.button = document.createElement('button');
     this.button.type = 'button';
     this.button.className = 'dd-field';

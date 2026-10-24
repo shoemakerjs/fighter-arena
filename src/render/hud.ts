@@ -143,6 +143,21 @@ export class Hud {
     const cx = this.w / 2;
     const y = 30;
 
+    if (s.training) {
+      // No clock and no rounds in training.
+      ctx.font = `22px ${DISPLAY}`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = COLORS.muted;
+      ctx.fillText('Training', cx, y + 1);
+    } else {
+      this.drawClock(s, cx, y);
+    }
+    this.drawNames(s, cx, y);
+  }
+
+  private drawClock(s: GameState, cx: number, y: number) {
+    const { ctx } = this;
     // Round timer
     const secs = Math.floor(s.roundFrame / TICK_RATE);
     const sudden = s.roundFrame >= SUDDEN_DEATH_AT;
@@ -161,8 +176,11 @@ export class Hud {
     ctx.font = `500 11px ${FONT}`;
     ctx.fillStyle = COLORS.muted;
     ctx.fillText(`ROUND ${s.round}`, cx, y + 30);
+  }
 
-    // Names, score pips, HP
+  /** Names, score pips (not in training), HP bars. */
+  private drawNames(s: GameState, cx: number, y: number) {
+    const { ctx } = this;
     for (let i = 0; i < 2; i++) {
       const dir = i === 0 ? -1 : 1;
       const color = COLORS.players[i];
@@ -187,7 +205,7 @@ export class Hud {
       ctx.fillRect(i === 0 ? bx + barW - hpW : bx, y + 7, hpW, 8);
 
       const nameW = ctx.measureText(name).width;
-      for (let r = 0; r < ROUNDS_TO_WIN; r++) {
+      for (let r = 0; r < (s.training ? 0 : ROUNDS_TO_WIN); r++) {
         ctx.beginPath();
         ctx.arc(nameX + dir * (nameW + 14 + r * 16), y - 7, 5, 0, TAU);
         ctx.fillStyle = r < s.score[i] ? color : 'rgba(255,255,255,0.1)';

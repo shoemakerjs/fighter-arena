@@ -1,7 +1,7 @@
 import type { Difficulty } from '../input/bot';
 import { CHAMPIONS } from '../sim/constants';
 import { Dropdown } from './dropdown';
-import { ROSTER } from './roster';
+import { ROSTER, rosterThumb } from './roster';
 
 export interface BotSetupHooks {
   onStart(): void;
@@ -26,7 +26,7 @@ export class BotSetup {
         ...ROSTER.map((r, i) => ({
           value: String(i),
           label: r.hero,
-          thumb: `background-image: url(${r.art}); background-size: 560% auto; background-position: ${r.portrait};${r.flip ? ' transform: scaleX(-1);' : ''}`,
+          thumb: rosterThumb(r),
         })),
       ],
       RANDOM,

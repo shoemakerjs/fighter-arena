@@ -18,6 +18,11 @@ export interface SelectHooks {
 const PICK_SECONDS = 30;
 const KEYS = ['LMB', 'RMB / F', 'Space', 'Q', 'E', 'R'];
 
+/** One row per ability: name, what it does, its key (also used by the training overlay). */
+export function abilityList(champ: number): string {
+  return CHAMPIONS[champ].abilities.map((a, i) => `<div class="ability"><span class="what"><b>${a.name}</b> — ${a.desc}</span><span class="key">${KEYS[i]}</span></div>`).join('');
+}
+
 const SPINNER = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
   <path d="M24 12C24 18.6274 18.6274 24 12 24C5.37258 24 0 18.6274 0 12C0 5.37258 5.37258 0 12 0C18.6274 0 24 5.37258 24 12ZM3.06809 12C3.06809 16.933 7.06704 20.9319 12 20.9319C16.933 20.9319 20.9319 16.933 20.9319 12C20.9319 7.06704 16.933 3.06809 12 3.06809C7.06704 3.06809 3.06809 7.06704 3.06809 12Z" fill="#363432"/>
   <path d="M24 12C24 10.4241 23.6896 8.86371 23.0866 7.4078C22.4835 5.95189 21.5996 4.62902 20.4853 3.51472C19.371 2.40042 18.0481 1.5165 16.5922 0.913445C15.1363 0.310389 13.5759 0 12 0L12 3.1026C13.1684 3.1026 14.3254 3.33274 15.4049 3.77987C16.4844 4.22701 17.4652 4.88239 18.2914 5.70859C19.1176 6.53479 19.773 7.51563 20.2201 8.59511C20.6673 9.67459 20.8974 10.8316 20.8974 12H24Z" fill="#7CC7FF"/>
@@ -205,7 +210,7 @@ export class ChampionSelect {
       <h2 class="display hero">${r.hero}</h2>
       <p class="lore">${r.lore}</p>
       <div class="abilities">
-        ${c.abilities.map((a, i) => `<div class="ability"><span class="what"><b>${a.name}</b> — ${a.desc}</span><span class="key">${KEYS[i]}</span></div>`).join('')}
+        ${abilityList(this.champ)}
       </div>`;
     const lock = $('lock-in') as HTMLButtonElement;
     lock.disabled = this.locked;

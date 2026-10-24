@@ -15,6 +15,7 @@ import type { GameState, Input } from './sim/types';
 import { BotSetup } from './ui/botsetup';
 import { roughenCards } from './ui/rough';
 import { Settings } from './ui/settings';
+import { TrainingPanel } from './ui/training';
 import { ChampionSelect } from './ui/select';
 
 /** home → (select | online) → play ⇄ pause → end. Menus run a bot match in the background. */
@@ -63,9 +64,6 @@ interface Controller {
   think(s: GameState): Input;
 }
 
-/** The training dummy: never presses anything. */
-const IDLE: Controller = { think: () => ({ mx: 0, my: 0, ax: 0, ay: 0, buttons: 0 }) };
-
 /** Who controls each player slot: a bot or the dummy, or null for the local human. */
 let controllers: (Controller | null)[] = [];
 let seed = 1;
@@ -101,6 +99,7 @@ function goHome(note?: string) {
   select.close();
   botSetup.close();
   settings.close();
+  training.close();
   $('menu-note').textContent = note ?? '';
   $('menu-note').classList.toggle('hidden', !note);
   startAttract('home');
@@ -211,13 +210,23 @@ function openTraining() {
   setMode('select');
 }
 
+const training = new TrainingPanel({
+  onChampion(champ) {
+    myChamp = champ;
+    startTraining();
+  },
+  onExit: () => goHome(),
+});
+
+/** (Re)start training with the current champion; the dummy is driven by the training settings. */
 function startTraining() {
   sfx.unlock();
   select.close();
-  newMatch([null, IDLE], [myChamp, 0], true);
+  newMatch([null, training.dummy], [myChamp, 0], true);
   setNames('YOU', 'DUMMY');
   fx.silent = false;
   input.clear();
+  training.open(myChamp);
   setMode('play');
 }
 
@@ -231,6 +240,8 @@ function setMode(m: Mode) {
   ui.pause.classList.toggle('hidden', m !== 'pause');
   ui.end.classList.toggle('hidden', m !== 'end');
   ui.hint.classList.toggle('hidden', m !== 'play');
+  // The training overlay only shows while playing (not over the pause screen).
+  $('training-ui').classList.toggle('hidden', !(m === 'play' && state.training));
   canvas.classList.toggle('playing', m === 'play');
   // A focused (now hidden) button would otherwise eat the Space key.
   (document.activeElement as HTMLElement | null)?.blur();

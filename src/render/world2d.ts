@@ -180,7 +180,7 @@ export class World2D implements WorldView {
     const size = (ARENA_R + 40) * 2;
     ctx.drawImage(this.floor, -size / 2, -size / 2, size, size);
 
-    if (s.arenaR < ARENA_R - 0.5 || s.roundFrame >= SUDDEN_DEATH_AT) {
+    if (s.arenaR < ARENA_R - 0.5 || (s.roundFrame >= SUDDEN_DEATH_AT && !s.training)) {
       // Darken everything outside the closing wall.
       ctx.save();
       ctx.beginPath();
