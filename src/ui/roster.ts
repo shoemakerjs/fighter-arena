@@ -16,6 +16,8 @@ export interface RosterEntry {
   artShift?: string;
   /** Where the figure stands in the art, 0 (left edge) to 1 (right edge), before any flip. */
   focus: number;
+  /** Vertical background-position of the select-screen art (default center); 'top' when the head is near the top edge. */
+  artY?: string;
 }
 
 /** Inline style for a small round thumbnail of a champion's face (dropdowns). */
@@ -77,6 +79,7 @@ export const ROSTER: RosterEntry[] = [
     flip: true,
     portrait: '47% 0%',
     focus: 0.47,
+    artY: 'top',
     lore: 'A lone high vampire who never leaves his castle. Mourning his wife without end, he kills everyone who comes close, in a rage that never cools.',
   },
 ];

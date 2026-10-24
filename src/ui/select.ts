@@ -144,7 +144,7 @@ export class ChampionSelect {
     const fx = figureAt(offset);
     const target = Math.max(lo, Math.min(hi, fx));
     offset = Math.min(0, Math.max(W - imgW, offset + flip * (target - fx)));
-    art.style.backgroundPosition = `${offset}px center`;
+    art.style.backgroundPosition = `${offset}px ${r.artY ?? 'center'}`;
   }
 
   private tick() {
