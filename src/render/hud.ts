@@ -311,6 +311,10 @@ export class Hud {
         (def.id === 'arrow' && p.quickT > 0) ||
         (def.id === 'soul' && p.soulT > 0) ||
         (def.id === 'deflect' && p.deflectT > 0) ||
+        (def.id === 'pool' && p.poolT > 0) ||
+        (def.id === 'drain' && p.drainT > 0) ||
+        // The next Transfusion is the empowered one.
+        (def.id === 'transfusion' && (p.bloodCount + 1) % 3 === 0) ||
         (def.id === 'tempest' && p.stacks >= TEMPEST.max) ||
         (def.id === 'whirl' && p.whirlT > 0) ||
         (def.id === 'smoke' && p.stealthT > 0);
@@ -894,6 +898,94 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
       ctx.beginPath();
       ctx.moveTo(-10, -10);
       ctx.lineTo(10, 10);
+      ctx.stroke();
+      break;
+    case 'bloodbolt':
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(10, -10);
+      ctx.quadraticCurveTo(2, 4, -6, 6);
+      ctx.quadraticCurveTo(-12, 0, -6, -6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = COLORS.crimson;
+      ctx.beginPath();
+      ctx.arc(-8, 8, 5, 0, TAU);
+      ctx.fill();
+      break;
+    case 'transfusion':
+      // A drop flowing back along an arrow
+      ctx.strokeStyle = COLORS.crimson;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-14, 8);
+      ctx.lineTo(10, -8);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.crimson;
+      ctx.beginPath();
+      ctx.moveTo(-4, -16);
+      ctx.quadraticCurveTo(4, -6, -4, -2);
+      ctx.quadraticCurveTo(-12, -6, -4, -16);
+      ctx.fill();
+      ctx.fillStyle = COLORS.heal;
+      ctx.fillRect(8, 6, 8, 2.5);
+      ctx.fillRect(10.75, 3.25, 2.5, 8);
+      break;
+    case 'pool':
+      ctx.fillStyle = COLORS.crimson;
+      ctx.beginPath();
+      ctx.ellipse(0, 6, 15, 6, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath();
+      ctx.ellipse(-4, 4, 5, 1.6, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.crimson;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -2);
+      ctx.lineTo(0, -14);
+      ctx.stroke();
+      break;
+    case 'tides':
+      ctx.strokeStyle = COLORS.crimson;
+      ctx.lineWidth = 2.5;
+      for (const r of [5, 10, 15]) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, TAU);
+        ctx.stroke();
+      }
+      ctx.fillStyle = COLORS.crimson;
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, TAU);
+      ctx.fill();
+      break;
+    case 'drain':
+      ctx.strokeStyle = COLORS.crimson;
+      ctx.lineWidth = 2.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(-12, 8);
+      ctx.quadraticCurveTo(0, -12, 12, 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = COLORS.crimson;
+      ctx.beginPath();
+      ctx.arc(-12, 8, 4, 0, TAU);
+      ctx.arc(12, 4, 3, 0, TAU);
+      ctx.fill();
+      break;
+    case 'plague':
+      ctx.strokeStyle = COLORS.crimson;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      for (let a = 0; a < 5 * Math.PI; a += 0.3) {
+        const r = 2 + a * 1.0;
+        const px = Math.cos(a) * r;
+        const py = Math.sin(a) * r;
+        if (a === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
       ctx.stroke();
       break;
     case 'rift':

@@ -5,7 +5,7 @@
  * World mapping: sim (x, y) → three (x, 0, y), height is +Y.
  */
 import * as THREE from 'three';
-import { ARENA_R, CHAMP, PLAYER_R, SPAWNS } from '../sim/constants';
+import { ARENA_R, CHAMP, PLAYER_R, POOL, SPAWNS } from '../sim/constants';
 import { COLORS } from './theme';
 import { hexA } from './view';
 
@@ -318,6 +318,10 @@ export interface ChampionRig {
   stunStars: THREE.Group;
   /** Shimmering half-shell in front of a deflecting samurai (turns with the aim). */
   deflectArc: THREE.Mesh;
+  /** Pool of blood on the floor while the blood mage is sunk into it. */
+  poolDisc: THREE.Mesh;
+  /** Crimson spiral over the head while cursed by Hemoplague. */
+  plagueMark: THREE.Mesh;
 }
 
 export function buildChampion(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
@@ -799,7 +803,25 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
   deflectArc.visible = false;
   pointer.add(deflectArc);
 
-  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars, deflectArc };
+  const poolDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(POOL.r, 40),
+    new THREE.MeshBasicMaterial({ color: COLORS.crimson, transparent: true, opacity: 0.6, depthWrite: false, toneMapped: false }),
+  );
+  poolDisc.rotation.x = -Math.PI / 2;
+  poolDisc.position.y = 1.6;
+  poolDisc.visible = false;
+  root.add(poolDisc);
+
+  const plagueMark = new THREE.Mesh(
+    new THREE.TorusGeometry(8, 1.4, 4, 24, Math.PI * 1.6),
+    new THREE.MeshBasicMaterial({ color: COLORS.crimson, transparent: true, opacity: 0.95, toneMapped: false }),
+  );
+  plagueMark.rotation.x = -Math.PI / 2;
+  plagueMark.position.y = 88;
+  plagueMark.visible = false;
+  root.add(plagueMark);
+
+  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars, deflectArc, poolDisc, plagueMark };
 }
 
 /**

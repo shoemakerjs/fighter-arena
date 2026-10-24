@@ -24,6 +24,9 @@ export const COLORS = {
   /** Sozuki's steel: katana cuts, the crescent and the deflect. */
   edge: '#c9d6f2',
   spirit: '#8f8cff',
+  /** The blood mage's crimson, and green for heals. */
+  crimson: '#d4203f',
+  heal: '#5dff8f',
   blood: '#ff2d55',
   energy: '#ffd54a',
   orb: '#ffd166',
@@ -51,5 +54,6 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'longshot') return COLORS.longshot;
   if (id === 'tempest' || id === 'crescent' || id === 'blade' || id === 'deflect') return COLORS.edge;
   if (id === 'soul' || id === 'fate') return COLORS.spirit;
+  if (id === 'transfusion' || id === 'pool' || id === 'tides' || id === 'drain' || id === 'plague') return COLORS.crimson;
   return COLORS.players[owner];
 }

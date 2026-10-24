@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAGUE, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -88,6 +88,8 @@ export class World3D implements WorldView {
   private zoneViews = new Map<number, ZoneView>();
   /** Where each samurai's body waits during Soul Unbound. */
   private soulMarks: THREE.Group[] = [];
+  /** Exsanguinate tethers, one per player. */
+  private tethers: THREE.Mesh[] = [];
   private lights: THREE.PointLight[] = [];
   private rings: THREE.Mesh[] = [];
   private particles: THREE.Points;
@@ -529,6 +531,7 @@ export class World3D implements WorldView {
 
   private updateChampions(prev: GameState, cur: GameState, alpha: number, dt: number, localId: number | null) {
     this.ensureRigs(cur);
+    for (const t of this.tethers.slice(cur.players.length)) t.visible = false;
     for (let i = 0; i < cur.players.length; i++) {
       const rig = this.champions[i];
       const a = this.anim[i];
@@ -706,6 +709,16 @@ export class World3D implements WorldView {
         rig.revealEye.position.y = 96 + Math.sin(this.time * 3) * 2;
         rig.revealEye.quaternion.copy(this.camera.quaternion);
       }
+      // Sanguine Pool: the body sinks away, only the blood stays.
+      rig.body.visible = pc.poolT === 0;
+      rig.poolDisc.visible = pc.poolT > 0 && !dead;
+      if (rig.poolDisc.visible) rig.poolDisc.scale.setScalar(0.9 + 0.1 * Math.sin(this.time * 9));
+      rig.plagueMark.visible = pc.plagueT > 0 && !dead;
+      if (rig.plagueMark.visible) {
+        rig.plagueMark.rotation.z += dt * 5;
+        rig.plagueMark.position.y = 88 + Math.sin(this.time * 4) * 2;
+      }
+      this.updateTether(i, cur, p);
       rig.deflectArc.visible = pc.deflectT > 0 && !dead;
       if (rig.deflectArc.visible) {
         const m = rig.deflectArc.material as THREE.MeshBasicMaterial;
@@ -736,7 +749,9 @@ export class World3D implements WorldView {
         ? new THREE.IcosahedronGeometry(size * 0.75, 0)
         : kind === 'frost' || kind === 'hook'
           ? new THREE.OctahedronGeometry(size * 0.85, 0)
-          : new THREE.SphereGeometry(size * 0.6, 12, 8);
+          : kind === 'transfusion'
+            ? new THREE.IcosahedronGeometry(size * 0.7, 0)
+            : new THREE.SphereGeometry(size * 0.6, 12, 8);
     const sprite = (opacity: number) =>
       new THREE.SpriteMaterial({ map: this.glowTex, color, opacity, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     l = {
@@ -964,6 +979,31 @@ export class World3D implements WorldView {
     }
   }
 
+  /** Exsanguinate: a crimson thread from the drainer's chest to its victim. */
+  private updateTether(i: number, cur: GameState, at: Vec) {
+    let t = this.tethers[i];
+    if (!t) {
+      t = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshBasicMaterial({ color: COLORS.crimson, transparent: true, opacity: 0.85, toneMapped: false }),
+      );
+      this.scene.add(t);
+      this.tethers[i] = t;
+    }
+    const p = cur.players[i];
+    const target = p.drainT > 0 ? cur.players[p.drainTarget] : null;
+    t.visible = !!target && this.champions[p.drainTarget]?.root.visible !== false;
+    if (!target || !t.visible) return;
+    const from = new THREE.Vector3(at.x, 34, at.y);
+    const to = new THREE.Vector3(target.x, 34, target.y);
+    const dir = to.clone().sub(from);
+    const len = dir.length();
+    t.position.copy(from).addScaledVector(dir, 0.5);
+    t.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.normalize());
+    const pulse = 1.6 + Math.sin(this.time * 18) * 0.6;
+    t.scale.set(len, pulse, pulse);
+  }
+
   // ---------------------------------------------------------------- soul unbound
 
   private updateSouls(cur: GameState, localId: number | null) {
@@ -1002,7 +1042,7 @@ export class World3D implements WorldView {
     const p = s.players[opts.localId];
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1022,8 +1062,15 @@ export class World3D implements WorldView {
       this.aimLaneMesh.position.set(PLAYER_R + len / 2, 0, 0);
       this.aimLaneMesh.scale.set(len, half * 2, 1);
       (this.aimLaneMesh.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
-    } else if ((id === 'meteor' || id === 'rain') && opts.cursor) {
-      const range = id === 'rain' ? RAIN.range : METEOR.range;
+    } else if (id === 'tides' && def && p.cast) {
+      // The burst's reach around you, filling up as the blood gathers.
+      const draw = (def.cast - p.cast.t) / def.cast;
+      this.aimCircle.visible = true;
+      this.aimCircle.position.set(p.x, 1.4, p.y);
+      this.aimCircle.scale.setScalar((TIDES.r / METEOR.r) * (0.5 + 0.5 * draw));
+      (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.crimson);
+    } else if ((id === 'meteor' || id === 'rain' || id === 'plague') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : id === 'plague' ? PLAGUE.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
@@ -1034,7 +1081,7 @@ export class World3D implements WorldView {
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
-      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : 1);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'plague' ? PLAGUE.r / METEOR.r : 1);
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }

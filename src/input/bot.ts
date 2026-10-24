@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, TEMPEST, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CRY, DRAIN, EXECUTE, FATE, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAGUE, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, teamSees } from '../sim/vision';
 
@@ -114,6 +114,7 @@ export class Bot {
     const archer = me.champ === CHAMP.ARCHER;
     const mage = me.champ === CHAMP.MAGE;
     const samurai = me.champ === CHAMP.SAMURAI;
+    const blood = me.champ === CHAMP.BLOOD;
     // Champions that fight up close and walk in rather than kite.
     const melee = warrior || samurai;
     const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI;
@@ -125,7 +126,7 @@ export class Bot {
     // --- Movement: warriors close in, mages hold range (more of it against melee) and strafe.
     let wx = 0;
     let wy = 0;
-    const pref = assassin ? (foeMelee ? 300 : 230) : archer ? (foeMelee ? 420 : 380) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
+    const pref = assassin ? (foeMelee ? 300 : 230) : archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
     const radial = melee ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
     wx += nx * radial * (melee ? 1.4 : 1);
     wy += ny * radial * (melee ? 1.4 : 1);
@@ -236,7 +237,8 @@ export class Bot {
     const foeThreatening = foeMelee && (dist < 90 + close || (dist < 120 + close && (foe.cast !== null || foe.whirlT > 0)));
     if (!melee && foeThreatening && !buttons && this.decide(-s.frame)) {
       if (archer && ready(SLOT.E) && me.cast === null && r() < 0.5) buttons |= BTN.E;
-      else if (!archer && ready(SLOT.Q) && r() < 0.5) buttons |= BTN.Q;
+      // (The blood mage's Q is a charge-up, not an escape: it sinks into the pool below.)
+      else if (!archer && !blood && ready(SLOT.Q) && r() < 0.5) buttons |= BTN.Q;
       else if (ready(SLOT.SPACE)) {
         buttons |= BTN.SPACE;
         escape = true;
@@ -256,10 +258,11 @@ export class Bot {
       aimId = id;
     };
 
-    // Keep drawing a longshot until the planned draw is reached (or the target hides).
-    if (archer && me.cast && kit[me.cast.ability].id === 'longshot') {
+    // Keep drawing a longshot / gathering Tides of Blood until the planned charge (or the target hides).
+    const charging = me.cast ? kit[me.cast.ability].id : null;
+    if (me.cast && (charging === 'longshot' || charging === 'tides')) {
       const drawn = kit[me.cast.ability].cast - me.cast.t;
-      if (drawn < this.drawFor && !hidden) buttons |= BTN.M2;
+      if (drawn < this.drawFor && !hidden) buttons |= SLOT_BUTTONS[me.cast.ability];
     }
 
     let engage = false;
@@ -277,6 +280,17 @@ export class Bot {
           engage = true;
         } else if (ready(SLOT.M2) && los && dist < (crescent ? PROJ.crescent.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
         else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
+      } else if (blood) {
+        const hurt = me.hp < CHAMPIONS[me.champ].hp * 0.75;
+        const enemiesNear = s.players.filter((p) => p.team !== me.team && !p.out && Math.hypot(p.x - me.x, p.y - me.y) < PLAGUE.range).length;
+        if (ready(SLOT.R) && !hidden && dist < PLAGUE.range && (enemiesNear > 1 || foe.hp < CHAMPIONS[foe.champ].hp * 0.5 || r() < 0.01)) press(SLOT.R);
+        else if (ready(SLOT.E) && !hidden && dist < DRAIN.range - 40 && (hurt || foeMelee) && r() < 0.08 * a) press(SLOT.E);
+        else if (ready(SLOT.Q) && dist < TIDES.r + PLAYER_R && r() < 0.15 * a) {
+          press(SLOT.Q);
+          // Gather longer when the target is slowed or rooted and won't walk out.
+          this.drawFor = Math.ceil(kit[SLOT.Q].cast * (foe.slowT > 0 || foe.rootT > 0 ? 1 : 0.4 + r() * 0.4));
+        } else if (ready(SLOT.M2) && los && dist < PROJ.transfusion.range - 30 && r() < 0.1 * a) press(SLOT.M2);
+        else if (los && dist < PROJ.bloodbolt.range && (!dodging || r() < 0.5) && r() < 0.9 * a) press(SLOT.M1);
       } else if (archer) {
         const pinned = foe.rootT > 0 || foe.slowT > 0 || foe.cast !== null;
         if (ready(SLOT.R) && !hidden && dist < RAIN.range + 40 && (pinned ? r() < 0.2 : r() < 0.005)) press(SLOT.R);
@@ -352,6 +366,9 @@ export class Bot {
       const ey = (escape ? -ny : dodgeY) * flip;
       ax = me.x + ex * 200;
       ay = me.y + ey * 200;
+    } else if (aimId === 'plague') {
+      ax = tx + this.tvx * kit[SLOT.R].cast * this.p.lead;
+      ay = ty + this.tvy * kit[SLOT.R].cast * this.p.lead;
     } else if (aimId === 'meteor' || aimId === 'rain') {
       const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : METEOR.delay);
       ax = tx + this.tvx * t * this.p.lead * 0.5;

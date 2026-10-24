@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, WHIRL } from '../sim/constants';
+import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAGUE, POOL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, TIDES, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -125,6 +125,9 @@ export class Fx {
             // Released as a crescent cut (the plain thrust has its own event).
             this.burst(e.x, e.y, 16, COLORS.edge, 220, 3, 0.35);
             this.sound('whirl');
+          } else if (e.ability === 'bloodbolt' || e.ability === 'transfusion') {
+            this.burst(e.x, e.y, e.ability === 'transfusion' ? 10 : 4, COLORS.crimson, 150, 2.6, 0.25);
+            this.sound(e.ability === 'transfusion' ? 'frost' : 'bolt');
           } else if (e.ability === 'rain') {
             // Volley loosed into the sky.
             for (let i = 0; i < 12; i++) this.particles.push(spark(e.x, e.y, COLORS.vine, 900));
@@ -149,6 +152,8 @@ export class Fx {
             e.kind === 'execute' ||
             e.kind === 'fate' ||
             e.kind === 'crescent' ||
+            e.kind === 'plague' ||
+            (e.kind === 'tides' && e.dmg >= TIDES.dmg + TIDES.bonus * 0.8) ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
           const color = abilityColor(e.kind, e.source);
@@ -235,6 +240,31 @@ export class Fx {
           this.sound('slash');
           break;
         }
+
+        case 'heal': {
+          const p = s.players[e.player];
+          this.texts.push({ x: p.x + (Math.random() - 0.5) * 24, y: p.y - 44, text: `+${e.amount}`, color: COLORS.heal, life: 0.8, max: 0.8, size: 15 });
+          break;
+        }
+
+        case 'tides':
+          this.rings.push({ x: e.x, y: e.y, r0: 20, r1: TIDES.r, life: 0.35, max: 0.35, color: COLORS.crimson, width: 6 + 6 * e.power });
+          this.burst(e.x, e.y, 14 + Math.round(20 * e.power), COLORS.crimson, 320, 3.5, 0.45, 10);
+          this.shake += 3 + 5 * e.power;
+          this.sound('blast');
+          break;
+
+        case 'pool':
+          this.rings.push({ x: e.x, y: e.y, r0: 10, r1: POOL.r, life: 0.3, max: 0.3, color: COLORS.crimson, width: 5 });
+          this.burst(e.x, e.y, 18, COLORS.crimson, 160, 3, 0.4, 6);
+          this.sound('dash');
+          break;
+
+        case 'plague':
+          this.rings.push({ x: e.x, y: e.y, r0: PLAGUE.r + 30, r1: PLAGUE.r, life: 0.45, max: 0.45, color: COLORS.crimson, width: 8 });
+          this.burst(e.x, e.y, 30, COLORS.crimson, 260, 3.5, 0.6, 20);
+          this.sound('meteorCast');
+          break;
 
         case 'deflect':
           this.burst(e.x, e.y, 12, COLORS.edge, 220, 2.6, 0.3);
@@ -549,11 +579,15 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'vault':
     case 'thrust':
     case 'deflect':
+    case 'tides':
+    case 'pool':
+    case 'heal':
     case 'soul':
     case 'soulReturn':
     case 'fate':
       return { x: e.x, y: e.y, player: e.player };
     case 'impact':
+    case 'plague':
       return { x: e.x, y: e.y, player: e.owner };
     default:
       return null;

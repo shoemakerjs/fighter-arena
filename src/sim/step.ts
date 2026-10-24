@@ -14,6 +14,7 @@ import {
   ARENA_SHRINK,
   BLADE,
   BLINK,
+  BLOODBOLT,
   BUFFER_TICKS,
   CHAMPIONS,
   COUNTDOWN_TICKS,
@@ -22,6 +23,7 @@ import {
   DASH,
   DUMMY,
   DEFLECT,
+  DRAIN,
   EXECUTE,
   FATE,
   HASTE_MUL,
@@ -39,8 +41,10 @@ import {
   ORB_RESPAWN,
   ORB_SPAWN_AT,
   PILLARS,
+  PLAGUE,
   PLAYER_R,
   POISON,
+  POOL,
   PROJ,
   RAIN,
   RIFT,
@@ -57,6 +61,8 @@ import {
   SUDDEN_DEATH_AT,
   TEAM_SPREAD,
   TEMPEST,
+  TIDES,
+  TRANSFUSION,
   VAULT,
   WHIRL,
   type AbilityDef,
@@ -154,6 +160,12 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     soulY: 0,
     soulDmg: 0,
     soulTarget: -1,
+    poolT: 0,
+    drainT: 0,
+    drainTarget: -1,
+    bloodCount: 0,
+    plagueT: 0,
+    plagueBy: 0,
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -306,12 +318,12 @@ export function airborne(p: Player): boolean {
 
 /** Leaping or executing: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
-  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2);
+  return (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2)) || p.poolT > 0;
 }
 
 /** Leaping, executing or sweeping: moves through the enemy instead of bumping it. */
 function passesThrough(p: Player): boolean {
-  return p.dashT > 0 && p.dashKind >= 1;
+  return (p.dashT > 0 && p.dashKind >= 1) || p.poolT > 0;
 }
 
 function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
@@ -329,6 +341,9 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.deflectT > 0) p.deflectT--;
   if (p.stackT > 0 && --p.stackT === 0) p.stacks = 0;
   if (p.soulT > 0 && --p.soulT === 0) soulReturn(s, p, ev);
+  if (p.poolT > 0) poolPulse(s, p, ev);
+  if (p.drainT > 0) drainPulse(s, p, ev);
+  if (p.plagueT > 0 && --p.plagueT === 0) plagueBurst(s, p, ev);
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   if (p.poisonT > 0) {
     p.poisonT--;
@@ -370,7 +385,9 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     p.cast.t--;
     // A longshot fires when the button is let go (after a minimal draw) or at full draw.
     const drawn = def.cast - p.cast.t;
-    const letGo = def.id === 'longshot' && !(inp.buttons & SLOT_BUTTONS[slot]) && drawn >= LONGSHOT.minDraw;
+    // Longshot and Tides of Blood go off when the button is let go (after a minimal draw) or at full draw.
+    const minDraw = def.id === 'longshot' ? LONGSHOT.minDraw : def.id === 'tides' ? TIDES.minDraw : -1;
+    const letGo = minDraw >= 0 && !(inp.buttons & SLOT_BUTTONS[slot]) && drawn >= minDraw;
     if (p.cast.t <= 0 || letGo) {
       p.cast = null;
       release(s, p, slot, inp, ev, drawn / def.cast);
@@ -403,6 +420,8 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     if (p.counterT > 0) speed *= COUNTER.slow;
     if (p.whirlT > 0) speed *= WHIRL.speed;
     if (p.stealthT > 0) speed *= SMOKE.speed;
+    if (p.poolT > 0) speed *= POOL.speed;
+    if (p.drainT > 0) speed *= DRAIN.speed;
     if (mx !== 0 && my !== 0) speed *= Math.SQRT1_2;
     p.x += mx * speed;
     p.y += my * speed;
@@ -515,8 +534,35 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     return true;
   }
 
-  // Deflecting holds the sword up: no attacks (mobility above still works).
-  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0 || p.deflectT > 0) return false;
+  // Deflecting holds the sword up, a pool or a drain keeps you busy: no attacks (mobility above still works).
+  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0 || p.deflectT > 0 || p.poolT > 0 || p.drainT > 0) return false;
+
+  if (def.id === 'pool') {
+    p.poolT = POOL.ticks;
+    p.hp = Math.max(1, p.hp - Math.round(p.hp * POOL.cost));
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'pool', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
+  if (def.id === 'drain') {
+    // The nearest enemy in reach; nothing in reach, nothing spent.
+    let best: Player | null = null;
+    let bestD = DRAIN.range * DRAIN.range;
+    for (const foe of enemiesOf(s, p)) {
+      const dx = foe.x - p.x;
+      const dy = foe.y - p.y;
+      const d2 = dx * dx + dy * dy;
+      if (d2 <= bestD && foe.hp > 0 && !untargetable(foe)) {
+        best = foe;
+        bestD = d2;
+      }
+    }
+    if (!best) return false;
+    p.drainT = DRAIN.ticks;
+    p.drainTarget = best.id;
+    p.cooldowns[slot] = def.cooldown;
+    return true;
+  }
 
   if (def.id === 'counter') {
     p.counterT = COUNTER.ticks;
@@ -588,6 +634,40 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       }
       s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'tides': {
+      p.hp = Math.max(1, p.hp - TIDES.cost);
+      ev.push({ type: 'tides', player: p.id, x: p.x, y: p.y, power: draw });
+      const dmg = Math.round(TIDES.dmg + TIDES.bonus * draw);
+      for (const foe of areaHit(s, p, p.x, p.y, TIDES.r, dmg, 10, 0, 'tides', ev)) {
+        foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, TIDES.slowMul) : TIDES.slowMul;
+        foe.slowT = Math.max(foe.slowT, TIDES.slowT);
+      }
+      return;
+    }
+
+    case 'plague': {
+      let tx = inp.ax - p.x;
+      let ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      if (d > PLAGUE.range) {
+        tx = (tx / d) * PLAGUE.range;
+        ty = (ty / d) * PLAGUE.range;
+      }
+      const x = p.x + tx;
+      const y = p.y + ty;
+      ev.push({ type: 'plague', owner: p.id, x, y });
+      for (const foe of foes) {
+        const dx = foe.x - x;
+        const dy = foe.y - y;
+        const reach = PLAGUE.r + PLAYER_R;
+        if (dx * dx + dy * dy < reach * reach && foe.hp > 0 && !untargetable(foe)) {
+          foe.plagueT = PLAGUE.ticks;
+          foe.plagueBy = p.id;
+        }
+      }
       return;
     }
 
@@ -720,6 +800,8 @@ function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, e
   } else if (kind === 'arrow' && p.quickT > 0) {
     p.quickT = 0;
     dmg += VAULT.bonus;
+  } else if (kind === 'transfusion' && ++p.bloodCount % TRANSFUSION.every === 0) {
+    dmg = Math.round(dmg * TRANSFUSION.boost);
   }
   const off = PLAYER_R + pd.r * 0.5;
   const x = p.x + p.fx * off;
@@ -920,6 +1002,8 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
     dmg += MARK.bonus;
     ev.push({ type: 'markPop', player: target.id, x: target.x, y: target.y });
   }
+  // Hemoplague: the cursed take more from everything (but the burst itself).
+  if (target.plagueT > 0 && kind !== 'plague') dmg = Math.round(dmg * PLAGUE.amp);
   target.hp = Math.max(0, target.hp - dmg);
   target.hitT = 8;
   target.restT = 0;
@@ -940,12 +1024,53 @@ function block(target: Player, x: number, y: number, ev: GameEvent[]) {
   ev.push({ type: 'block', player: target.id, x, y });
 }
 
+/** Heal up to max HP (the knocked out stay down). */
+function heal(p: Player, amount: number, ev: GameEvent[]) {
+  if (amount <= 0 || p.hp <= 0 || p.out) return;
+  const before = p.hp;
+  p.hp = Math.min(maxHp(p), p.hp + amount);
+  if (p.hp > before) ev.push({ type: 'heal', player: p.id, amount: p.hp - before, x: p.x, y: p.y });
+}
+
+/** Sanguine Pool: every few ticks drain and slow the enemies around. */
+function poolPulse(s: GameState, p: Player, ev: GameEvent[]) {
+  p.poolT--;
+  if (p.poolT % POOL.every !== 0) return;
+  const hit = areaHit(s, p, p.x, p.y, POOL.r, POOL.dmg, 2, 0, 'pool', ev);
+  for (const foe of hit) {
+    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, POOL.slowMul) : POOL.slowMul;
+    foe.slowT = Math.max(foe.slowT, POOL.every + 2);
+  }
+  heal(p, hit.length * POOL.dmg, ev);
+}
+
+/** Exsanguinate: drain the tethered enemy while it stays in reach. */
+function drainPulse(s: GameState, p: Player, ev: GameEvent[]) {
+  const t = s.players[p.drainTarget];
+  const dx = t.x - p.x;
+  const dy = t.y - p.y;
+  const reach = DRAIN.range * 1.15;
+  if (!t || t.out || t.hp <= 0 || untargetable(t) || dx * dx + dy * dy > reach * reach) {
+    p.drainT = 0;
+    return;
+  }
+  if (--p.drainT % DRAIN.every === 0 && hit(p, t, DRAIN.dmg, DRAIN.energy, 'drain', t.x, t.y, ev)) heal(p, DRAIN.dmg, ev);
+}
+
+/** Hemoplague runs out: the cursed burst, healing the caster. */
+function plagueBurst(s: GameState, p: Player, ev: GameEvent[]) {
+  const src = s.players[p.plagueBy];
+  if (src.out || p.hp <= 0) return;
+  if (hit(src, p, PLAGUE.dmg, 0, 'plague', p.x, p.y, ev)) heal(src, PLAGUE.heal, ev);
+}
+
 function stun(target: Player, ticks: number, ev: GameEvent[]) {
   target.stunT = Math.max(target.stunT, ticks);
   target.cast = null;
   target.whirlT = 0;
   target.counterT = 0;
   target.deflectT = 0;
+  target.drainT = 0;
   if (!untargetable(target)) target.dashT = 0;
   target.buffer = -1;
   target.bufferT = 0;
@@ -957,6 +1082,7 @@ function knockback(target: Player, nx: number, ny: number, force: number) {
   target.vy += ny * force;
   target.cast = null;
   target.whirlT = 0;
+  target.drainT = 0;
 }
 
 function damageOrb(s: GameState, owner: number, dmg: number, x: number, y: number, ev: GameEvent[]) {
@@ -1037,6 +1163,9 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         }
         if (pr.kind === 'sonic') target.revealT = SONIC.reveal;
         if (pr.kind === 'crescent') stun(target, TEMPEST.stun, ev);
+        const shooter = s.players[pr.owner];
+        if (pr.kind === 'bloodbolt') heal(shooter, BLOODBOLT.heal, ev);
+        if (pr.kind === 'transfusion') heal(shooter, Math.round((TRANSFUSION.heal * pr.dmg) / PROJ.transfusion.dmg), ev);
         if (pr.kind === 'snare') {
           target.rootT = SNARE.root;
           ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });

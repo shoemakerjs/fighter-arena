@@ -1228,6 +1228,9 @@ button {
 
 .training-skills .abilities {
   margin-top: 0;
+  /* Stop above the settings panel; long kits scroll. */
+  max-height: calc(100vh - 84px - 110px - 330px);
+  overflow-y: auto;
 }
 
 .training-panel {

@@ -63,7 +63,8 @@ export type AbilityId =
   | 'slash' | 'hook' | 'leap' | 'cry' | 'whirl' | 'rift'
   | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute'
   | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain'
-  | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate';
+  | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
+  | 'bloodbolt' | 'transfusion' | 'pool' | 'tides' | 'drain' | 'plague';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -85,7 +86,7 @@ export interface ChampionDef {
   abilities: AbilityDef[];
 }
 
-export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4 } as const;
+export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4, BLOOD: 5 } as const;
 
 export const CHAMPIONS: ChampionDef[] = [
   {
@@ -159,6 +160,21 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'fate', name: 'Fate Sealed', desc: 'blink forward in a line, pulling the enemy along and stunning it, 100 energy', cooldown: 60, cast: 24, castSlow: 0.2, energyCost: 100 },
     ],
   },
+  {
+    name: 'Blood Mage',
+    role: 'drain and sustain',
+    hp: 155,
+    speed: 3.1,
+    abilities: [
+      { id: 'bloodbolt', name: 'Blood Bolt', desc: 'bolt that heals you a little when it hits, hold to keep firing', cooldown: 8, cast: 16, castSlow: 0.6, energyCost: 0 },
+      { id: 'transfusion', name: 'Transfusion', desc: 'drains the enemy and heals you; every third one is empowered', cooldown: 240, cast: 12, castSlow: 0.6, energyCost: 0 },
+      { id: 'pool', name: 'Sanguine Pool', desc: 'sink into a pool of blood for 1.2 s: untargetable, slowing and draining enemies around you; costs 10% of your HP', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
+      // Charged: `cast` is the full gathering; letting go early bursts weaker.
+      { id: 'tides', name: 'Tides of Blood', desc: 'hold to gather blood, release to burst around you and slow; costs 6 HP', cooldown: 300, cast: 60, castSlow: 0.5, energyCost: 0 },
+      { id: 'drain', name: 'Exsanguinate', desc: 'tether the nearest enemy and drain it for up to 2 s while it stays close', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'plague', name: 'Hemoplague', desc: 'curse an area: enemies inside take +15% damage for 3 s, then burst and heal you, 100 energy', cooldown: 60, cast: 16, castSlow: 0.3, energyCost: 100 },
+    ],
+  },
 ];
 
 export interface ProjDef {
@@ -189,6 +205,8 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   snare: { speed: 13, r: 11, range: 480, dmg: 8, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
   // Steel Tempest with two stacks becomes a flying crescent cut.
   crescent: { speed: 12, r: 22, range: 440, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
+  bloodbolt: { speed: 12, r: 9, range: 440, dmg: 7, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
+  transfusion: { speed: 15, r: 11, range: 420, dmg: 13, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
 };
 
 // Mage
@@ -246,3 +264,17 @@ export const FATE = { range: 320, half: 40, dmg: 18, stun: 45 };
 // Training
 /** Training: nobody dies, and after `rest` ticks without damage a player heals up. The dummy has `hp`. */
 export const DUMMY = { hp: 1000, rest: 150 };
+
+// Blood mage
+/** Blood Bolt heals this much on a hit. */
+export const BLOODBOLT = { heal: 2 };
+/** Transfusion heals `heal` on a hit; every `every`th cast is empowered by `boost` (damage and heal). */
+export const TRANSFUSION = { heal: 9, every: 3, boost: 1.6 };
+/** A pool of blood: untargetable for `ticks`, moving at `speed`; every `every` ticks drains enemies within `r`. Costs `cost` of current HP. */
+export const POOL = { ticks: 72, speed: 0.75, r: 75, every: 12, dmg: 2, slowMul: 0.6, cost: 0.1 };
+/** Gather at least `minDraw`; bursts within `r` for `dmg` (+`bonus` at a full gathering) and slows. Costs `cost` HP. */
+export const TIDES = { minDraw: 12, r: 135, dmg: 10, bonus: 14, slowMul: 0.6, slowT: 60, cost: 6 };
+/** Tether the nearest enemy within `range` for up to `ticks`; every `every` ticks deals and heals `dmg`. Moving at `speed`. */
+export const DRAIN = { ticks: 120, range: 300, every: 15, dmg: 5, energy: 4, speed: 0.6 };
+/** Area within `range` of radius `r`: enemies take `amp` times damage for `ticks`, then take `dmg` and heal the caster `heal` each. */
+export const PLAGUE = { range: 450, r: 140, ticks: 180, amp: 1.15, dmg: 22, heal: 14 };

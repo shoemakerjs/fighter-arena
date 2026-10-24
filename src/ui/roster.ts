@@ -70,4 +70,14 @@ export const ROSTER: RosterEntry[] = [
     focus: 0.34,
     lore: 'A wandering swordswoman from the land in the east. Her blade turns arrows aside, cuts through her foes before they can react, and her spirit strikes twice.',
   },
+  {
+    hero: 'Morvane',
+    category: 'Mage',
+    // Stand-in until the painted art arrives.
+    art: './art/placeholder.svg',
+    flip: false,
+    portrait: '68% 12%',
+    focus: 0.65,
+    lore: 'A noble of the old blood who learned to drink the life of others. Every wound dealt is a sip taken, and pain only sharpens the thirst.',
+  },
 ];

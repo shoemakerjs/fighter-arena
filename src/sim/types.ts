@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'pool' | 'tides' | 'drain' | 'plague';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -105,6 +105,16 @@ export interface Player {
   soulDmg: number;
   /** The enemy last hit during Soul Unbound; the echo lands on them. */
   soulTarget: number;
+  /** Blood mage: in the Sanguine Pool (ticks left). */
+  poolT: number;
+  /** Blood mage: draining `drainTarget` (ticks left). */
+  drainT: number;
+  drainTarget: number;
+  /** Transfusions cast this round (every third is empowered). */
+  bloodCount: number;
+  /** Cursed by Hemoplague (ticks left) and by whom. */
+  plagueT: number;
+  plagueBy: number;
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -212,6 +222,11 @@ export type GameEvent =
   | { type: 'root'; player: number; x: number; y: number }
   | { type: 'stun'; player: number; x: number; y: number }
   | { type: 'thrust'; player: number; x: number; y: number; fx: number; fy: number }
+  | { type: 'heal'; player: number; amount: number; x: number; y: number }
+  /** Tides of Blood bursting with radius r. */
+  | { type: 'tides'; player: number; x: number; y: number; power: number }
+  | { type: 'pool'; player: number; x: number; y: number }
+  | { type: 'plague'; owner: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */
   | { type: 'deflect'; player: number; x: number; y: number }
   | { type: 'soul'; player: number; x: number; y: number }
