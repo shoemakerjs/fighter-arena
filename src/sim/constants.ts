@@ -64,7 +64,7 @@ export type AbilityId =
   | 'dagger' | 'mark' | 'blink' | 'smoke' | 'poison' | 'execute'
   | 'arrow' | 'longshot' | 'vault' | 'sonic' | 'snare' | 'rain'
   | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
-  | 'bloodbolt' | 'transfusion' | 'pool' | 'tides' | 'drain' | 'plague';
+  | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'plague';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -163,12 +163,12 @@ export const CHAMPIONS: ChampionDef[] = [
   {
     name: 'Blood Mage',
     role: 'drain and sustain',
-    hp: 155,
+    hp: 150,
     speed: 3.1,
     abilities: [
       { id: 'bloodbolt', name: 'Blood Bolt', desc: 'bolt that heals you a little when it hits, hold to keep firing', cooldown: 8, cast: 16, castSlow: 0.6, energyCost: 0 },
-      { id: 'transfusion', name: 'Transfusion', desc: 'drains the enemy and heals you; every third one is empowered', cooldown: 240, cast: 12, castSlow: 0.6, energyCost: 0 },
-      { id: 'pool', name: 'Sanguine Pool', desc: 'sink into a pool of blood for 1.2 s: untargetable, slowing and draining enemies around you; costs 10% of your HP', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'transfusion', name: 'Transfusion', desc: 'drains the enemy and heals you, but a miss costs you 8 HP; every third one is empowered', cooldown: 240, cast: 12, castSlow: 0.6, energyCost: 0 },
+      { id: 'step', name: 'Crimson Step', desc: 'dash toward the cursor; enemies you pass through bleed for 2 s, healing you', cooldown: 360, cast: 0, castSlow: 1, energyCost: 0 },
       // Charged: `cast` is the full gathering; letting go early bursts weaker.
       { id: 'tides', name: 'Tides of Blood', desc: 'hold to gather blood, release to burst around you and slow; costs 6 HP', cooldown: 300, cast: 60, castSlow: 0.5, energyCost: 0 },
       { id: 'drain', name: 'Exsanguinate', desc: 'tether the nearest enemy and drain it for up to 2 s while it stays close', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
@@ -268,10 +268,12 @@ export const DUMMY = { hp: 1000, rest: 150 };
 // Blood mage
 /** Blood Bolt heals this much on a hit. */
 export const BLOODBOLT = { heal: 2 };
-/** Transfusion heals `heal` on a hit; every `every`th cast is empowered by `boost` (damage and heal). */
-export const TRANSFUSION = { heal: 9, every: 3, boost: 1.6 };
-/** A pool of blood: untargetable for `ticks`, moving at `speed`; every `every` ticks drains enemies within `r`. Costs `cost` of current HP. */
-export const POOL = { ticks: 72, speed: 0.75, r: 75, every: 12, dmg: 2, slowMul: 0.6, cost: 0.1 };
+/** Transfusion heals `heal` on a hit and costs `missCost` HP on a miss; every `every`th cast is empowered by `boost` (damage and heal). */
+export const TRANSFUSION = { heal: 9, missCost: 8, every: 3, boost: 1.6 };
+/** Crimson Step: a dash through enemies; each one passed through bleeds (BLEED). */
+export const STEP = { ticks: 10, speed: 17 };
+/** Bleeding: `dmg` every `every` ticks for `ticks`, each tick healing whoever caused it. */
+export const BLEED = { ticks: 120, every: 20, dmg: 2 };
 /** Gather at least `minDraw`; bursts within `r` for `dmg` (+`bonus` at a full gathering) and slows. Costs `cost` HP. */
 export const TIDES = { minDraw: 12, r: 135, dmg: 10, bonus: 14, slowMul: 0.6, slowT: 60, cost: 6 };
 /** Tether the nearest enemy within `range` for up to `ticks`; every `every` ticks deals and heals `dmg`. Moving at `speed`. */

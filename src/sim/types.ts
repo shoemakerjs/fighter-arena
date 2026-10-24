@@ -30,7 +30,7 @@ export interface Input {
 }
 
 export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'pool' | 'tides' | 'drain' | 'plague';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'plague';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -71,7 +71,8 @@ export interface Player {
   dashY: number;
   /**
    * 0 = ground dash, 1 = leap (airborne: can't be hit, damages on landing),
-   * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once).
+   * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once),
+   * 4 = crimson step (passes through, makes each enemy bleed; dashHit is a bitmask by id).
    */
   dashKind: number;
   /** Execute / sweeping blade already connected during this dash (0/1). */
@@ -105,8 +106,9 @@ export interface Player {
   soulDmg: number;
   /** The enemy last hit during Soul Unbound; the echo lands on them. */
   soulTarget: number;
-  /** Blood mage: in the Sanguine Pool (ticks left). */
-  poolT: number;
+  /** Bleeding from a Crimson Step (ticks left), healing `bleedBy`. */
+  bleedT: number;
+  bleedBy: number;
   /** Blood mage: draining `drainTarget` (ticks left). */
   drainT: number;
   drainTarget: number;
@@ -225,7 +227,10 @@ export type GameEvent =
   | { type: 'heal'; player: number; amount: number; x: number; y: number }
   /** Tides of Blood bursting with radius r. */
   | { type: 'tides'; player: number; x: number; y: number; power: number }
-  | { type: 'pool'; player: number; x: number; y: number }
+  /** `player` starts bleeding. */
+  | { type: 'bleed'; player: number; x: number; y: number }
+  /** A missed Transfusion costs its caster HP. */
+  | { type: 'bloodloss'; player: number; amount: number; x: number; y: number }
   | { type: 'plague'; owner: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */
   | { type: 'deflect'; player: number; x: number; y: number }

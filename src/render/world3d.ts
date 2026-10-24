@@ -709,10 +709,6 @@ export class World3D implements WorldView {
         rig.revealEye.position.y = 96 + Math.sin(this.time * 3) * 2;
         rig.revealEye.quaternion.copy(this.camera.quaternion);
       }
-      // Sanguine Pool: the body sinks away, only the blood stays.
-      rig.body.visible = pc.poolT === 0;
-      rig.poolDisc.visible = pc.poolT > 0 && !dead;
-      if (rig.poolDisc.visible) rig.poolDisc.scale.setScalar(0.9 + 0.1 * Math.sin(this.time * 9));
       rig.plagueMark.visible = pc.plagueT > 0 && !dead;
       if (rig.plagueMark.visible) {
         rig.plagueMark.rotation.z += dt * 5;

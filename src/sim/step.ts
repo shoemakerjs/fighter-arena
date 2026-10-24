@@ -13,9 +13,11 @@ import {
   ARENA_R,
   ARENA_SHRINK,
   BLADE,
+  BLEED,
   BLINK,
   BLOODBOLT,
   BUFFER_TICKS,
+  CHAMP,
   CHAMPIONS,
   COUNTDOWN_TICKS,
   COUNTER,
@@ -44,7 +46,6 @@ import {
   PLAGUE,
   PLAYER_R,
   POISON,
-  POOL,
   PROJ,
   RAIN,
   RIFT,
@@ -58,6 +59,7 @@ import {
   SOUL,
   SONIC,
   SPAWNS,
+  STEP,
   SUDDEN_DEATH_AT,
   TEAM_SPREAD,
   TEMPEST,
@@ -160,7 +162,8 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     soulY: 0,
     soulDmg: 0,
     soulTarget: -1,
-    poolT: 0,
+    bleedT: 0,
+    bleedBy: 0,
     drainT: 0,
     drainTarget: -1,
     bloodCount: 0,
@@ -318,12 +321,12 @@ export function airborne(p: Player): boolean {
 
 /** Leaping or executing: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
-  return (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2)) || p.poolT > 0;
+  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2);
 }
 
 /** Leaping, executing or sweeping: moves through the enemy instead of bumping it. */
 function passesThrough(p: Player): boolean {
-  return (p.dashT > 0 && p.dashKind >= 1) || p.poolT > 0;
+  return p.dashT > 0 && p.dashKind >= 1;
 }
 
 function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
@@ -341,7 +344,6 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.deflectT > 0) p.deflectT--;
   if (p.stackT > 0 && --p.stackT === 0) p.stacks = 0;
   if (p.soulT > 0 && --p.soulT === 0) soulReturn(s, p, ev);
-  if (p.poolT > 0) poolPulse(s, p, ev);
   if (p.drainT > 0) drainPulse(s, p, ev);
   if (p.plagueT > 0 && --p.plagueT === 0) plagueBurst(s, p, ev);
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
@@ -352,6 +354,16 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
       p.hp = Math.max(0, p.hp - POISON.dmg);
       p.restT = 0;
       ev.push({ type: 'hit', target: p.id, source: p.poisonBy, dmg: POISON.dmg, x: p.x, y: p.y, kind: 'poison' });
+    }
+  }
+
+  if (p.bleedT > 0) {
+    p.bleedT--;
+    if (p.bleedT % BLEED.every === 0 && p.hp > 0) {
+      p.hp = Math.max(0, p.hp - BLEED.dmg);
+      p.restT = 0;
+      ev.push({ type: 'hit', target: p.id, source: p.bleedBy, dmg: BLEED.dmg, x: p.x, y: p.y, kind: 'bleed' });
+      heal(s.players[p.bleedBy], BLEED.dmg, ev);
     }
   }
 
@@ -409,6 +421,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     }
     if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
     if (p.dashKind === 3 && !p.dashHit) bladeContact(s, p, ev);
+    if (p.dashKind === 4) stepContact(s, p, ev);
   } else {
     const held = p.rootT > 0 || stunned;
     const mx = held ? 0 : Math.sign(inp.mx);
@@ -420,7 +433,6 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     if (p.counterT > 0) speed *= COUNTER.slow;
     if (p.whirlT > 0) speed *= WHIRL.speed;
     if (p.stealthT > 0) speed *= SMOKE.speed;
-    if (p.poolT > 0) speed *= POOL.speed;
     if (p.drainT > 0) speed *= DRAIN.speed;
     if (mx !== 0 && my !== 0) speed *= Math.SQRT1_2;
     p.x += mx * speed;
@@ -447,7 +459,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate';
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step';
   if (p.rootT > 0 && mobility) return false;
 
   // Blink: instant teleport, also usable mid-cast (cancels it).
@@ -472,7 +484,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
 
   // Mobility works mid-cast and cancels the cast.
-  if (def.id === 'dash' || def.id === 'leap' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul') {
+  if (def.id === 'dash' || def.id === 'leap' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul' || def.id === 'step') {
     if (p.dashT > 0) return false;
     p.cast = null;
     p.counterT = 0;
@@ -490,6 +502,13 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       p.dashT = BLADE.ticks;
       p.dashX = p.fx * BLADE.speed;
       p.dashY = p.fy * BLADE.speed;
+      ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+    } else if (def.id === 'step') {
+      p.dashKind = 4;
+      p.dashHit = 0;
+      p.dashT = STEP.ticks;
+      p.dashX = p.fx * STEP.speed;
+      p.dashY = p.fy * STEP.speed;
       ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
     } else if (def.id === 'soul') {
       p.soulX = p.x;
@@ -534,16 +553,9 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     return true;
   }
 
-  // Deflecting holds the sword up, a pool or a drain keeps you busy: no attacks (mobility above still works).
-  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0 || p.deflectT > 0 || p.poolT > 0 || p.drainT > 0) return false;
+  // Deflecting holds the sword up, a drain keeps you busy: no attacks (mobility above still works).
+  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0 || p.deflectT > 0 || p.drainT > 0) return false;
 
-  if (def.id === 'pool') {
-    p.poolT = POOL.ticks;
-    p.hp = Math.max(1, p.hp - Math.round(p.hp * POOL.cost));
-    p.cooldowns[slot] = def.cooldown;
-    ev.push({ type: 'pool', player: p.id, x: p.x, y: p.y });
-    return true;
-  }
   if (def.id === 'drain') {
     // The nearest enemy in reach; nothing in reach, nothing spent.
     let best: Player | null = null;
@@ -1032,16 +1044,19 @@ function heal(p: Player, amount: number, ev: GameEvent[]) {
   if (p.hp > before) ev.push({ type: 'heal', player: p.id, amount: p.hp - before, x: p.x, y: p.y });
 }
 
-/** Sanguine Pool: every few ticks drain and slow the enemies around. */
-function poolPulse(s: GameState, p: Player, ev: GameEvent[]) {
-  p.poolT--;
-  if (p.poolT % POOL.every !== 0) return;
-  const hit = areaHit(s, p, p.x, p.y, POOL.r, POOL.dmg, 2, 0, 'pool', ev);
-  for (const foe of hit) {
-    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, POOL.slowMul) : POOL.slowMul;
-    foe.slowT = Math.max(foe.slowT, POOL.every + 2);
+/** Crimson Step: everyone passed through starts bleeding (once per dash each). */
+function stepContact(s: GameState, p: Player, ev: GameEvent[]) {
+  const reach = 2 * PLAYER_R + 6;
+  for (const foe of enemiesOf(s, p)) {
+    const bit = 1 << foe.id;
+    const dx = foe.x - p.x;
+    const dy = foe.y - p.y;
+    if (p.dashHit & bit || dx * dx + dy * dy > reach * reach || foe.hp <= 0 || untargetable(foe)) continue;
+    p.dashHit |= bit;
+    foe.bleedT = BLEED.ticks;
+    foe.bleedBy = p.id;
+    ev.push({ type: 'bleed', player: foe.id, x: foe.x, y: foe.y });
   }
-  heal(p, hit.length * POOL.dmg, ev);
 }
 
 /** Exsanguinate: drain the tethered enemy while it stays in reach. */
@@ -1191,6 +1206,13 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
 /** A projectile that ends without hitting the enemy; a sonic arrow leaves a sensor where it stops. */
 function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
   if (impact) ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
+  // A Transfusion that hits nothing costs its caster blood (one turned around by a deflect doesn't).
+  const owner = s.players[pr.owner];
+  if (impact && pr.kind === 'transfusion' && owner.champ === CHAMP.BLOOD && owner.hp > 0) {
+    const lost = Math.min(TRANSFUSION.missCost, owner.hp - 1);
+    owner.hp -= lost;
+    if (lost > 0) ev.push({ type: 'bloodloss', player: owner.id, amount: lost, x: owner.x, y: owner.y });
+  }
   if (pr.kind === 'sonic') {
     s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks });
     ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });

@@ -237,7 +237,7 @@ export class Bot {
     const foeThreatening = foeMelee && (dist < 90 + close || (dist < 120 + close && (foe.cast !== null || foe.whirlT > 0)));
     if (!melee && foeThreatening && !buttons && this.decide(-s.frame)) {
       if (archer && ready(SLOT.E) && me.cast === null && r() < 0.5) buttons |= BTN.E;
-      // (The blood mage's Q is a charge-up, not an escape: it sinks into the pool below.)
+      // (The blood mage's Q is a charge-up, not an escape: it dashes off with Crimson Step below.)
       else if (!archer && !blood && ready(SLOT.Q) && r() < 0.5) buttons |= BTN.Q;
       else if (ready(SLOT.SPACE)) {
         buttons |= BTN.SPACE;

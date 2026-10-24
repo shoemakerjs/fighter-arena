@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAGUE, POOL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, TIDES, WHIRL } from '../sim/constants';
+import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAGUE, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, TIDES, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -137,11 +137,12 @@ export class Fx {
         }
 
         case 'hit': {
-          if (e.kind === 'poison') {
-            // Damage over time: small green ticks, no shake.
+          if (e.kind === 'poison' || e.kind === 'bleed') {
+            // Damage over time: small ticks (green poison, red bleeding), no shake.
             const t = s.players[e.target];
-            this.burst(t.x, t.y, 4, COLORS.poison, 90, 2.2, 0.4, 20);
-            this.texts.push({ x: t.x + (Math.random() - 0.5) * 30, y: t.y - 30, text: String(e.dmg), color: COLORS.poison, life: 0.7, max: 0.7, size: 14 });
+            const color = e.kind === 'poison' ? COLORS.poison : COLORS.crimson;
+            this.burst(t.x, t.y, 4, color, 90, 2.2, 0.4, 20);
+            this.texts.push({ x: t.x + (Math.random() - 0.5) * 30, y: t.y - 30, text: String(e.dmg), color, life: 0.7, max: 0.7, size: 14 });
             break;
           }
           const big =
@@ -254,11 +255,18 @@ export class Fx {
           this.sound('blast');
           break;
 
-        case 'pool':
-          this.rings.push({ x: e.x, y: e.y, r0: 10, r1: POOL.r, life: 0.3, max: 0.3, color: COLORS.crimson, width: 5 });
-          this.burst(e.x, e.y, 18, COLORS.crimson, 160, 3, 0.4, 6);
-          this.sound('dash');
+        case 'bleed':
+          this.burst(e.x, e.y, 12, COLORS.crimson, 180, 2.8, 0.4, 30);
+          this.texts.push({ x: e.x, y: e.y - 50, text: 'BLEEDING', color: COLORS.crimson, life: 0.8, max: 0.8, size: 15 });
           break;
+
+        case 'bloodloss': {
+          // A missed Transfusion: the caster pays.
+          const p = s.players[e.player];
+          this.burst(p.x, p.y, 8, COLORS.crimson, 120, 2.4, 0.35, 30);
+          this.texts.push({ x: p.x, y: p.y - 44, text: `-${e.amount}`, color: COLORS.crimson, life: 0.8, max: 0.8, size: 16 });
+          break;
+        }
 
         case 'plague':
           this.rings.push({ x: e.x, y: e.y, r0: PLAGUE.r + 30, r1: PLAGUE.r, life: 0.45, max: 0.45, color: COLORS.crimson, width: 8 });
@@ -580,8 +588,9 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'thrust':
     case 'deflect':
     case 'tides':
-    case 'pool':
     case 'heal':
+    case 'bleed':
+    case 'bloodloss':
     case 'soul':
     case 'soulReturn':
     case 'fate':

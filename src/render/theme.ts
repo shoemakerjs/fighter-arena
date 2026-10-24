@@ -54,6 +54,6 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'longshot') return COLORS.longshot;
   if (id === 'tempest' || id === 'crescent' || id === 'blade' || id === 'deflect') return COLORS.edge;
   if (id === 'soul' || id === 'fate') return COLORS.spirit;
-  if (id === 'transfusion' || id === 'pool' || id === 'tides' || id === 'drain' || id === 'plague') return COLORS.crimson;
+  if (id === 'transfusion' || id === 'step' || id === 'bleed' || id === 'tides' || id === 'drain' || id === 'plague') return COLORS.crimson;
   return COLORS.players[owner];
 }

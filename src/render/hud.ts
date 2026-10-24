@@ -311,7 +311,7 @@ export class Hud {
         (def.id === 'arrow' && p.quickT > 0) ||
         (def.id === 'soul' && p.soulT > 0) ||
         (def.id === 'deflect' && p.deflectT > 0) ||
-        (def.id === 'pool' && p.poolT > 0) ||
+        (def.id === 'step' && p.dashT > 0 && p.dashKind === 4) ||
         (def.id === 'drain' && p.drainT > 0) ||
         // The next Transfusion is the empowered one.
         (def.id === 'transfusion' && (p.bloodCount + 1) % 3 === 0) ||
@@ -931,21 +931,23 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
       ctx.fillRect(8, 6, 8, 2.5);
       ctx.fillRect(10.75, 3.25, 2.5, 8);
       break;
-    case 'pool':
-      ctx.fillStyle = COLORS.crimson;
-      ctx.beginPath();
-      ctx.ellipse(0, 6, 15, 6, 0, 0, TAU);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.35)';
-      ctx.beginPath();
-      ctx.ellipse(-4, 4, 5, 1.6, 0, 0, TAU);
-      ctx.fill();
+    case 'step':
+      // Crimson chevrons with drops trailing behind
       ctx.strokeStyle = COLORS.crimson;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(0, -2);
-      ctx.lineTo(0, -14);
-      ctx.stroke();
+      ctx.lineWidth = 3;
+      for (const o of [-6, 4]) {
+        ctx.beginPath();
+        ctx.moveTo(o, -9);
+        ctx.lineTo(o + 9, 0);
+        ctx.lineTo(o, 9);
+        ctx.stroke();
+      }
+      ctx.fillStyle = COLORS.crimson;
+      for (const [x, y] of [[-13, -4], [-16, 5]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, 2, 0, TAU);
+        ctx.fill();
+      }
       break;
     case 'tides':
       ctx.strokeStyle = COLORS.crimson;
