@@ -1,30 +1,41 @@
 import { Peer, type DataConnection } from 'peerjs';
 import type { GameState, Input } from '../sim/types';
 
-/** Everything the two players say to each other. */
+/** Everything the players say to each other. Guests talk only to the host; the host relays. */
 export type NetMsg =
   /** First thing each side says: which build it runs (they must match). */
   | { t: 'hello'; build: string }
+  /** Host → everyone: the room — format, who sits where (peer ids, null = empty/bot), names, who's locked in. */
+  | { t: 'room'; format: '1v1' | '2v2'; seats: (string | null)[]; names: (string | null)[]; ready: boolean[] }
+  /** Guest → host: move me to this empty seat. */
+  | { t: 'sit'; seat: number }
+  /** Our pick and ready flag (guest → host). */
   | { t: 'lobby'; champ: number; ready: boolean }
-  | { t: 'start'; champs: number[] }
+  /** Host → guests: leave the lobby for champion select. */
+  | { t: 'go' }
+  /** Host → guests: start match `m` with these champions per seat. */
+  | { t: 'start'; m: number; champs: number[]; seats: (string | null)[] }
   /**
    * In-match messages carry `m`, the match number in this lobby, so late packets
-   * from a previous match are ignored. `adv` is the sender's frame advantage (time sync).
+   * from a previous match are ignored. `adv`: guest → host, the guest's frame
+   * advantage over the host; host → guest, the host's over that guest (time sync).
    */
-  | { t: 'input'; m: number; frame: number; input: Input; adv: number }
+  | { t: 'input'; m: number; slot: number; frame: number; input: Input; adv: number }
   | { t: 'hash'; m: number; frame: number; hash: number }
-  /** Host → guest after a hash mismatch: the host's state before `frame`, to adopt. */
+  /** Host → one guest after a hash mismatch: the host's state before `frame`, to adopt. */
   | { t: 'sync'; m: number; frame: number; state: GameState }
+  /** Back to the lobby after a match (guest → host asks, host → everyone does it). */
   | { t: 'back' }
-  /** Host → guest: leave the lobby for champion select. */
-  | { t: 'go' }
   | { t: 'ping' };
 
-/** Silence longer than this means the other player is gone. */
+/** Silence longer than this means the other side is gone. */
 const TIMEOUT_MS = 6000;
 
 /** Prefix keeps our ids apart from other apps on the public PeerJS server. */
 const PREFIX = 'fighter-arena-';
+
+/** What a guest calls its one connection. */
+export const HOST = 'host';
 
 function randomCode(): string {
   const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -34,23 +45,39 @@ function randomCode(): string {
 }
 
 /**
- * Peer-to-peer link between the two players (WebRTC data channel). Signaling goes
+ * Peer-to-peer links between the players (WebRTC data channels), as a star: the host
+ * accepts up to `maxGuests` connections, a guest has one, to the host. Signaling goes
  * through the free public PeerJS server, so it works from a static page.
  */
 export class NetLink {
   private peer: Peer | null = null;
-  private conn: DataConnection | null = null;
-  private lastHeard = 0;
+  private conns = new Map<string, DataConnection>();
+  private lastHeard = new Map<string, number>();
   private heartbeat = 0;
   private isHost = false;
   code = '';
-  onMessage: (msg: NetMsg) => void = () => {};
-  onConnect: () => void = () => {};
-  /** The other player is gone. The host's lobby code stays valid while `listening`. */
-  onClose: (reason: string) => void = () => {};
+  /** Host: how many guests may be connected at once (others are turned away). */
+  maxGuests = 1;
+  onMessage: (msg: NetMsg, from: string) => void = () => {};
+  /** A guest joined (host), or we reached the host (guest, `id` = HOST). */
+  onConnect: (id: string) => void = () => {};
+  /** That connection is gone. The host's lobby code stays valid while `listening`. */
+  onClose: (id: string, reason: string) => void = () => {};
+
+  /** Number of open connections (a guest: 1 when connected to the host). */
+  get connections() {
+    let n = 0;
+    for (const c of this.conns.values()) if (c.open) n++;
+    return n;
+  }
 
   get connected() {
-    return !!this.conn?.open;
+    return this.connections > 0;
+  }
+
+  /** How the room refers to us: HOST for the host, our peer id for a guest. */
+  get myId(): string {
+    return this.isHost ? HOST : (this.peer?.id ?? '');
   }
 
   /** Host only: the lobby is still registered, so someone new can join with the same link. */
@@ -58,18 +85,18 @@ export class NetLink {
     return this.isHost && !!this.peer && !this.peer.destroyed && !this.peer.disconnected;
   }
 
-  /** Open a lobby and wait for someone to join. Resolves with the lobby code. */
+  /** Open a lobby and wait for people to join. Resolves with the lobby code. */
   host(): Promise<string> {
     this.code = randomCode();
     this.isHost = true;
     const peer = new Peer(PREFIX + this.code);
     this.peer = peer;
     peer.on('connection', (conn) => {
-      if (this.conn) {
+      if (this.conns.size >= this.maxGuests) {
         conn.on('open', () => conn.close());
         return;
       }
-      this.attach(conn);
+      this.attach(conn.peer, conn);
     });
     return this.whenOpen(peer).then(() => this.code);
   }
@@ -81,54 +108,75 @@ export class NetLink {
     const peer = new Peer();
     this.peer = peer;
     return this.whenOpen(peer).then(() => {
-      this.attach(peer.connect(PREFIX + code, { reliable: true }));
+      this.attach(HOST, peer.connect(PREFIX + code, { reliable: true }));
     });
   }
 
+  /** To everyone we're connected to. */
   send(msg: NetMsg) {
-    if (this.conn?.open) this.conn.send(msg);
+    for (const c of this.conns.values()) if (c.open) c.send(msg);
+  }
+
+  sendTo(id: string, msg: NetMsg) {
+    const c = this.conns.get(id);
+    if (c?.open) c.send(msg);
+  }
+
+  /** Host: turn a guest away. */
+  kick(id: string) {
+    const c = this.conns.get(id);
+    if (c) this.drop(id, c, 'Removed from the lobby.');
   }
 
   close() {
     const peer = this.peer;
     this.peer = null;
-    this.conn = null;
+    this.conns.clear();
     clearInterval(this.heartbeat);
+    this.heartbeat = 0;
     window.removeEventListener('pagehide', this.onPageHide);
     peer?.destroy();
   }
 
   private onPageHide = () => this.close();
 
-  private attach(conn: DataConnection) {
-    this.conn = conn;
+  private attach(id: string, conn: DataConnection) {
+    this.conns.set(id, conn);
     conn.on('open', () => {
-      this.lastHeard = performance.now();
-      // Closing the tab should tell the other side right away, not after a timeout.
+      this.lastHeard.set(id, performance.now());
+      // Closing the tab should tell the others right away, not after a timeout.
       window.addEventListener('pagehide', this.onPageHide);
-      clearInterval(this.heartbeat);
-      this.heartbeat = window.setInterval(() => {
-        this.send({ t: 'ping' });
-        if (performance.now() - this.lastHeard > TIMEOUT_MS) this.drop(conn, 'Your opponent stopped responding.');
-      }, 1000);
-      this.onConnect();
+      if (!this.heartbeat) {
+        this.heartbeat = window.setInterval(() => {
+          this.send({ t: 'ping' });
+          const now = performance.now();
+          for (const [cid, c] of this.conns) {
+            if (c.open && now - (this.lastHeard.get(cid) ?? now) > TIMEOUT_MS) this.drop(cid, c, 'stopped responding.');
+          }
+        }, 1000);
+      }
+      this.onConnect(id);
     });
     conn.on('data', (data) => {
-      this.lastHeard = performance.now();
+      this.lastHeard.set(id, performance.now());
       const msg = data as NetMsg;
-      if (msg.t !== 'ping') this.onMessage(msg);
+      if (msg.t !== 'ping') this.onMessage(msg, id);
     });
-    conn.on('close', () => this.drop(conn, 'Your opponent disconnected.'));
-    conn.on('error', () => this.drop(conn, 'The connection dropped.'));
+    conn.on('close', () => this.drop(id, conn, 'disconnected.'));
+    conn.on('error', () => this.drop(id, conn, 'lost the connection.'));
   }
 
-  /** Forget `conn` (if it is still the current one) and report it once. */
-  private drop(conn: DataConnection, reason: string) {
-    if (this.conn !== conn) return;
-    this.conn = null;
-    clearInterval(this.heartbeat);
+  /** Forget `conn` (if it is still the current one for `id`) and report it once. */
+  private drop(id: string, conn: DataConnection, reason: string) {
+    if (this.conns.get(id) !== conn) return;
+    this.conns.delete(id);
+    this.lastHeard.delete(id);
+    if (this.conns.size === 0) {
+      clearInterval(this.heartbeat);
+      this.heartbeat = 0;
+    }
     conn.close();
-    this.onClose(reason);
+    this.onClose(id, reason);
   }
 
   private whenOpen(peer: Peer): Promise<void> {
@@ -142,12 +190,12 @@ export class NetLink {
             : type === 'network' || type === 'server-error' || type === 'socket-error'
               ? 'Cannot reach the lobby server.'
               : `Connection error (${type ?? 'unknown'}).`;
-        if (this.conn) this.onClose(reason);
+        if (!this.isHost && this.conns.size) this.onClose(HOST, reason);
         reject(new Error(reason));
       });
       peer.on('disconnected', () => {
-        // Lost the signaling server; an established game keeps running peer-to-peer.
-        if (!this.conn) this.onClose('Lost connection to the lobby server.');
+        // Lost the signaling server; established games keep running peer-to-peer.
+        if (!this.conns.size) this.onClose(HOST, 'Lost connection to the lobby server.');
       });
     });
   }

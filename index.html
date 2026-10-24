@@ -71,18 +71,11 @@
           <input id="invite-link" readonly />
           <button class="pill" id="invite-copy">Copy</button>
         </div>
-        <div class="lobby-slots">
-          <div class="lobby-slot rough">
-            <span class="status-chip ok" id="slot-me-status"></span>
-            <span class="slot-name display">You</span>
-            <span class="slot-sub" id="slot-me-sub">Host</span>
-          </div>
-          <div class="lobby-slot rough">
-            <span class="status-chip waiting" id="slot-foe-status"></span>
-            <span class="slot-name display">Opponent</span>
-            <span class="slot-sub" id="slot-foe-sub">Waiting for a player…</span>
-          </div>
+        <div class="segmented lobby-format" id="lobby-format">
+          <button type="button" data-format="1v1" class="active">1v1</button>
+          <button type="button" data-format="2v2">2v2</button>
         </div>
+        <div class="lobby-slots" id="lobby-seats"></div>
         <button class="pill pill-lg" id="lobby-start" disabled>Start</button>
         <p class="slot-sub hidden" id="lobby-wait">Waiting for the host to start…</p>
         <button class="link-btn" id="invite-leave">Back</button>

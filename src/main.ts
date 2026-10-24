@@ -154,15 +154,15 @@ function openBotSelect() {
   setMode('select');
 }
 
-// ------------------------------------------------------------------ online 1v1
+// ------------------------------------------------------------------ online 1v1 / 2v2
 
 const lobby = new Lobby(select, {
-  onStart(s) {
+  onStart(s, names) {
     sfx.unlock();
     session = s;
     controllers = [];
     localId = s.localId;
-    setNames(localId === 0 ? 'YOU' : 'RIVAL', localId === 0 ? 'RIVAL' : 'YOU');
+    setNames(...names);
     state = s.state;
     prev = s.prev;
     fx.reset();

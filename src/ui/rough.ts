@@ -232,33 +232,39 @@ export function brushRing(size: number, rad: number, band: number, pad: number, 
 
 const cssVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-/**
- * Paint every `.rough` card, `.pill` button and `.brush` stroke (e.g. a scrollbar
- * thumb) now and again whenever it changes size. Pills get two images: `--brush`
- * (accent) and `--brush-off` (disabled); brush strokes only `--brush`.
- */
-export function roughenCards() {
-  const accent = cssVar('--accent') || '#7cc7ff';
-  const seeds = new Map<Element, number>();
-  let n = 1;
-  const paintOne = (el: HTMLElement) => {
-    if (!seeds.has(el)) seeds.set(el, 1013 * n++);
-    const seed = seeds.get(el)!;
-    if (el.classList.contains('pill') || el.classList.contains('brush')) {
-      const w = el.clientWidth;
-      const h = el.clientHeight;
-      if (!w || !h) return;
-      el.style.setProperty('--brush', `url(${paintPill(w, h, accent, seed)})`);
-      if (el.classList.contains('pill')) el.style.setProperty('--brush-off', `url(${paintPill(w, h, '#3a3a40', seed)})`);
-    } else {
-      paint(el, seed);
-    }
-  };
-  const ro = new ResizeObserver((entries) => {
+const seeds = new Map<Element, number>();
+let nextSeed = 1;
+let observer: ResizeObserver | null = null;
+
+function paintOne(el: HTMLElement) {
+  if (!seeds.has(el)) seeds.set(el, 1013 * nextSeed++);
+  const seed = seeds.get(el)!;
+  if (el.classList.contains('pill') || el.classList.contains('brush')) {
+    const w = el.clientWidth;
+    const h = el.clientHeight;
+    if (!w || !h) return;
+    const accent = cssVar('--accent') || '#7cc7ff';
+    el.style.setProperty('--brush', `url(${paintPill(w, h, accent, seed)})`);
+    if (el.classList.contains('pill')) el.style.setProperty('--brush-off', `url(${paintPill(w, h, '#3a3a40', seed)})`);
+  } else {
+    paint(el, seed);
+  }
+}
+
+/** Paint one `.rough` / `.pill` / `.brush` element now and again whenever it changes size. */
+export function roughen(el: HTMLElement) {
+  observer ??= new ResizeObserver((entries) => {
     for (const e of entries) paintOne(e.target as HTMLElement);
   });
-  for (const el of document.querySelectorAll<HTMLElement>('.rough, .pill, .brush')) {
-    paintOne(el);
-    ro.observe(el);
-  }
+  paintOne(el);
+  observer.observe(el);
+}
+
+/**
+ * Paint every `.rough` card, `.pill` button and `.brush` stroke (e.g. a scrollbar
+ * thumb) on the page. Pills get two images: `--brush` (accent) and `--brush-off`
+ * (disabled); brush strokes only `--brush`. Elements added later go through roughen().
+ */
+export function roughenCards() {
+  for (const el of document.querySelectorAll<HTMLElement>('.rough, .pill, .brush')) roughen(el);
 }

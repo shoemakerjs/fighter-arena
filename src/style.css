@@ -412,6 +412,63 @@ button {
   font-size: 40px;
 }
 
+/* 2v2: two team columns of two compact seats; empty seats are bots you can take. */
+.lobby-format {
+  width: 200px;
+}
+
+.lobby-slots.duo {
+  gap: 40px;
+}
+
+.lobby-team {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.lobby-slot.compact {
+  width: 280px;
+  height: 128px;
+  gap: 6px;
+}
+
+.lobby-slot.compact .status-chip {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+}
+
+.lobby-slot.compact .status-chip svg {
+  width: 22px;
+  height: 22px;
+}
+
+.lobby-slot.compact .slot-name {
+  font-size: 28px;
+}
+
+.lobby-slot.free {
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.lobby-slot.free:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+}
+
+.segmented button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.segmented button.active:disabled {
+  opacity: 0.85;
+}
+
 .slot-sub {
   font-size: 16px;
   color: var(--muted);
@@ -1110,6 +1167,12 @@ button {
   .lobby-slots {
     flex-direction: column;
     align-items: center;
+  }
+  .lobby-slots.duo {
+    gap: 20px;
+  }
+  .lobby-slot.compact {
+    height: 100px;
   }
   .lobby-slot {
     width: min(345px, 100%);
