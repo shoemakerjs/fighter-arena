@@ -316,6 +316,8 @@ export interface ChampionRig {
   revealEye: THREE.Group;
   /** Little stars circling the head while stunned. */
   stunStars: THREE.Group;
+  /** Shimmering half-shell in front of a deflecting samurai (turns with the aim). */
+  deflectArc: THREE.Mesh;
 }
 
 export function buildChampion(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
@@ -788,7 +790,16 @@ function addMarkers(root: THREE.Group, team: THREE.Color, bright: THREE.Color) {
   stunStars.visible = false;
   root.add(stunStars);
 
-  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars };
+  // Deflect: front half of a cylinder, on the pointer group so it faces the aim.
+  const deflectArc = new THREE.Mesh(
+    new THREE.CylinderGeometry(PLAYER_R + 12, PLAYER_R + 12, 56, 24, 1, true, 0, Math.PI),
+    new THREE.MeshBasicMaterial({ color: COLORS.edge, transparent: true, opacity: 0.3, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
+  );
+  deflectArc.position.y = 30;
+  deflectArc.visible = false;
+  pointer.add(deflectArc);
+
+  return { ring, pointer, shield, slowRing, markSigil, rootRing, revealEye, stunStars, deflectArc };
 }
 
 /**

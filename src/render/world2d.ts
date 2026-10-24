@@ -1,4 +1,4 @@
-import { ARENA_R, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WALL, WHIRL } from '../sim/constants';
+import { ARENA_R, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
 import { abilityOf } from '../sim/step';
 import { canSee, pointVisible } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -300,24 +300,11 @@ export class World2D implements WorldView {
     }
   }
 
-  /** Arrow rain and wind walls (everyone sees them) and sonic sensors (only the archer who placed them). */
+  /** Arrow rain (everyone sees it) and sonic sensors (only the archer who placed them). */
   private drawZones(s: GameState, localId: number | null) {
     const { ctx } = this;
     for (const z of s.zones) {
       if (z.kind === 'sonic' && localId !== null && z.owner !== localId) continue;
-      if (z.kind === 'wall') {
-        ctx.save();
-        ctx.strokeStyle = COLORS.wind;
-        ctx.globalAlpha = Math.min(1, z.t / 25);
-        ctx.lineWidth = 6;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(z.x + z.fy * WALL.half, z.y - z.fx * WALL.half);
-        ctx.lineTo(z.x - z.fy * WALL.half, z.y + z.fx * WALL.half);
-        ctx.stroke();
-        ctx.restore();
-        continue;
-      }
       const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
       const falling = z.kind === 'rain' && z.t > RAIN.ticks;
       ctx.save();

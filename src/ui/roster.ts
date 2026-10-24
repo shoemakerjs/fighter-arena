@@ -63,6 +63,6 @@ export const ROSTER: RosterEntry[] = [
     flip: true,
     portrait: '38% 12%',
     focus: 0.34,
-    lore: 'A wandering swordswoman from the land in the east. She moves like the wind, cuts through her foes before they can react, and her spirit strikes twice.',
+    lore: 'A wandering swordswoman from the land in the east. Her blade turns arrows aside, cuts through her foes before they can react, and her spirit strikes twice.',
   },
 ];

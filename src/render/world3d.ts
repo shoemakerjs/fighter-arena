@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, WALL } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST } from '../sim/constants';
 import { abilityOf, airborne } from '../sim/step';
 import { canSee, pointVisible } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -632,6 +632,11 @@ export class World3D implements WorldView {
           swing = 1.4 - t * 2.6;
           twist = 0.35 - t * 0.8;
         }
+        // Deflect: blade held up in front, flicking to parry.
+        if (pc.deflectT > 0) {
+          swing = 0.35 + 0.3 * Math.sin(this.time * 28);
+          twist = -0.2;
+        }
         // Sweeping Blade: blade held back and low while dashing through.
         if (pc.dashT > 0 && pc.dashKind === 3) {
           swing = -1.3;
@@ -686,6 +691,11 @@ export class World3D implements WorldView {
         rig.revealEye.position.y = 96 + Math.sin(this.time * 3) * 2;
         rig.revealEye.quaternion.copy(this.camera.quaternion);
       }
+      rig.deflectArc.visible = pc.deflectT > 0 && !dead;
+      if (rig.deflectArc.visible) {
+        const m = rig.deflectArc.material as THREE.MeshBasicMaterial;
+        m.opacity = 0.22 + 0.12 * Math.sin(this.time * 20);
+      }
       rig.stunStars.visible = pc.stunT > 0 && !dead;
       if (rig.stunStars.visible) rig.stunStars.rotation.y += dt * 6;
       rig.slowRing.visible = slowed;
@@ -705,9 +715,11 @@ export class World3D implements WorldView {
     const size = PROJ[kind].r;
     const core = ARROWS.includes(kind)
       ? arrowGeometry(size)
+      : kind === 'crescent'
+        ? crescentGeometry(size)
       : kind === 'blast'
         ? new THREE.IcosahedronGeometry(size * 0.75, 0)
-        : kind === 'frost' || kind === 'hook' || kind === 'gale'
+        : kind === 'frost' || kind === 'hook'
           ? new THREE.OctahedronGeometry(size * 0.85, 0)
           : new THREE.SphereGeometry(size * 0.6, 12, 8);
     const sprite = (opacity: number) =>
@@ -772,7 +784,7 @@ export class World3D implements WorldView {
       const seen = localId === null || pr.owner === localId || pointVisible(cur.players[localId], x, y);
       v.group.visible = seen;
       if (v.chain) v.chain.visible = seen;
-      if (ARROWS.includes(pr.kind)) {
+      if (ARROWS.includes(pr.kind) || pr.kind === 'crescent') {
         v.core.rotation.set(0, Math.atan2(-pr.vy, pr.vx), 0);
       } else {
         v.core.rotation.x += 0.15;
@@ -869,23 +881,6 @@ export class World3D implements WorldView {
 
   private createZoneView(z: Zone): ZoneView {
     const color = abilityColor(z.kind, z.owner);
-    if (z.kind === 'wall') {
-      // A shimmering sheet of wind standing across the facing direction, with its line on the floor.
-      const sheet = new THREE.Mesh(
-        new THREE.BoxGeometry(5, 64, WALL.half * 2),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
-      );
-      sheet.position.set(z.x, 32, z.y);
-      sheet.rotation.y = Math.atan2(-z.fy, z.fx);
-      const line = new THREE.Mesh(
-        new THREE.PlaneGeometry(10, WALL.half * 2),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8, depthWrite: false, toneMapped: false }),
-      );
-      line.rotation.set(-Math.PI / 2, 0, Math.atan2(-z.fy, z.fx));
-      line.position.set(z.x, 1.4, z.y);
-      this.scene.add(sheet, line);
-      return { fill: sheet, ring: line, sweep: null };
-    }
     const r = z.kind === 'rain' ? RAIN.r : SONIC.r;
     const fill = new THREE.Mesh(
       new THREE.CircleGeometry(r, 48),
@@ -927,12 +922,7 @@ export class World3D implements WorldView {
       v.fill.visible = v.ring.visible = seen;
       const fillMat = v.fill.material as THREE.MeshBasicMaterial;
       const ringMat = v.ring.material as THREE.MeshBasicMaterial;
-      if (z.kind === 'wall') {
-        const fade = Math.min(1, z.t / 25);
-        fillMat.opacity = (0.22 + 0.1 * Math.sin(this.time * 18 + z.id)) * fade;
-        ringMat.opacity = 0.75 * fade;
-        v.fill.scale.y = 0.9 + 0.1 * Math.sin(this.time * 9);
-      } else if (z.kind === 'rain') {
+      if (z.kind === 'rain') {
         const falling = z.t > RAIN.ticks;
         // While the volley is in the air the fill grows like a meteor warning.
         const k = falling ? 1 - (z.t - RAIN.ticks) / RAIN.delay : 1;
@@ -1002,7 +992,7 @@ export class World3D implements WorldView {
       let half: number;
       if (id === 'rift') [len, half] = [RIFT.len, RIFT.half];
       else if (id === 'fate') [len, half] = [FATE.range, FATE.half];
-      else if (id === 'tempest') [len, half] = p.stacks >= TEMPEST.max ? [PROJ.gale.range, PROJ.gale.r] : [TEMPEST.len, TEMPEST.half];
+      else if (id === 'tempest') [len, half] = p.stacks >= TEMPEST.max ? [PROJ.crescent.range, PROJ.crescent.r] : [TEMPEST.len, TEMPEST.half];
       else {
         const kind = id as ProjKind;
         // A longshot's lane grows as the bow is drawn.
@@ -1087,6 +1077,16 @@ export class World3D implements WorldView {
 
 function kitCd(champ: number, slot: number): number {
   return CHAMPIONS[champ].abilities[slot].cooldown;
+}
+
+/** A flat crescent lying on the floor plane, its curve bulging along +X. */
+function crescentGeometry(size: number): THREE.BufferGeometry {
+  const g = new THREE.TorusGeometry(size, size * 0.2, 4, 18, Math.PI);
+  g.scale(1, 1, 0.35);
+  g.rotateZ(-Math.PI / 2);
+  g.rotateX(Math.PI / 2);
+  g.translate(-size * 0.6, 0, 0);
+  return g;
 }
 
 /** Shaft with a head pointing along +X, centered on the projectile. */

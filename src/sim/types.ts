@@ -29,7 +29,7 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'gale';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent';
 export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate';
 
 export interface Cast {
@@ -81,6 +81,8 @@ export interface Player {
   quickT: number;
   /** Stunned: can't move, cast or use anything. */
   stunT: number;
+  /** Samurai: Deflect active (ticks left). */
+  deflectT: number;
   /** Samurai: Steel Tempest stacks and the ticks until they expire. */
   stacks: number;
   stackT: number;
@@ -112,16 +114,13 @@ export interface Projectile {
   kb: number;
 }
 
-/** Lingering area on the floor: an archer's arrow rain or sonic sensor, or a samurai's wind wall. */
+/** Lingering area on the floor: an archer's arrow rain or sonic sensor. */
 export interface Zone {
   id: number;
   owner: number;
-  kind: 'rain' | 'sonic' | 'wall';
+  kind: 'rain' | 'sonic';
   x: number;
   y: number;
-  /** Wall only: the direction it faces (it runs across this, WALL.half each way). */
-  fx: number;
-  fy: number;
   /** Ticks left. Rain is still falling while t > RAIN.ticks. */
   t: number;
 }
@@ -194,8 +193,8 @@ export type GameEvent =
   | { type: 'root'; player: number; x: number; y: number }
   | { type: 'stun'; player: number; x: number; y: number }
   | { type: 'thrust'; player: number; x: number; y: number; fx: number; fy: number }
-  | { type: 'wall'; player: number; x: number; y: number }
-  | { type: 'wallBlock'; x: number; y: number }
+  /** A deflected projectile turning around at (x, y). */
+  | { type: 'deflect'; player: number; x: number; y: number }
   | { type: 'soul'; player: number; x: number; y: number }
   | { type: 'soulReturn'; player: number; x0: number; y0: number; x: number; y: number }
   | { type: 'fate'; player: number; x0: number; y0: number; x: number; y: number }

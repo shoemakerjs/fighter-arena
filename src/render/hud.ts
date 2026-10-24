@@ -234,6 +234,7 @@ export class Hud {
         ((def.id === 'dash' || def.id === 'leap' || def.id === 'vault' || def.id === 'blade') && p.dashT > 0) ||
         (def.id === 'arrow' && p.quickT > 0) ||
         (def.id === 'soul' && p.soulT > 0) ||
+        (def.id === 'deflect' && p.deflectT > 0) ||
         (def.id === 'tempest' && p.stacks >= TEMPEST.max) ||
         (def.id === 'whirl' && p.whirlT > 0) ||
         (def.id === 'smoke' && p.stealthT > 0);
@@ -247,7 +248,7 @@ export class Hud {
 
       ctx.save();
       ctx.globalAlpha = cd > 0 || noEnergy ? 0.35 : 1;
-      drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'gale' : def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
+      drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'crescent' : def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
       ctx.restore();
 
       // Steel Tempest stacks
@@ -255,7 +256,7 @@ export class Hud {
         for (let k = 0; k < TEMPEST.max; k++) {
           ctx.beginPath();
           ctx.arc(x + slot / 2 + (k - (TEMPEST.max - 1) / 2) * 10, y0 + slot - 7, 3, 0, TAU);
-          ctx.fillStyle = k < p.stacks ? COLORS.wind : 'rgba(255,255,255,0.15)';
+          ctx.fillStyle = k < p.stacks ? COLORS.edge : 'rgba(255,255,255,0.15)';
           ctx.fill();
         }
       }
@@ -371,7 +372,7 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.roundRect(x, y, Math.max(0, w), h, Math.min(r, Math.max(0, w) / 2, h / 2));
 }
 
-function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'gale', x: number, y: number, color: string) {
+function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent', x: number, y: number, color: string) {
   ctx.save();
   ctx.translate(x, y);
   ctx.lineCap = 'round';
@@ -713,8 +714,8 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'gale', x:
       ctx.stroke();
       break;
     case 'tempest':
-      ctx.strokeStyle = COLORS.wind;
-      ctx.fillStyle = COLORS.wind;
+      ctx.strokeStyle = COLORS.edge;
+      ctx.fillStyle = COLORS.edge;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(-15, 0);
@@ -734,19 +735,25 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'gale', x:
         ctx.stroke();
       }
       break;
-    case 'gale':
-      // Tornado: stacked arcs narrowing downwards
-      ctx.strokeStyle = COLORS.wind;
-      ctx.lineWidth = 2.5;
-      for (let i = 0; i < 4; i++) {
-        const w = 14 - i * 3.2;
+    case 'crescent':
+      // A flying crescent cut
+      ctx.fillStyle = COLORS.edge;
+      ctx.beginPath();
+      ctx.arc(-4, 0, 15, -1.2, 1.2);
+      ctx.arc(-10, 0, 13, 1.05, -1.05, true);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = COLORS.edge;
+      ctx.lineWidth = 1.5;
+      for (const o of [-6, 0, 6]) {
         ctx.beginPath();
-        ctx.ellipse(i * 1.2 - 2, -10 + i * 6.5, w, 2.6, 0, 0, TAU);
+        ctx.moveTo(-20, o);
+        ctx.lineTo(-13, o);
         ctx.stroke();
       }
       break;
     case 'blade':
-      ctx.strokeStyle = COLORS.wind;
+      ctx.strokeStyle = COLORS.edge;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(-14, 10);
@@ -759,14 +766,24 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'gale', x:
       ctx.lineTo(16, -14);
       ctx.stroke();
       break;
-    case 'wall':
-      ctx.strokeStyle = COLORS.wind;
+    case 'deflect':
+      // Blade held across, with a parry arc in front of it
+      ctx.strokeStyle = COLORS.steel;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-10, 14);
+      ctx.lineTo(10, -14);
+      ctx.stroke();
+      ctx.strokeStyle = COLORS.edge;
       ctx.lineWidth = 2.5;
-      for (const o of [-8, 0, 8]) {
+      ctx.beginPath();
+      ctx.arc(-6, 0, 16, -1, 1);
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      for (const [x, y] of [[9, -9], [11, 0], [9, 9]]) {
         ctx.beginPath();
-        ctx.moveTo(o - 3, -14);
-        ctx.bezierCurveTo(o + 5, -6, o - 5, 6, o + 3, 14);
-        ctx.stroke();
+        ctx.arc(x, y, 1.6, 0, TAU);
+        ctx.fill();
       }
       break;
     case 'soul':

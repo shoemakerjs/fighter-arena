@@ -20,6 +20,7 @@ import {
   COUNTER,
   CRY,
   DASH,
+  DEFLECT,
   EXECUTE,
   FATE,
   HASTE_MUL,
@@ -55,7 +56,6 @@ import {
   SUDDEN_DEATH_AT,
   TEMPEST,
   VAULT,
-  WALL,
   WHIRL,
   type AbilityDef,
   type AbilityId,
@@ -125,6 +125,7 @@ function createPlayer(id: number, champ: number): Player {
     revealT: 0,
     quickT: 0,
     stunT: 0,
+    deflectT: 0,
     stacks: 0,
     stackT: 0,
     soulT: 0,
@@ -274,6 +275,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.revealT > 0) p.revealT--;
   if (p.quickT > 0) p.quickT--;
   if (p.stunT > 0) p.stunT--;
+  if (p.deflectT > 0) p.deflectT--;
   if (p.stackT > 0 && --p.stackT === 0) p.stacks = 0;
   if (p.soulT > 0 && --p.soulT === 0) soulReturn(s, p, ev);
   if (p.stealthT > 0 && --p.stealthT === 0) ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
@@ -460,7 +462,8 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     return true;
   }
 
-  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0) return false;
+  // Deflecting holds the sword up: no attacks (mobility above still works).
+  if (p.cast || p.dashT > 0 || p.counterT > 0 || p.whirlT > 0 || p.deflectT > 0) return false;
 
   if (def.id === 'counter') {
     p.counterT = COUNTER.ticks;
@@ -468,12 +471,9 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     ev.push({ type: 'counter', player: p.id });
     return true;
   }
-  if (def.id === 'wall') {
-    const x = p.x + p.fx * WALL.dist;
-    const y = p.y + p.fy * WALL.dist;
-    s.zones.push({ id: s.nextId++, owner: p.id, kind: 'wall', x, y, fx: p.fx, fy: p.fy, t: WALL.ticks });
+  if (def.id === 'deflect') {
+    p.deflectT = DEFLECT.ticks;
     p.cooldowns[slot] = def.cooldown;
-    ev.push({ type: 'wall', player: p.id, x, y });
     return true;
   }
   if (def.id === 'whirl') {
@@ -532,7 +532,7 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         tx = (tx / d) * RAIN.range;
         ty = (ty / d) * RAIN.range;
       }
-      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, fx: 0, fy: 0, t: RAIN.delay + RAIN.ticks });
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
       return;
     }
@@ -561,7 +561,7 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       if (p.stacks >= TEMPEST.max) {
         p.stacks = 0;
         p.stackT = 0;
-        fireProjectile(s, p, 'gale', 1, ev, def.id);
+        fireProjectile(s, p, 'crescent', 1, ev, def.id);
         return;
       }
       ev.push({ type: 'thrust', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
@@ -860,6 +860,7 @@ function stun(target: Player, ticks: number, ev: GameEvent[]) {
   target.cast = null;
   target.whirlT = 0;
   target.counterT = 0;
+  target.deflectT = 0;
   if (!untargetable(target)) target.dashT = 0;
   target.buffer = -1;
   target.bufferT = 0;
@@ -914,11 +915,6 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
       fizzle(s, pr, ev);
       continue;
     }
-    if (hitsWall(s, pr)) {
-      ev.push({ type: 'wallBlock', x: pr.x, y: pr.y });
-      fizzle(s, pr, ev, false);
-      continue;
-    }
 
     const target = s.players[1 - pr.owner];
     const tdx = target.x - pr.x;
@@ -926,6 +922,17 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
     const tmin = PLAYER_R + pr.r;
     // Untargetable champions let projectiles fly through.
     if (!untargetable(target) && tdx * tdx + tdy * tdy < tmin * tmin) {
+      // Deflect: coming at her front, it turns around and becomes hers.
+      if (target.deflectT > 0 && pr.vx * target.fx + pr.vy * target.fy < DEFLECT.minDot) {
+        pr.owner = target.id;
+        pr.vx = -pr.vx;
+        pr.vy = -pr.vy;
+        pr.age = 0;
+        target.energy = Math.min(MAX_ENERGY, target.energy + DEFLECT.energy);
+        ev.push({ type: 'deflect', player: target.id, x: pr.x, y: pr.y });
+        alive.push(pr);
+        continue;
+      }
       const pd = PROJ[pr.kind];
       if (hit(s.players[pr.owner], target, pr.dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
         if (pr.kb !== 0) {
@@ -939,7 +946,7 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         if (pr.kind === 'mark') target.markT = MARK.ticks;
         if (pr.kind === 'poison') target.poisonT = POISON.ticks;
         if (pr.kind === 'sonic') target.revealT = SONIC.reveal;
-        if (pr.kind === 'gale') stun(target, TEMPEST.stun, ev);
+        if (pr.kind === 'crescent') stun(target, TEMPEST.stun, ev);
         if (pr.kind === 'snare') {
           target.rootT = SNARE.root;
           ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });
@@ -962,24 +969,11 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
   s.projectiles = alive;
 }
 
-/** Does this projectile touch a wind wall raised by the other player? */
-function hitsWall(s: GameState, pr: Projectile): boolean {
-  for (const z of s.zones) {
-    if (z.kind !== 'wall' || z.owner === pr.owner) continue;
-    // The wall runs across its facing direction.
-    const ux = -z.fy * WALL.half;
-    const uy = z.fx * WALL.half;
-    const reach = pr.r + 6;
-    if (segDist2(pr.x, pr.y, z.x - ux, z.y - uy, z.x + ux, z.y + uy) < reach * reach) return true;
-  }
-  return false;
-}
-
 /** A projectile that ends without hitting the enemy; a sonic arrow leaves a sensor where it stops. */
 function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
   if (impact) ev.push({ type: 'impact', x: pr.x, y: pr.y, kind: pr.kind, owner: pr.owner });
   if (pr.kind === 'sonic') {
-    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, fx: 0, fy: 0, t: SONIC.ticks });
+    s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks });
     ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });
   }
 }

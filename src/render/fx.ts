@@ -1,4 +1,4 @@
-import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, WALL, WHIRL } from '../sim/constants';
+import { COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, RAIN, RIFT, SONIC, PLAYER_R, TEMPEST, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { pointVisible } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -119,8 +119,8 @@ export class Fx {
             this.burst(e.x, e.y, 9, abilityColor(e.ability, e.player), 180, 2.8, 0.3);
             this.sound(e.ability === 'longshot' ? 'blast' : 'hook');
           } else if (e.ability === 'tempest') {
-            // Released as a gale (the plain thrust has its own event).
-            this.burst(e.x, e.y, 16, COLORS.wind, 220, 3, 0.35);
+            // Released as a crescent cut (the plain thrust has its own event).
+            this.burst(e.x, e.y, 16, COLORS.edge, 220, 3, 0.35);
             this.sound('whirl');
           } else if (e.ability === 'rain') {
             // Volley loosed into the sky.
@@ -145,7 +145,7 @@ export class Fx {
             e.kind === 'leap' ||
             e.kind === 'execute' ||
             e.kind === 'fate' ||
-            e.kind === 'gale' ||
+            e.kind === 'crescent' ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
           const color = abilityColor(e.kind, e.source);
@@ -227,23 +227,15 @@ export class Fx {
           for (let d = 20; d <= TEMPEST.len; d += 18) {
             const x = e.x + e.fx * (PLAYER_R + d);
             const y = e.y + e.fy * (PLAYER_R + d);
-            this.burst(x, y, 2, d % 36 < 18 ? '#ffffff' : COLORS.wind, 80, 2.4, 0.2, 28);
+            this.burst(x, y, 2, d % 36 < 18 ? '#ffffff' : COLORS.edge, 80, 2.4, 0.2, 28);
           }
           this.sound('slash');
           break;
         }
 
-        case 'wall': {
-          const p = s.players[e.player];
-          for (let k = -1; k <= 1; k += 0.25) {
-            this.burst(e.x - p.fy * WALL.half * k, e.y + p.fx * WALL.half * k, 3, COLORS.wind, 120, 3, 0.4, 20);
-          }
-          this.sound('whirl');
-          break;
-        }
-
-        case 'wallBlock':
-          this.burst(e.x, e.y, 10, COLORS.wind, 200, 2.6, 0.3);
+        case 'deflect':
+          this.burst(e.x, e.y, 12, COLORS.edge, 220, 2.6, 0.3);
+          this.burst(e.x, e.y, 5, '#ffffff', 160, 2, 0.2);
           this.sound('block');
           break;
 
@@ -545,7 +537,7 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'reveal':
     case 'vault':
     case 'thrust':
-    case 'wall':
+    case 'deflect':
     case 'soul':
     case 'soulReturn':
     case 'fate':

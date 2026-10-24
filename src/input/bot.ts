@@ -211,15 +211,15 @@ export class Bot {
         dodgeY = ux * side;
       }
     }
-    let walling = false;
+    let deflecting = false;
     if (threatT < Infinity) {
       dodging = true;
       wx = dodgeX * 2;
       wy = dodgeY * 2;
-      if (samurai && threatT < 18 && threatKind !== 'bolt' && threatKind !== 'arrow' && threatKind !== 'dagger' && ready(SLOT.Q) && r() < 0.5) {
-        // Wind Wall towards the incoming projectile.
+      if (samurai && threatT < 18 && ready(SLOT.Q) && r() < 0.5) {
+        // Deflect, facing the incoming projectile.
         buttons |= BTN.Q;
-        walling = true;
+        deflecting = true;
       } else if (!warrior && threatT < 10 && ready(SLOT.SPACE) && r() < 0.3) {
         buttons |= BTN.SPACE;
       } else if (mage && threatT < 12 && threatKind !== 'bolt' && ready(SLOT.Q) && r() < 0.5) {
@@ -244,9 +244,13 @@ export class Bot {
     const los = this.lineOfSight(me.x, me.y, tx, ty);
     let aimId: AbilityId = me.cast ? kit[me.cast.ability].id : kit[SLOT.M1].id;
     const busy = me.cast !== null || me.counterT > 0 || me.dashT > 0;
+    // A samurai deflecting towards us would send any projectile straight back: hold fire, like a person would.
+    const foeDeflecting = foe.deflectT > 0 && !hidden && foe.fx * (me.x - foe.x) + foe.fy * (me.y - foe.y) > 0;
     const press = (slot: number) => {
+      const id = kit[slot].id;
+      if (foeDeflecting && (id in PROJ || (id === 'tempest' && me.stacks >= TEMPEST.max))) return;
       buttons |= SLOT_BUTTONS[slot];
-      aimId = kit[slot].id;
+      aimId = id;
     };
 
     // Keep drawing a longshot until the planned draw is reached (or the target hides).
@@ -262,13 +266,13 @@ export class Bot {
     if (!busy && !(buttons & (BTN.SPACE | BTN.Q | BTN.E))) {
       if (samurai) {
         const pinned = foeLow || foe.rootT > 0 || foe.stunT > 0 || foe.cast !== null;
-        const gale = me.stacks >= TEMPEST.max;
+        const crescent = me.stacks >= TEMPEST.max;
         if (ready(SLOT.R) && !hidden && los && dist < FATE.range - 20 && r() < (pinned ? 0.3 : 0.03)) press(SLOT.R);
         else if (ready(SLOT.E) && me.soulT === 0 && !hidden && dist > 120 && dist < 320 && r() < 0.03 * a) press(SLOT.E);
         else if (ready(SLOT.SPACE) && !hidden && dist > 140 && dist < BLADE.ticks * BLADE.speed + 80 && r() < 0.06 * a) {
           press(SLOT.SPACE);
           engage = true;
-        } else if (ready(SLOT.M2) && los && dist < (gale ? PROJ.gale.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
+        } else if (ready(SLOT.M2) && los && dist < (crescent ? PROJ.crescent.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
         else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (archer) {
         const pinned = foe.rootT > 0 || foe.slowT > 0 || foe.cast !== null;
@@ -321,16 +325,16 @@ export class Bot {
     }
     let ax: number;
     let ay: number;
-    if (walling) {
-      // Put the wall between us and the projectile.
-      ax = threatX;
-      ay = threatY;
+    if (deflecting || me.deflectT > 0) {
+      // Face the incoming projectile, or else the shooter, so the deflect catches it.
+      ax = threatT < Infinity ? threatX : tx;
+      ay = threatT < Infinity ? threatY : ty;
     } else if (engage || aimId === 'soul' || aimId === 'fate') {
       // Samurai engages: dash, spirit or blink straight at the target, leading a little.
       ax = tx + this.tvx * 12 * this.p.lead;
       ay = ty + this.tvy * 12 * this.p.lead;
     } else if (aimId === 'tempest' && me.stacks >= TEMPEST.max) {
-      const t = dist / PROJ.gale.speed;
+      const t = dist / PROJ.crescent.speed;
       ax = tx + this.tvx * t * this.p.lead + this.errX;
       ay = ty + this.tvy * t * this.p.lead + this.errY;
     } else if (aimId === 'blink' && !escape && threatT === Infinity) {
