@@ -71,9 +71,11 @@ let endTimer = 0;
 /** Online match in progress (null when playing the bot). */
 let session: RollbackSession | null = null;
 
-/** Every match is played on a random map. */
+/** `?map=N` in the address forces a map in local matches (for testing); otherwise each match picks one at random. */
+const forcedMap = new URLSearchParams(location.search).get('map');
+
 function newMatch(ctrl: (Controller | null)[], champs: number[], training = false) {
-  state = createMatch(champs, training, Math.floor(Math.random() * MAPS.length));
+  state = createMatch(champs, training, forcedMap !== null ? Number(forcedMap) : Math.floor(Math.random() * MAPS.length));
   prev = cloneState(state);
   controllers = ctrl;
   session = null;

@@ -42,8 +42,8 @@ export interface River {
 
 export interface MapDef {
   name: string;
-  /** How the renderer dresses it: overgrown elven ruins, or castle walls and statues. */
-  theme: 'ruins' | 'castle';
+  /** How the renderer dresses it: elven ruins, a castle courtyard, a crystal mine or a grove. */
+  theme: 'ruins' | 'castle' | 'mine' | 'grove';
   river: River | null;
   pillars: Pillar[];
   walls: Wall[];
@@ -75,6 +75,18 @@ function courtyardWalls(): Wall[] {
   return walls;
 }
 
+/** Mirror points into all four quadrants (each map is symmetric both ways). */
+function mirrored(pillars: Pillar[]): Pillar[] {
+  const out: Pillar[] = [];
+  for (const p of pillars) {
+    for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      if ((p.x === 0 && sx < 0) || (p.y === 0 && sy < 0)) continue;
+      out.push({ x: p.x * sx, y: p.y * sy, r: p.r });
+    }
+  }
+  return out;
+}
+
 /** Index = GameState.map. Every map is mirrored left/right so neither spawn is favored. */
 export const MAPS: MapDef[] = [
   // Overgrown elven ruins split by a river: bridges in the middle (with the orb) and near
@@ -101,6 +113,31 @@ export const MAPS: MapDef[] = [
       { x: 0, y: 260, r: 30 },
     ],
     courtyardWalls(),
+  ),
+  // Crystal mine: two rock ridges split it into three lanes, open by the orb; crystals give cover on the flanks.
+  makeMap(
+    'Crystal Mine',
+    'mine',
+    mirrored([
+      { x: 0, y: 330, r: 30 },
+      { x: 330, y: 280, r: 18 },
+    ]),
+    [-1, 1].flatMap((sy) => [-1, 1].map((sx) => ({ x0: sx * 80, y0: sy * 140, x1: sx * 240, y1: sy * 140, r: 22 }))),
+  ),
+  // Whispering grove: trees everywhere around a clearing with the orb; short sight lines, ambush ground.
+  makeMap(
+    'Whispering Grove',
+    'grove',
+    mirrored([
+      { x: 150, y: 120, r: 26 },
+      { x: 230, y: 250, r: 30 },
+      { x: 90, y: 300, r: 22 },
+      { x: 400, y: 170, r: 20 },
+      { x: 0, y: 190, r: 26 },
+      { x: 0, y: 420, r: 22 },
+      { x: 300, y: 380, r: 18 },
+    ]),
+    [],
   ),
 ];
 

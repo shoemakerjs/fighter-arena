@@ -84,9 +84,33 @@ export const THEME_LOOKS: Record<MapTheme, ThemeLook> = {
   ruins: { background: '#060a08', ground: '#0b120d', hemiSky: '#bcd9cc', hemiGround: '#17220f', hemi: 1.25, key: '#e4ecff', keyIntensity: 2.5, rim: '#7fe8c8', rimIntensity: 1.15 },
   // Romulus's castle under a blood moon: warm stone, crimson rim light.
   castle: { background: '#0c0709', ground: '#150d0d', hemiSky: '#cfb0b8', hemiGround: '#1c0c0a', hemi: 1.1, key: '#ffd8bb', keyIntensity: 2.45, rim: '#ff4058', rimIntensity: 1.35 },
+  // Rustic's crystal mine: warm lantern light from above, green crystal glow from the side.
+  mine: { background: '#080705', ground: '#110d09', hemiSky: '#c9b9a0', hemiGround: '#1a1308', hemi: 1.05, key: '#ffd9a8', keyIntensity: 2.3, rim: '#5dffb0', rimIntensity: 1.25 },
+  // Elianis's grove at dusk: golden light through the leaves, deep green shade.
+  grove: { background: '#060b06', ground: '#0c140a', hemiSky: '#cfe3b0', hemiGround: '#14200c', hemi: 1.2, key: '#ffe9b8', keyIntensity: 2.5, rim: '#ffd27a', rimIntensity: 1.0 },
 };
 
-/** Floor painted once into a texture: mossy rings of stone (ruins) or flagstones (castle), plus team pads. */
+/** Colors of the arena ring around each theme: outer wall, glowing edge, pedestal and the four fires. */
+interface ArenaPalette {
+  wallTall: string;
+  wallLow: string;
+  rim: string;
+  rimOpacity: number;
+  pedestal: string;
+  brazier: string;
+  flame: string;
+  flameGlow: string;
+  flameLight: string;
+}
+
+const ARENA_PALETTES: Record<MapTheme, ArenaPalette> = {
+  ruins: { wallTall: '#6f7868', wallLow: '#59614f', rim: '#9dffc8', rimOpacity: 0.3, pedestal: '#5d6656', brazier: '#4c5446', flame: '#dcffe8', flameGlow: '#6dffa8', flameLight: '#a8ffcc' },
+  castle: { wallTall: '#5a4c4a', wallLow: '#463b3a', rim: '#ff4058', rimOpacity: 0.32, pedestal: '#4a3c3a', brazier: '#3e3434', flame: '#ff7a4a', flameGlow: '#ff4a2a', flameLight: '#ff6a48' },
+  mine: { wallTall: '#5b4a3a', wallLow: '#463a2e', rim: '#5dffb0', rimOpacity: 0.28, pedestal: '#4a4036', brazier: '#2f2a24', flame: '#ffc070', flameGlow: '#ff9a3a', flameLight: '#ffad5c' },
+  grove: { wallTall: '#3f5a2c', wallLow: '#324a24', rim: '#ffe08a', rimOpacity: 0.26, pedestal: '#5a5446', brazier: '#4a3f30', flame: '#fff0a8', flameGlow: '#ffd75a', flameLight: '#ffe7a0' },
+};
+
+/** Floor painted once into a texture (one painter per theme), plus team pads. */
 function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   const S = 2048;
   const k = S / (2 * ARENA_R);
@@ -103,6 +127,8 @@ function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   };
 
   if (theme === 'castle') paintCastleFloor(g, rnd);
+  else if (theme === 'mine') paintMineFloor(g, rnd);
+  else if (theme === 'grove') paintGroveFloor(g, rnd);
   else paintRuinsFloor(g, rnd);
 
   // Worn spots
@@ -312,18 +338,307 @@ function paintCastleFloor(g: CanvasRenderingContext2D, rnd: () => number) {
   g.stroke();
 }
 
+/** Packed earth and rock slabs, gravel, cracks, mine-cart rails down the middle lane, crystal glow. */
+function paintMineFloor(g: CanvasRenderingContext2D, rnd: () => number) {
+  g.fillStyle = '#2a2219';
+  g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
+  // Rock slabs: irregular polygons
+  for (let i = 0; i < 160; i++) {
+    const x = (rnd() - 0.5) * ARENA_R * 2;
+    const y = (rnd() - 0.5) * ARENA_R * 2;
+    const rad = 18 + rnd() * 34;
+    g.fillStyle = `hsl(${26 + rnd() * 12}, ${10 + rnd() * 8}%, ${17 + rnd() * 10}%)`;
+    g.beginPath();
+    const n = 6 + Math.floor(rnd() * 3);
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * TAU + rnd() * 0.4;
+      const rr = rad * (0.7 + rnd() * 0.3);
+      if (k === 0) g.moveTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+      else g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+    }
+    g.closePath();
+    g.fill();
+  }
+  // Gravel
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = `hsla(30, 10%, ${20 + rnd() * 25}%, 0.7)`;
+    g.fillRect((rnd() - 0.5) * ARENA_R * 2, (rnd() - 0.5) * ARENA_R * 2, 1.5 + rnd() * 2, 1.5 + rnd() * 2);
+  }
+  // Mine-cart track along the middle lane: sleepers, then two iron rails
+  for (let x = -ARENA_R; x < ARENA_R; x += 22) {
+    g.fillStyle = `hsl(25, 35%, ${16 + rnd() * 6}%)`;
+    g.fillRect(x, -16, 9, 32);
+  }
+  g.strokeStyle = 'rgba(150, 140, 130, 0.75)';
+  g.lineWidth = 2.5;
+  for (const y of [-10, 10]) {
+    g.beginPath();
+    g.moveTo(-ARENA_R, y);
+    g.lineTo(ARENA_R, y);
+    g.stroke();
+  }
+  // Green glow where crystals grow, and a few glowing veins in the rock
+  for (const [x, y, r] of [[0, 330, 90], [0, -330, 90], [330, 280, 60], [-330, 280, 60], [330, -280, 60], [-330, -280, 60]]) {
+    const grad = g.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, 'rgba(90, 255, 170, 0.28)');
+    grad.addColorStop(1, 'rgba(90, 255, 170, 0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, r, 0, TAU);
+    g.fill();
+  }
+  g.strokeStyle = 'rgba(110, 255, 180, 0.35)';
+  g.lineWidth = 1.6;
+  for (let i = 0; i < 22; i++) {
+    let x = (rnd() - 0.5) * ARENA_R * 1.8;
+    let y = (rnd() - 0.5) * ARENA_R * 1.8;
+    let a = rnd() * TAU;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 5; k++) {
+      a += (rnd() - 0.5) * 1.2;
+      x += Math.cos(a) * 14;
+      y += Math.sin(a) * 14;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // A ring of rocks around the orb
+  g.strokeStyle = 'rgba(255, 209, 102, 0.4)';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.arc(0, 0, 70, 0, TAU);
+  g.stroke();
+}
+
+/** Grass and dark soil, a worn dirt path between the spawns, leaf litter, flowers and a fairy ring. */
+function paintGroveFloor(g: CanvasRenderingContext2D, rnd: () => number) {
+  g.fillStyle = '#1f2a16';
+  g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
+  // Grass patches
+  for (let i = 0; i < 120; i++) {
+    const x = (rnd() - 0.5) * ARENA_R * 2;
+    const y = (rnd() - 0.5) * ARENA_R * 2;
+    const rad = 30 + rnd() * 80;
+    const grad = g.createRadialGradient(x, y, 0, x, y, rad);
+    grad.addColorStop(0, `hsla(${85 + rnd() * 30}, 40%, ${22 + rnd() * 12}%, 0.7)`);
+    grad.addColorStop(1, 'hsla(100, 40%, 20%, 0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, rad, 0, TAU);
+    g.fill();
+  }
+  // Worn path from spawn to spawn, curving around the clearing
+  g.strokeStyle = 'rgba(120, 95, 62, 0.55)';
+  g.lineCap = 'round';
+  g.lineWidth = 46;
+  g.beginPath();
+  g.moveTo(-ARENA_R, 0);
+  g.bezierCurveTo(-200, 40, -120, -30, 0, 0);
+  g.bezierCurveTo(120, 30, 200, -40, ARENA_R, 0);
+  g.stroke();
+  // Clearing in the middle
+  const clear = g.createRadialGradient(0, 0, 0, 0, 0, 120);
+  clear.addColorStop(0, 'rgba(150, 175, 90, 0.35)');
+  clear.addColorStop(1, 'rgba(150, 175, 90, 0)');
+  g.fillStyle = clear;
+  g.beginPath();
+  g.arc(0, 0, 120, 0, TAU);
+  g.fill();
+  // Blades of grass, leaf litter and small flowers
+  for (let i = 0; i < 1200; i++) {
+    const x = (rnd() - 0.5) * ARENA_R * 2;
+    const y = (rnd() - 0.5) * ARENA_R * 2;
+    const k = rnd();
+    if (k < 0.6) {
+      g.strokeStyle = `hsla(${90 + rnd() * 30}, 50%, ${28 + rnd() * 20}%, 0.8)`;
+      g.lineWidth = 1.3;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + (rnd() - 0.5) * 5, y - 5 - rnd() * 6);
+      g.stroke();
+    } else if (k < 0.92) {
+      g.fillStyle = `hsla(${25 + rnd() * 30}, 60%, ${30 + rnd() * 20}%, 0.85)`;
+      g.beginPath();
+      g.ellipse(x, y, 3.4, 1.7, rnd() * TAU, 0, TAU);
+      g.fill();
+    } else {
+      g.fillStyle = rnd() < 0.5 ? 'rgba(250, 245, 230, 0.9)' : 'rgba(240, 170, 210, 0.9)';
+      g.beginPath();
+      g.arc(x, y, 1.8, 0, TAU);
+      g.fill();
+    }
+  }
+  // Fairy ring of tiny mushrooms around the orb
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * TAU;
+    g.fillStyle = 'rgba(235, 225, 190, 0.9)';
+    g.beginPath();
+    g.arc(Math.cos(a) * 74, Math.sin(a) * 74, 2.6, 0, TAU);
+    g.fill();
+  }
+}
+
+/** Timber supports against the mine wall and small green crystals at its foot. */
+function addMineDressing(root: THREE.Group, rnd: () => number, glowTex: THREE.Texture) {
+  const wood = toon('#5a3f26');
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * TAU + TAU / 32;
+    const r = ARENA_R + 6;
+    const frame = new THREE.Group();
+    frame.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
+    frame.rotation.y = -a;
+    for (const side of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(6, 62, 6), wood);
+      post.position.set(0, 31, side * 26);
+      frame.add(post);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(7, 7, 64), wood);
+    beam.position.set(0, 62, 0);
+    frame.add(beam);
+    root.add(shadowed(frame));
+  }
+  const crystals = new THREE.InstancedMesh(new THREE.OctahedronGeometry(1, 0), new THREE.MeshBasicMaterial({ color: '#7dffb8', transparent: true, opacity: 0.8, toneMapped: false }), 40);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  for (let i = 0; i < 40; i++) {
+    const a = rnd() * TAU;
+    const r = ARENA_R - 8 - rnd() * 14;
+    const h = 5 + rnd() * 9;
+    q.setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.7, rnd() * 3, (rnd() - 0.5) * 0.7));
+    m.compose(new THREE.Vector3(Math.cos(a) * r, h * 0.6, Math.sin(a) * r), q, new THREE.Vector3(h * 0.35, h, h * 0.35));
+    crystals.setMatrixAt(i, m);
+  }
+  root.add(crystals);
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU;
+    const glow = glowSprite(glowTex, '#5dffb0', 70, 0.35);
+    glow.position.set(Math.cos(a) * (ARENA_R - 14), 10, Math.sin(a) * (ARENA_R - 14));
+    root.add(glow);
+  }
+}
+
+/** Glowing mushrooms at the foot of the grove's hedge. */
+function addGroveDressing(root: THREE.Group, rnd: () => number, glowTex: THREE.Texture) {
+  const n = 36;
+  const stems = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5, 0.7, 1, 6), toon('#e8dcc0'), n);
+  const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 5, 0, TAU, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: '#ffe9a0', toneMapped: false }), n);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const col = new THREE.Color();
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * TAU;
+    const r = ARENA_R - 10 - rnd() * 18;
+    const x = Math.cos(a) * r;
+    const z = Math.sin(a) * r;
+    const h = 4 + rnd() * 6;
+    m.compose(new THREE.Vector3(x, h / 2, z), q.identity(), new THREE.Vector3(h * 0.5, h, h * 0.5));
+    stems.setMatrixAt(i, m);
+    m.compose(new THREE.Vector3(x, h, z), q.identity(), new THREE.Vector3(h * 0.6, h * 0.45, h * 0.6));
+    caps.setMatrixAt(i, m);
+    caps.setColorAt(i, col.set(i % 3 ? '#ffe9a0' : '#9fe8ff'));
+  }
+  root.add(stems, caps);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU + 0.3;
+    const glow = glowSprite(glowTex, i % 2 ? '#ffe08a' : '#9fe8ff', 60, 0.3);
+    glow.position.set(Math.cos(a) * (ARENA_R - 18), 8, Math.sin(a) * (ARENA_R - 18));
+    root.add(glow);
+  }
+}
+
+/** A cluster of glowing green crystals on a rock: the mine's pillars. */
+export function buildCrystal(r: number, glowTex: THREE.Texture): THREE.Group {
+  const g = new THREE.Group();
+  const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r * 0.95, 0), stone('#3e352c'));
+  rock.position.y = r * 0.35;
+  rock.scale.set(1, 0.6, 1);
+  g.add(rock);
+  const mat = new THREE.MeshBasicMaterial({ color: '#7dffb8', transparent: true, opacity: 0.82, toneMapped: false });
+  const edge = new THREE.MeshStandardMaterial({ color: '#2f8a5a', roughness: 0.3, metalness: 0.2, flatShading: true });
+  const shards: [number, number, number, number, number][] = [
+    [0, 0, 1.0, 2.6, 0],
+    [0.45, 0.2, 0.7, 1.8, 0.45],
+    [-0.4, 0.35, 0.65, 1.6, -0.5],
+    [0.1, -0.5, 0.6, 1.5, 0.35],
+    [-0.35, -0.35, 0.5, 1.2, -0.3],
+  ];
+  shards.forEach(([x, z, w, h, tilt], i) => {
+    const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.45, 0), i === 3 ? edge : mat);
+    crystal.position.set(x * r, r * 0.5 + h * r * 0.35, z * r);
+    crystal.scale.set(w, h, w);
+    crystal.rotation.set(tilt, x * 2, tilt * 0.6);
+    g.add(crystal);
+  });
+  const glow = glowSprite(glowTex, '#5dffb0', r * 5, 0.5);
+  glow.position.y = r * 1.1;
+  shadowed(g);
+  g.add(glow);
+  return g;
+}
+
+/** A rock ridge `len` long along local X, `r` thick each side, with crystals poking out. */
+export function buildRidge(len: number, r: number): THREE.Group {
+  const g = new THREE.Group();
+  const rockMats = ['#4a3f33', '#3e352c', '#544737'].map((c) => stone(c));
+  const crystal = new THREE.MeshBasicMaterial({ color: '#7dffb8', transparent: true, opacity: 0.8, toneMapped: false });
+  const n = Math.max(3, Math.round(len / (r * 1.1)));
+  for (let i = 0; i <= n; i++) {
+    const x = -len / 2 + (len * i) / n;
+    const size = r * (1.05 + ((i * 37) % 5) * 0.08);
+    const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(size, 0), rockMats[i % 3]);
+    rock.position.set(x, size * 0.75, ((i * 13) % 5 - 2) * 1.5);
+    rock.scale.set(1, 1.15 + ((i * 7) % 3) * 0.12, 0.95);
+    rock.rotation.set(i * 0.7, i * 1.3, i * 0.4);
+    g.add(rock);
+    if (i % 2) {
+      const shard = new THREE.Mesh(new THREE.OctahedronGeometry(r * 0.3, 0), crystal);
+      shard.position.set(x, size * 1.9, (i % 4 === 1 ? 1 : -1) * r * 0.5);
+      shard.scale.set(0.6, 1.8, 0.6);
+      shard.rotation.z = (i % 4 === 1 ? 1 : -1) * 0.35;
+      g.add(shard);
+    }
+  }
+  shadowed(g);
+  return g;
+}
+
+/** A broad-leafed tree for the grove: flared roots, a bark trunk and a layered canopy. */
+export function buildTree(r: number): THREE.Group {
+  const g = new THREE.Group();
+  const bark = toon('#5a4330');
+  const leaves = ['#3f6e2c', '#4f8536', '#5f9a3e'].map((c) => toon(c));
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.55, r * 0.8, 70, 9), bark);
+  trunk.position.y = 35;
+  g.add(trunk);
+  for (let k = 0; k < 5; k++) {
+    const a = (k / 5) * TAU + r;
+    const root = new THREE.Mesh(new THREE.ConeGeometry(r * 0.28, r * 1.3, 5), bark);
+    root.position.set(Math.cos(a) * r * 0.7, r * 0.18, Math.sin(a) * r * 0.7);
+    root.rotation.set(Math.sin(a) * 1.25, 0, -Math.cos(a) * 1.25);
+    g.add(root);
+  }
+  const blobs: [number, number, number, number][] = [
+    [0, 92, 0, 1.55],
+    [r * 0.7, 84, r * 0.4, 1.1],
+    [-r * 0.6, 86, -r * 0.5, 1.15],
+    [r * 0.1, 108, -r * 0.2, 1.05],
+  ];
+  blobs.forEach(([x, y, z, k], i) => {
+    const blob = new THREE.Mesh(new THREE.IcosahedronGeometry(r * k, 1), leaves[i % 3]);
+    blob.position.set(x, y, z);
+    blob.scale.set(1, 0.75, 1);
+    g.add(blob);
+  });
+  shadowed(g);
+  return g;
+}
+
 export interface Brazier {
   light: THREE.PointLight;
   flame: THREE.Mesh;
   glow: THREE.Sprite;
   seed: number;
-}
-
-/** Fireflies (ruins) or rising embers (castle): one Points object, moved on the CPU. */
-export interface Ambient {
-  points: THREE.Points;
-  speeds: Float32Array;
-  rise: boolean;
 }
 
 export interface ArenaModel {
@@ -336,50 +651,79 @@ export interface ArenaModel {
 
 const AMBIENT_TOP = 180;
 
+/** Airborne specks of a theme: one Points object, moved on the CPU. */
+export interface Ambient {
+  points: THREE.Points;
+  speeds: Float32Array;
+  mode: AmbientConfig['mode'];
+}
+
+interface AmbientConfig {
+  n: number;
+  color: string;
+  size: number;
+  opacity: number;
+  /** rise: embers float up and wrap; fall: leaves and dust drift down and wrap; wander: fireflies loop in place. */
+  mode: 'rise' | 'fall' | 'wander';
+  low: number;
+  high: number;
+  speed: number;
+  spread: number;
+}
+
+const AMBIENT: Record<MapTheme, AmbientConfig> = {
+  ruins: { n: 110, color: '#d8ff7a', size: 6, opacity: 0.9, mode: 'wander', low: 15, high: 85, speed: 6, spread: 10 },
+  castle: { n: 140, color: '#ff6a3a', size: 7, opacity: 0.85, mode: 'rise', low: 0, high: AMBIENT_TOP, speed: 18, spread: 30 },
+  mine: { n: 120, color: '#b8ffd8', size: 4, opacity: 0.6, mode: 'fall', low: 0, high: AMBIENT_TOP, speed: 4, spread: 6 },
+  grove: { n: 90, color: '#e8c060', size: 6, opacity: 0.85, mode: 'fall', low: 0, high: AMBIENT_TOP, speed: 10, spread: 12 },
+};
+
 function buildAmbient(theme: MapTheme, glowTex: THREE.Texture): Ambient {
-  const castle = theme === 'castle';
-  const n = castle ? 140 : 110;
-  const pos = new Float32Array(n * 3);
-  const speeds = new Float32Array(n);
+  const cfg = AMBIENT[theme];
+  const pos = new Float32Array(cfg.n * 3);
+  const speeds = new Float32Array(cfg.n);
   let seed = 11;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < cfg.n; i++) {
     const a = rnd() * TAU;
     const r = Math.sqrt(rnd()) * (ARENA_R + 60);
     pos[i * 3] = Math.cos(a) * r;
-    pos[i * 3 + 1] = castle ? rnd() * AMBIENT_TOP : 15 + rnd() * 70;
+    pos[i * 3 + 1] = cfg.low + rnd() * (cfg.high - cfg.low);
     pos[i * 3 + 2] = Math.sin(a) * r;
-    speeds[i] = (castle ? 18 : 6) + rnd() * (castle ? 30 : 10);
+    speeds[i] = cfg.speed + rnd() * cfg.spread;
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const mat = new THREE.PointsMaterial({
     map: glowTex,
-    color: castle ? '#ff6a3a' : '#d8ff7a',
-    size: castle ? 7 : 6,
+    color: cfg.color,
+    size: cfg.size,
     transparent: true,
-    opacity: castle ? 0.85 : 0.9,
+    opacity: cfg.opacity,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     toneMapped: false,
   });
-  return { points: new THREE.Points(geo, mat), speeds, rise: castle };
+  return { points: new THREE.Points(geo, mat), speeds, mode: cfg.mode };
 }
 
-/** Embers rise and wrap around; motes bob slowly in place. */
+/** Embers rise and leaves fall (both wrapping around), fireflies wander in small loops. */
 export function updateAmbient(a: Ambient, t: number, dt: number) {
   const attr = a.points.geometry.getAttribute('position') as THREE.BufferAttribute;
   const pos = attr.array as Float32Array;
   for (let i = 0; i < a.speeds.length; i++) {
-    if (a.rise) {
+    if (a.mode === 'rise') {
       pos[i * 3 + 1] += a.speeds[i] * dt;
       pos[i * 3] += Math.sin(t * 1.3 + i) * 6 * dt;
       if (pos[i * 3 + 1] > AMBIENT_TOP) pos[i * 3 + 1] = 0;
+    } else if (a.mode === 'fall') {
+      pos[i * 3 + 1] -= a.speeds[i] * dt;
+      pos[i * 3] += Math.sin(t * 0.9 + i * 1.3) * a.speeds[i] * 0.8 * dt;
+      if (pos[i * 3 + 1] < 0) pos[i * 3 + 1] = AMBIENT_TOP;
     } else {
-      // Fireflies wander in small loops.
       pos[i * 3] += Math.sin(t * 0.7 + i * 2.3) * a.speeds[i] * dt;
       pos[i * 3 + 1] += Math.sin(t * 0.6 + i * 1.7) * a.speeds[i] * dt;
       pos[i * 3 + 2] += Math.cos(t * 0.5 + i * 1.1) * a.speeds[i] * dt;
@@ -391,6 +735,7 @@ export function updateAmbient(a: Ambient, t: number, dt: number) {
 export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: MapTheme = 'ruins'): ArenaModel {
   const castle = theme === 'castle';
   const look = THEME_LOOKS[theme];
+  const pal = ARENA_PALETTES[theme];
   const root = new THREE.Group();
   scene.add(root);
 
@@ -409,7 +754,7 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   ground.receiveShadow = true;
   root.add(ground);
 
-  // Wall: a ring of uneven stone blocks (pale and mossy in the ruins, warm in the castle).
+  // Wall: a ring of uneven stone blocks in the theme's colors.
   const N = 64;
   const wall = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), stone('#ffffff'), N);
   const m = new THREE.Matrix4();
@@ -431,7 +776,7 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a);
     m.compose(new THREE.Vector3(Math.cos(a) * r, h / 2, Math.sin(a) * r), q, new THREE.Vector3(depth, h, ((TAU * r) / N) * (tall ? 1.05 : 0.95)));
     wall.setMatrixAt(i, m);
-    col.set(castle ? (tall ? '#5a4c4a' : '#463b3a') : tall ? '#6f7868' : '#59614f').multiplyScalar(0.85 + rnd() * 0.3);
+    col.set(tall ? pal.wallTall : pal.wallLow).multiplyScalar(0.85 + rnd() * 0.3);
     wall.setColorAt(i, col);
   }
   wall.castShadow = true;
@@ -441,14 +786,14 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   // Faint glowing edge so the boundary reads clearly.
   const rim = new THREE.Mesh(
     new THREE.RingGeometry(ARENA_R - 3, ARENA_R + 1, 160),
-    new THREE.MeshBasicMaterial({ color: castle ? '#ff4058' : '#9dffc8', transparent: true, opacity: castle ? 0.32 : 0.3, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: pal.rim, transparent: true, opacity: pal.rimOpacity, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   rim.rotation.x = -Math.PI / 2;
   rim.position.y = 0.6;
   root.add(rim);
 
   // Orb pedestal
-  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 4, 32), stone(castle ? '#4a3c3a' : '#5d6656', 0.7));
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 4, 32), stone(pal.pedestal, 0.7));
   pedestal.position.y = 2;
   pedestal.receiveShadow = true;
   root.add(pedestal);
@@ -460,30 +805,30 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   pedestalInlay.position.y = 4.2;
   root.add(pedestalInlay);
 
-  // Braziers outside the wall: pale green moonfire in the ruins, red fire at the castle
+  // Fires outside the wall: green moonfire, red fire, lanterns or golden wisps by theme
   const braziers: Brazier[] = [];
   for (let i = 0; i < 4; i++) {
     const a = TAU / 8 + (i / 4) * TAU;
     const r = ARENA_R + 85;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(13, 18, 46, 8), stone(castle ? '#3e3434' : '#4c5446'));
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(13, 18, 46, 8), stone(pal.brazier));
     base.position.set(x, 23, z);
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(22, 12, 12, 8), new THREE.MeshStandardMaterial({ color: '#2a2622', metalness: 0.6, roughness: 0.5, flatShading: true }));
     bowl.position.set(x, 52, z);
     root.add(shadowed(base), shadowed(bowl));
 
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(11, 30, 6), new THREE.MeshBasicMaterial({ color: castle ? '#ff7a4a' : '#dcffe8', toneMapped: false }));
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(11, 30, 6), new THREE.MeshBasicMaterial({ color: pal.flame, toneMapped: false }));
     flame.position.set(x, 72, z);
-    const glow = glowSprite(glowTex, castle ? '#ff4a2a' : '#6dffa8', 130, 0.8);
+    const glow = glowSprite(glowTex, pal.flameGlow, 130, 0.8);
     glow.position.set(x, 72, z);
-    const light = new THREE.PointLight(castle ? '#ff6a48' : '#a8ffcc', 18000, 700, 2);
+    const light = new THREE.PointLight(pal.flameLight, 18000, 700, 2);
     light.position.set(x, 90, z);
     root.add(flame, glow, light);
     braziers.push({ light, flame, glow, seed: i * 1.7 });
   }
 
-  if (!castle) {
+  if (theme === 'ruins' || theme === 'grove') {
     // Moss and ferns along the foot of the outer wall
     const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 5), toon('#4f7a34'), 90);
     for (let i = 0; i < 90; i++) {
@@ -528,6 +873,9 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
     rubble.receiveShadow = true;
     root.add(rubble);
   }
+
+  if (theme === 'mine') addMineDressing(root, rnd, glowTex);
+  if (theme === 'grove') addGroveDressing(root, rnd, glowTex);
 
   const ambient = buildAmbient(theme, glowTex);
   root.add(ambient.points);

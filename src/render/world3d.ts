@@ -6,7 +6,7 @@ import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
-import { buildArena, buildChampion, buildPillar, buildRiver, buildStatue, buildTrainingDummy, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig, type RiverModel } from './models';
+import { buildArena, buildChampion, buildCrystal, buildPillar, buildRidge, buildRiver, buildStatue, buildTrainingDummy, buildTree, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig, type RiverModel } from './models';
 import { abilityColor, COLORS } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
@@ -825,7 +825,11 @@ export class World3D implements WorldView {
       this.rimLight.intensity = look.rimIntensity;
     }
     for (const pl of def.pillars) {
-      const p = def.theme === 'castle' ? buildStatue(pl.r) : buildPillar(pl.r, def.theme === 'ruins');
+      const p =
+        def.theme === 'castle' ? buildStatue(pl.r)
+        : def.theme === 'mine' ? buildCrystal(pl.r, this.glowTex)
+        : def.theme === 'grove' ? buildTree(pl.r)
+        : buildPillar(pl.r, true);
       p.position.set(pl.x, 0, pl.y);
       // Statues look toward the middle of the arena.
       if (def.theme === 'castle') p.rotation.y = Math.atan2(pl.y, -pl.x);
@@ -834,7 +838,7 @@ export class World3D implements WorldView {
     for (const w of def.walls) {
       const dx = w.x1 - w.x0;
       const dy = w.y1 - w.y0;
-      const wall = buildWall(Math.hypot(dx, dy), w.r);
+      const wall = def.theme === 'mine' ? buildRidge(Math.hypot(dx, dy), w.r) : buildWall(Math.hypot(dx, dy), w.r);
       wall.position.set((w.x0 + w.x1) / 2, 0, (w.y0 + w.y1) / 2);
       wall.rotation.y = -Math.atan2(dy, dx);
       g.add(wall);
