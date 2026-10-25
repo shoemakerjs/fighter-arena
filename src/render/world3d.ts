@@ -6,7 +6,7 @@ import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
-import { buildArena, buildChampion, buildPillar, buildStatue, buildTrainingDummy, buildWall, glowSprite, lighten, makeGlowTexture, type ArenaModel, type ChampionRig } from './models';
+import { buildArena, buildChampion, buildPillar, buildStatue, buildTrainingDummy, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig } from './models';
 import { abilityColor, COLORS } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
@@ -54,6 +54,24 @@ interface ZoneView {
 
 /** Projectiles drawn as an arrow pointing along their flight instead of a spinning gem. */
 const ARROWS: ProjKind[] = ['arrow', 'longshot', 'sonic', 'snare'];
+
+/**
+ * Remove a subtree built for one map and free its GPU resources. Sprites share one
+ * geometry across three.js and `keep` (the glow texture) is shared too, so those stay.
+ */
+function dropTree(scene: THREE.Scene, root: THREE.Object3D, keep: THREE.Texture) {
+  scene.remove(root);
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.geometry) return;
+    if (!(o as THREE.Sprite).isSprite) mesh.geometry.dispose();
+    for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const map = (m as THREE.MeshStandardMaterial).map;
+      if (map && map !== keep) map.dispose();
+      m.dispose();
+    }
+  });
+}
 
 function zoneRadius(kind: Zone['kind']): number {
   return kind === 'rain' ? RAIN.r : kind === 'converge' ? CONVERGE.r : kind === 'pulse' ? PULSE.r : SONIC.r;
@@ -117,6 +135,9 @@ export class World3D implements WorldView {
   private aimLane: THREE.Group;
   private aimLaneMesh: THREE.Mesh;
   private aimCircle: THREE.Mesh;
+  private hemi: THREE.HemisphereLight;
+  private key: THREE.DirectionalLight;
+  private rimLight: THREE.DirectionalLight;
   /** Obstacles of the map on screen (rebuilt when the map changes). */
   private mapGroup: THREE.Group | null = null;
   private mapShown = -1;
@@ -139,8 +160,11 @@ export class World3D implements WorldView {
     scene.environmentIntensity = 0.3;
 
     // Lighting: cool sky fill, warm key light with shadows, blue rim from behind.
-    scene.add(new THREE.HemisphereLight('#a9bcff', '#20180f', 1.25));
+    const hemi = new THREE.HemisphereLight('#a9bcff', '#20180f', 1.25);
+    scene.add(hemi);
+    this.hemi = hemi;
     const key = new THREE.DirectionalLight('#ffe6c7', 2.6);
+    this.key = key;
     key.position.set(-420, 900, -300);
     key.castShadow = true;
     key.shadow.mapSize.set(2048, 2048);
@@ -157,12 +181,15 @@ export class World3D implements WorldView {
     const rimLight = new THREE.DirectionalLight('#6f8dff', 1.1);
     rimLight.position.set(300, 420, -800);
     scene.add(rimLight);
+    this.rimLight = rimLight;
     // Warm fill from the camera's side so faces turned away from the key light stay readable.
     const fill = new THREE.DirectionalLight('#ffe0c8', 0.9);
     fill.position.set(-150, 500, 900);
     scene.add(fill);
 
     this.arena = buildArena(scene, this.glowTex);
+    this.arena.root.userData.theme = 'arena';
+    this.showMap(0);
 
 
     for (let i = 0; i < LIGHT_POOL; i++) {
@@ -451,7 +478,7 @@ export class World3D implements WorldView {
     this.showMap(cur.map);
     this.fog.update(viewers, MAPS[cur.map].solids);
     this.fogTex.needsUpdate = true;
-    this.updateArena(cur);
+    this.updateArena(cur, dt);
     this.updateOrb(cur);
     this.updateChampions(prev, cur, alpha, dt, opts.localId);
     this.updateProjectiles(prev, cur, alpha, opts.localId);
@@ -471,8 +498,9 @@ export class World3D implements WorldView {
 
   // ---------------------------------------------------------------- arena
 
-  private updateArena(s: GameState) {
+  private updateArena(s: GameState, dt: number) {
     const t = this.time;
+    updateAmbient(this.arena.ambient, t, dt);
     for (const b of this.arena.braziers) {
       const f = 0.82 + 0.1 * Math.sin(t * 13 + b.seed) + 0.08 * Math.sin(t * 29 + b.seed * 3);
       b.light.intensity = 18000 * f;
@@ -771,13 +799,28 @@ export class World3D implements WorldView {
 
   // ---------------------------------------------------------------- map
 
-  /** Build the obstacles of `map` (once per change of map). */
+  /** Build the arena, obstacles and lighting of `map` (once per change of map). */
   private showMap(map: number) {
     if (map === this.mapShown) return;
     this.mapShown = map;
-    if (this.mapGroup) this.scene.remove(this.mapGroup);
+    if (this.mapGroup) dropTree(this.scene, this.mapGroup, this.glowTex);
     const g = new THREE.Group();
     const def = MAPS[map];
+    if (this.arena.root.userData.theme !== def.theme) {
+      dropTree(this.scene, this.arena.root, this.glowTex);
+      this.arena = buildArena(this.scene, this.glowTex, def.theme);
+      this.arena.root.userData.theme = def.theme;
+      const look = THEME_LOOKS[def.theme];
+      (this.scene.background as THREE.Color).set(look.background);
+      this.scene.fog!.color.set(look.background);
+      this.hemi.color.set(look.hemiSky);
+      this.hemi.groundColor.set(look.hemiGround);
+      this.hemi.intensity = look.hemi;
+      this.key.color.set(look.key);
+      this.key.intensity = look.keyIntensity;
+      this.rimLight.color.set(look.rim);
+      this.rimLight.intensity = look.rimIntensity;
+    }
     for (const pl of def.pillars) {
       const p = def.theme === 'castle' ? buildStatue(pl.r) : buildPillar(pl.r);
       p.position.set(pl.x, 0, pl.y);

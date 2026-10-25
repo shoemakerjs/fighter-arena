@@ -5,7 +5,7 @@
  * World mapping: sim (x, y) → three (x, 0, y), height is +Y.
  */
 import * as THREE from 'three';
-import { ARENA_R, CHAMP, PLAYER_R, SPAWNS } from '../sim/constants';
+import { ARENA_R, CHAMP, PLAYER_R, SPAWNS, type MapDef } from '../sim/constants';
 import { COLORS } from './theme';
 import { hexA } from './view';
 
@@ -64,8 +64,30 @@ function shadowed<T extends THREE.Object3D>(o: T): T {
 
 // ---------------------------------------------------------------- floor
 
-/** Polar stone tiles + team pads, painted once into a texture. */
-function makeFloorTexture(): THREE.CanvasTexture {
+export type MapTheme = MapDef['theme'];
+
+/** Lighting and palette of a map theme (the renderer applies the lights). */
+export interface ThemeLook {
+  background: string;
+  ground: string;
+  hemiSky: string;
+  hemiGround: string;
+  hemi: number;
+  key: string;
+  keyIntensity: number;
+  rim: string;
+  rimIntensity: number;
+}
+
+export const THEME_LOOKS: Record<MapTheme, ThemeLook> = {
+  // Moonlit rune arena: cool blue light, warm torches.
+  arena: { background: COLORS.bg, ground: '#0f131b', hemiSky: '#a9bcff', hemiGround: '#20180f', hemi: 1.25, key: '#ffe6c7', keyIntensity: 2.6, rim: '#6f8dff', rimIntensity: 1.1 },
+  // Romulus's castle under a blood moon: warm stone, crimson rim light.
+  castle: { background: '#0c0709', ground: '#150d0d', hemiSky: '#cfb0b8', hemiGround: '#1c0c0a', hemi: 1.1, key: '#ffd8bb', keyIntensity: 2.45, rim: '#ff4058', rimIntensity: 1.35 },
+};
+
+/** Floor painted once into a texture: polar rune tiles (arena) or flagstones (castle), plus team pads. */
+function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   const S = 2048;
   const k = S / (2 * ARENA_R);
   const c = document.createElement('canvas');
@@ -74,41 +96,14 @@ function makeFloorTexture(): THREE.CanvasTexture {
   g.translate(S / 2, S / 2);
   g.scale(k, k);
 
-  // Grout
-  g.fillStyle = '#1a1f2b';
-  g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
-
   let seed = 7;
   const rnd = () => {
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
-  const tile = (r0: number, r1: number, a0: number, a1: number, light: number) => {
-    const gap = 1.6;
-    const ga0 = gap / Math.max(r0, 20);
-    const ga1 = gap / r1;
-    g.beginPath();
-    g.arc(0, 0, r1 - gap, a0 + ga1, a1 - ga1);
-    g.arc(0, 0, Math.max(0, r0 + gap), a1 - ga0, a0 + ga0, true);
-    g.closePath();
-    g.fillStyle = `hsl(222, 13%, ${light}%)`;
-    g.fill();
-  };
 
-  // Center disc
-  g.beginPath();
-  g.arc(0, 0, 78, 0, TAU);
-  g.fillStyle = 'hsl(222, 12%, 30%)';
-  g.fill();
-  for (let r0 = 80; r0 < ARENA_R; r0 += 80) {
-    const r1 = Math.min(ARENA_R, r0 + 80);
-    const n = Math.max(8, Math.round((TAU * r1) / 120));
-    const off = rnd() * TAU;
-    for (let i = 0; i < n; i++) {
-      const a0 = off + (i / n) * TAU;
-      tile(r0, r1, a0, a0 + TAU / n, 26 + rnd() * 9);
-    }
-  }
+  if (theme === 'castle') paintCastleFloor(g, rnd);
+  else paintArenaFloor(g, rnd);
 
   // Worn spots
   for (let i = 0; i < 60; i++) {
@@ -120,13 +115,6 @@ function makeFloorTexture(): THREE.CanvasTexture {
     g.fillStyle = grad;
     g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
   }
-
-  // Center inlay
-  g.strokeStyle = 'rgba(255, 209, 102, 0.45)';
-  g.lineWidth = 3;
-  g.beginPath();
-  g.arc(0, 0, 70, 0, TAU);
-  g.stroke();
 
   // Team pads
   SPAWNS.forEach((sp, i) => {
@@ -159,6 +147,138 @@ function makeFloorTexture(): THREE.CanvasTexture {
   return t;
 }
 
+/** Concentric stone tiles with a faint ring of blue runes and a gold center inlay. */
+function paintArenaFloor(g: CanvasRenderingContext2D, rnd: () => number) {
+  g.fillStyle = '#1a1f2b';
+  g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
+  const tile = (r0: number, r1: number, a0: number, a1: number, light: number) => {
+    const gap = 1.6;
+    const ga0 = gap / Math.max(r0, 20);
+    const ga1 = gap / r1;
+    g.beginPath();
+    g.arc(0, 0, r1 - gap, a0 + ga1, a1 - ga1);
+    g.arc(0, 0, Math.max(0, r0 + gap), a1 - ga0, a0 + ga0, true);
+    g.closePath();
+    g.fillStyle = `hsl(222, 13%, ${light}%)`;
+    g.fill();
+  };
+  g.beginPath();
+  g.arc(0, 0, 78, 0, TAU);
+  g.fillStyle = 'hsl(222, 12%, 30%)';
+  g.fill();
+  for (let r0 = 80; r0 < ARENA_R; r0 += 80) {
+    const r1 = Math.min(ARENA_R, r0 + 80);
+    const n = Math.max(8, Math.round((TAU * r1) / 120));
+    const off = rnd() * TAU;
+    for (let i = 0; i < n; i++) {
+      const a0 = off + (i / n) * TAU;
+      tile(r0, r1, a0, a0 + TAU / n, 26 + rnd() * 9);
+    }
+  }
+  // A ring of runes between the pillars: short glyph strokes around two thin circles.
+  g.strokeStyle = 'rgba(122, 162, 255, 0.22)';
+  g.lineWidth = 2;
+  for (const r of [262, 298]) {
+    g.beginPath();
+    g.arc(0, 0, r, 0, TAU);
+    g.stroke();
+  }
+  g.strokeStyle = 'rgba(140, 180, 255, 0.3)';
+  g.lineWidth = 2.4;
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * TAU;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    const kind = Math.floor(rnd() * 3);
+    g.beginPath();
+    g.moveTo(ca * 270, sa * 270);
+    g.lineTo(ca * 290, sa * 290);
+    if (kind === 0) {
+      g.moveTo(ca * 280 - sa * 6, sa * 280 + ca * 6);
+      g.lineTo(ca * 280 + sa * 6, sa * 280 - ca * 6);
+    } else if (kind === 1) {
+      g.moveTo(ca * 290, sa * 290);
+      g.lineTo(ca * 284 - sa * 7, sa * 284 + ca * 7);
+    }
+    g.stroke();
+  }
+  g.strokeStyle = 'rgba(255, 209, 102, 0.45)';
+  g.lineWidth = 3;
+  g.beginPath();
+  g.arc(0, 0, 70, 0, TAU);
+  g.stroke();
+}
+
+/** Warm grey flagstones in running bond, cracks and old blood, a crimson star in the middle. */
+function paintCastleFloor(g: CanvasRenderingContext2D, rnd: () => number) {
+  g.fillStyle = '#17120f';
+  g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
+  const size = 66;
+  for (let row = 0; row * size < ARENA_R * 2; row++) {
+    const y = -ARENA_R + row * size;
+    const off = row % 2 ? size / 2 : 0;
+    for (let x = -ARENA_R - off; x < ARENA_R; x += size) {
+      g.fillStyle = `hsl(${18 + rnd() * 14}, ${7 + rnd() * 7}%, ${23 + rnd() * 9}%)`;
+      g.fillRect(x + 1.8, y + 1.8, size - 3.6, size - 3.6);
+      // A lighter worn top edge on some stones
+      if (rnd() < 0.4) {
+        g.fillStyle = 'rgba(255, 235, 220, 0.04)';
+        g.fillRect(x + 1.8, y + 1.8, size - 3.6, 6);
+      }
+    }
+  }
+  // Cracks
+  g.strokeStyle = 'rgba(8, 5, 4, 0.55)';
+  g.lineWidth = 1.6;
+  for (let i = 0; i < 70; i++) {
+    let x = (rnd() - 0.5) * ARENA_R * 2;
+    let y = (rnd() - 0.5) * ARENA_R * 2;
+    let a = rnd() * TAU;
+    g.beginPath();
+    g.moveTo(x, y);
+    for (let k = 0; k < 4; k++) {
+      a += (rnd() - 0.5) * 1.4;
+      x += Math.cos(a) * (8 + rnd() * 14);
+      y += Math.sin(a) * (8 + rnd() * 14);
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  }
+  // Old bloodstains
+  for (let i = 0; i < 26; i++) {
+    const a = rnd() * TAU;
+    const r = 90 + rnd() * (ARENA_R - 140);
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    const rad = 14 + rnd() * 34;
+    const grad = g.createRadialGradient(x, y, 0, x, y, rad);
+    grad.addColorStop(0, `rgba(110, 12, 24, ${0.22 + rnd() * 0.2})`);
+    grad.addColorStop(1, 'rgba(110, 12, 24, 0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, rad, 0, TAU);
+    g.fill();
+  }
+  // Crimson eight-pointed star and ring around the orb
+  g.fillStyle = 'hsl(10, 10%, 21%)';
+  g.beginPath();
+  g.arc(0, 0, 84, 0, TAU);
+  g.fill();
+  g.strokeStyle = 'rgba(212, 32, 63, 0.55)';
+  g.lineWidth = 3;
+  g.beginPath();
+  for (let i = 0; i <= 16; i++) {
+    const a = (i / 16) * TAU;
+    const r = i % 2 ? 40 : 80;
+    if (i === 0) g.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+    else g.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  g.stroke();
+  g.beginPath();
+  g.arc(0, 0, 84, 0, TAU);
+  g.stroke();
+}
+
 export interface Brazier {
   light: THREE.PointLight;
   flame: THREE.Mesh;
@@ -166,28 +286,94 @@ export interface Brazier {
   seed: number;
 }
 
-export interface ArenaModel {
-  braziers: Brazier[];
-  pedestalInlay: THREE.Mesh;
+/** Drifting motes (arena) or rising embers (castle): one Points object, moved on the CPU. */
+export interface Ambient {
+  points: THREE.Points;
+  speeds: Float32Array;
+  rise: boolean;
 }
 
-export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture): ArenaModel {
+export interface ArenaModel {
+  /** Everything of this arena, to drop it when the map changes. */
+  root: THREE.Group;
+  braziers: Brazier[];
+  pedestalInlay: THREE.Mesh;
+  ambient: Ambient;
+}
+
+const AMBIENT_TOP = 180;
+
+function buildAmbient(theme: MapTheme, glowTex: THREE.Texture): Ambient {
+  const castle = theme === 'castle';
+  const n = castle ? 140 : 110;
+  const pos = new Float32Array(n * 3);
+  const speeds = new Float32Array(n);
+  let seed = 11;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * TAU;
+    const r = Math.sqrt(rnd()) * (ARENA_R + 60);
+    pos[i * 3] = Math.cos(a) * r;
+    pos[i * 3 + 1] = rnd() * AMBIENT_TOP;
+    pos[i * 3 + 2] = Math.sin(a) * r;
+    speeds[i] = (castle ? 18 : 5) + rnd() * (castle ? 30 : 8);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.PointsMaterial({
+    map: glowTex,
+    color: castle ? '#ff6a3a' : '#8fb4ff',
+    size: castle ? 7 : 9,
+    transparent: true,
+    opacity: castle ? 0.85 : 0.5,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  return { points: new THREE.Points(geo, mat), speeds, rise: castle };
+}
+
+/** Embers rise and wrap around; motes bob slowly in place. */
+export function updateAmbient(a: Ambient, t: number, dt: number) {
+  const attr = a.points.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const pos = attr.array as Float32Array;
+  for (let i = 0; i < a.speeds.length; i++) {
+    if (a.rise) {
+      pos[i * 3 + 1] += a.speeds[i] * dt;
+      pos[i * 3] += Math.sin(t * 1.3 + i) * 6 * dt;
+      if (pos[i * 3 + 1] > AMBIENT_TOP) pos[i * 3 + 1] = 0;
+    } else {
+      pos[i * 3 + 1] += Math.sin(t * 0.6 + i * 1.7) * a.speeds[i] * dt;
+    }
+  }
+  attr.needsUpdate = true;
+}
+
+export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: MapTheme = 'arena'): ArenaModel {
+  const castle = theme === 'castle';
+  const look = THEME_LOOKS[theme];
+  const root = new THREE.Group();
+  scene.add(root);
+
   // Floor: CircleGeometry lies in XY; rotating it flat maps canvas x/y onto sim x/y.
   const floor = new THREE.Mesh(
     new THREE.CircleGeometry(ARENA_R, 128),
-    new THREE.MeshStandardMaterial({ map: makeFloorTexture(), roughness: 0.88, metalness: 0.04 }),
+    new THREE.MeshStandardMaterial({ map: makeFloorTexture(theme), roughness: 0.88, metalness: 0.04 }),
   );
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
-  scene.add(floor);
+  root.add(floor);
 
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(3200, 64), new THREE.MeshStandardMaterial({ color: '#0f131b', roughness: 1 }));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(3200, 64), new THREE.MeshStandardMaterial({ color: look.ground, roughness: 1 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.5;
   ground.receiveShadow = true;
-  scene.add(ground);
+  root.add(ground);
 
-  // Wall: a ring of uneven stone blocks.
+  // Wall: a ring of uneven stone blocks (bluish in the arena, warm in the castle).
   const N = 64;
   const wall = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), stone('#ffffff'), N);
   const m = new THREE.Matrix4();
@@ -198,68 +384,104 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture): ArenaMod
     seed = (seed * 16807) % 2147483647;
     return seed / 2147483647;
   };
+  const tallAngles: number[] = [];
   for (let i = 0; i < N; i++) {
     const a = (i / N) * TAU;
     const tall = i % 8 === 0;
+    if (tall) tallAngles.push(a);
     const h = tall ? 70 : 30 + rnd() * 16;
     const depth = tall ? 44 : 34;
     const r = ARENA_R + 3 + depth / 2;
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a);
     m.compose(new THREE.Vector3(Math.cos(a) * r, h / 2, Math.sin(a) * r), q, new THREE.Vector3(depth, h, ((TAU * r) / N) * (tall ? 1.05 : 0.95)));
     wall.setMatrixAt(i, m);
-    col.set(tall ? '#4a556e' : '#394357').multiplyScalar(0.85 + rnd() * 0.3);
+    col.set(castle ? (tall ? '#5a4c4a' : '#463b3a') : tall ? '#4a556e' : '#394357').multiplyScalar(0.85 + rnd() * 0.3);
     wall.setColorAt(i, col);
   }
   wall.castShadow = true;
   wall.receiveShadow = true;
-  scene.add(wall);
+  root.add(wall);
 
   // Faint glowing edge so the boundary reads clearly.
   const rim = new THREE.Mesh(
     new THREE.RingGeometry(ARENA_R - 3, ARENA_R + 1, 160),
-    new THREE.MeshBasicMaterial({ color: '#7aa2ff', transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: castle ? '#ff4058' : '#7aa2ff', transparent: true, opacity: castle ? 0.32 : 0.4, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   rim.rotation.x = -Math.PI / 2;
   rim.position.y = 0.6;
-  scene.add(rim);
+  root.add(rim);
 
   // Orb pedestal
-  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 4, 32), stone('#3e475c', 0.7));
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 4, 32), stone(castle ? '#4a3c3a' : '#3e475c', 0.7));
   pedestal.position.y = 2;
   pedestal.receiveShadow = true;
-  scene.add(pedestal);
+  root.add(pedestal);
   const pedestalInlay = new THREE.Mesh(
     new THREE.RingGeometry(40, 44, 64),
     new THREE.MeshBasicMaterial({ color: COLORS.orb, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }),
   );
   pedestalInlay.rotation.x = -Math.PI / 2;
   pedestalInlay.position.y = 4.2;
-  scene.add(pedestalInlay);
+  root.add(pedestalInlay);
 
-  // Braziers outside the wall
+  // Braziers outside the wall (red fire at the castle)
   const braziers: Brazier[] = [];
   for (let i = 0; i < 4; i++) {
     const a = TAU / 8 + (i / 4) * TAU;
     const r = ARENA_R + 85;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(13, 18, 46, 8), stone('#353e51'));
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(13, 18, 46, 8), stone(castle ? '#3e3434' : '#353e51'));
     base.position.set(x, 23, z);
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(22, 12, 12, 8), new THREE.MeshStandardMaterial({ color: '#2a2622', metalness: 0.6, roughness: 0.5, flatShading: true }));
     bowl.position.set(x, 52, z);
-    scene.add(shadowed(base), shadowed(bowl));
+    root.add(shadowed(base), shadowed(bowl));
 
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(11, 30, 6), new THREE.MeshBasicMaterial({ color: '#ffb35c', toneMapped: false }));
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(11, 30, 6), new THREE.MeshBasicMaterial({ color: castle ? '#ff7a4a' : '#ffb35c', toneMapped: false }));
     flame.position.set(x, 72, z);
-    const glow = glowSprite(glowTex, '#ff8a3a', 130, 0.8);
+    const glow = glowSprite(glowTex, castle ? '#ff4a2a' : '#ff8a3a', 130, 0.8);
     glow.position.set(x, 72, z);
-    const light = new THREE.PointLight('#ff9b50', 18000, 700, 2);
+    const light = new THREE.PointLight(castle ? '#ff6a48' : '#ff9b50', 18000, 700, 2);
     light.position.set(x, 90, z);
-    scene.add(flame, glow, light);
+    root.add(flame, glow, light);
     braziers.push({ light, flame, glow, seed: i * 1.7 });
   }
 
-  return { braziers, pedestalInlay };
+  if (castle) {
+    // Crimson banners hanging on the inner face of the tall wall blocks
+    const cloth = new THREE.MeshStandardMaterial({ color: '#6e1422', roughness: 0.9, side: THREE.DoubleSide });
+    const gold = new THREE.MeshStandardMaterial({ color: '#b08a4a', roughness: 0.5, metalness: 0.5 });
+    tallAngles.forEach((a, i) => {
+      const banner = new THREE.Group();
+      banner.position.set(Math.cos(a) * (ARENA_R + 1), 68, Math.sin(a) * (ARENA_R + 1));
+      banner.rotation.y = Math.atan2(-Math.cos(a), -Math.sin(a));
+      const panel = new THREE.Mesh(raggedPanel(24, 54, 5, 31 + i), cloth);
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 30, 6), gold);
+      rod.rotation.z = Math.PI / 2;
+      const crest = new THREE.Mesh(new THREE.CircleGeometry(5, 12), gold);
+      crest.position.set(0, -18, 0.4);
+      banner.add(panel, rod, crest);
+      root.add(shadowed(banner));
+    });
+    // Rubble along the foot of the outer wall
+    const rubble = new THREE.InstancedMesh(new THREE.DodecahedronGeometry(1, 0), stone('#ffffff'), 60);
+    for (let i = 0; i < 60; i++) {
+      const a = rnd() * TAU;
+      const r = ARENA_R - 8 - rnd() * 22;
+      const size = 2.5 + rnd() * 5;
+      q.setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, rnd() * 3));
+      m.compose(new THREE.Vector3(Math.cos(a) * r, size * 0.4, Math.sin(a) * r), q, new THREE.Vector3(size, size * 0.7, size));
+      rubble.setMatrixAt(i, m);
+      rubble.setColorAt(i, col.set('#5a4c48').multiplyScalar(0.7 + rnd() * 0.4));
+    }
+    rubble.receiveShadow = true;
+    root.add(rubble);
+  }
+
+  const ambient = buildAmbient(theme, glowTex);
+  root.add(ambient.points);
+
+  return { root, braziers, pedestalInlay, ambient };
 }
 
 export function buildPillar(r: number): THREE.Group {
