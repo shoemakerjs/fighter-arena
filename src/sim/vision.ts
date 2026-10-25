@@ -2,8 +2,33 @@
  * Fog of war. Pure functions of the state: they never change it, so they can be
  * used by the renderer, the HUD and the bot alike.
  */
-import { MAPS, SONIC, VISION_R, type Pillar } from './constants';
+import { MAPS, PLAYER_R, SONIC, VISION_R, type Pillar } from './constants';
 import type { GameState, Player } from './types';
+
+/**
+ * Where to walk from (x, y) to reach (tx, ty) on foot: straight there, or, with the river
+ * in between, to the near end of the best bridge (still inside the arena), then over it.
+ */
+export function walkTarget(s: GameState, x: number, y: number, tx: number, ty: number): { x: number; y: number } {
+  const river = MAPS[s.map].river;
+  const side = x >= 0 ? 1 : -1;
+  if (!river || (tx >= 0 ? 1 : -1) === side) return { x: tx, y: ty };
+  const bank = river.half + PLAYER_R / 2;
+  let best: { y: number; half: number } | null = null;
+  let bestCost = Infinity;
+  for (const b of river.bridges) {
+    if (Math.hypot(bank + 30, b.y) > s.arenaR - PLAYER_R - 10) continue;
+    const cost = Math.abs(y - b.y) + Math.abs(ty - b.y);
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = b;
+    }
+  }
+  if (!best) return { x: tx, y: ty };
+  // Lined up with the bridge: walk over it to the far end; otherwise go to its near end first.
+  const aligned = Math.abs(y - best.y) < best.half * 0.6;
+  return { x: (aligned ? -side : side) * (bank + 30), y: best.y };
+}
 
 /** Pillars and walls of the map being played. */
 export function solidsOf(s: GameState): Pillar[] {

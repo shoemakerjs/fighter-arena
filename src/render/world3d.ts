@@ -6,7 +6,7 @@ import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
-import { buildArena, buildChampion, buildPillar, buildStatue, buildTrainingDummy, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig } from './models';
+import { buildArena, buildChampion, buildPillar, buildRiver, buildStatue, buildTrainingDummy, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig, type RiverModel } from './models';
 import { abilityColor, COLORS } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
@@ -141,6 +141,8 @@ export class World3D implements WorldView {
   /** Obstacles of the map on screen (rebuilt when the map changes). */
   private mapGroup: THREE.Group | null = null;
   private mapShown = -1;
+  /** The map's river, if it has one (its texture scrolls). */
+  private river: RiverModel | null = null;
   /** Where Rewind would land (shown to Rustic's own player). */
   private recallMark: THREE.Mesh;
 
@@ -188,7 +190,7 @@ export class World3D implements WorldView {
     scene.add(fill);
 
     this.arena = buildArena(scene, this.glowTex);
-    this.arena.root.userData.theme = 'arena';
+    this.arena.root.userData.theme = 'ruins';
     this.showMap(0);
 
 
@@ -501,6 +503,7 @@ export class World3D implements WorldView {
   private updateArena(s: GameState, dt: number) {
     const t = this.time;
     updateAmbient(this.arena.ambient, t, dt);
+    if (this.river) this.river.flow.offset.y -= dt * 0.18;
     for (const b of this.arena.braziers) {
       const f = 0.82 + 0.1 * Math.sin(t * 13 + b.seed) + 0.08 * Math.sin(t * 29 + b.seed * 3);
       b.light.intensity = 18000 * f;
@@ -822,7 +825,7 @@ export class World3D implements WorldView {
       this.rimLight.intensity = look.rimIntensity;
     }
     for (const pl of def.pillars) {
-      const p = def.theme === 'castle' ? buildStatue(pl.r) : buildPillar(pl.r);
+      const p = def.theme === 'castle' ? buildStatue(pl.r) : buildPillar(pl.r, def.theme === 'ruins');
       p.position.set(pl.x, 0, pl.y);
       // Statues look toward the middle of the arena.
       if (def.theme === 'castle') p.rotation.y = Math.atan2(pl.y, -pl.x);
@@ -835,6 +838,11 @@ export class World3D implements WorldView {
       wall.position.set((w.x0 + w.x1) / 2, 0, (w.y0 + w.y1) / 2);
       wall.rotation.y = -Math.atan2(dy, dx);
       g.add(wall);
+    }
+    this.river = null;
+    if (def.river) {
+      this.river = buildRiver(def.river);
+      g.add(this.river.root);
     }
     this.scene.add(g);
     this.mapGroup = g;

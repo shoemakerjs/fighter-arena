@@ -5,7 +5,7 @@
  * World mapping: sim (x, y) → three (x, 0, y), height is +Y.
  */
 import * as THREE from 'three';
-import { ARENA_R, CHAMP, PLAYER_R, SPAWNS, type MapDef } from '../sim/constants';
+import { ARENA_R, CHAMP, PLAYER_R, SPAWNS, type MapDef, type River } from '../sim/constants';
 import { COLORS } from './theme';
 import { hexA } from './view';
 
@@ -80,13 +80,13 @@ export interface ThemeLook {
 }
 
 export const THEME_LOOKS: Record<MapTheme, ThemeLook> = {
-  // Moonlit rune arena: cool blue light, warm torches.
-  arena: { background: COLORS.bg, ground: '#0f131b', hemiSky: '#a9bcff', hemiGround: '#20180f', hemi: 1.25, key: '#ffe6c7', keyIntensity: 2.6, rim: '#6f8dff', rimIntensity: 1.1 },
+  // Moonlit elven ruins: pale moonlight, green from the leaves below, cool teal rim.
+  ruins: { background: '#060a08', ground: '#0b120d', hemiSky: '#bcd9cc', hemiGround: '#17220f', hemi: 1.25, key: '#e4ecff', keyIntensity: 2.5, rim: '#7fe8c8', rimIntensity: 1.15 },
   // Romulus's castle under a blood moon: warm stone, crimson rim light.
   castle: { background: '#0c0709', ground: '#150d0d', hemiSky: '#cfb0b8', hemiGround: '#1c0c0a', hemi: 1.1, key: '#ffd8bb', keyIntensity: 2.45, rim: '#ff4058', rimIntensity: 1.35 },
 };
 
-/** Floor painted once into a texture: polar rune tiles (arena) or flagstones (castle), plus team pads. */
+/** Floor painted once into a texture: mossy rings of stone (ruins) or flagstones (castle), plus team pads. */
 function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   const S = 2048;
   const k = S / (2 * ARENA_R);
@@ -103,7 +103,7 @@ function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   };
 
   if (theme === 'castle') paintCastleFloor(g, rnd);
-  else paintArenaFloor(g, rnd);
+  else paintRuinsFloor(g, rnd);
 
   // Worn spots
   for (let i = 0; i < 60; i++) {
@@ -147,24 +147,24 @@ function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   return t;
 }
 
-/** Concentric stone tiles with a faint ring of blue runes and a gold center inlay. */
-function paintArenaFloor(g: CanvasRenderingContext2D, rnd: () => number) {
-  g.fillStyle = '#1a1f2b';
+/** Pale mossy stone in concentric rings, grass in the joints, fallen leaves, a ring of elven runes. */
+function paintRuinsFloor(g: CanvasRenderingContext2D, rnd: () => number) {
+  g.fillStyle = '#1b2219';
   g.fillRect(-ARENA_R, -ARENA_R, ARENA_R * 2, ARENA_R * 2);
   const tile = (r0: number, r1: number, a0: number, a1: number, light: number) => {
-    const gap = 1.6;
+    const gap = 1.8;
     const ga0 = gap / Math.max(r0, 20);
     const ga1 = gap / r1;
     g.beginPath();
     g.arc(0, 0, r1 - gap, a0 + ga1, a1 - ga1);
     g.arc(0, 0, Math.max(0, r0 + gap), a1 - ga0, a0 + ga0, true);
     g.closePath();
-    g.fillStyle = `hsl(222, 13%, ${light}%)`;
+    g.fillStyle = `hsl(${88 + rnd() * 30}, ${6 + rnd() * 6}%, ${light}%)`;
     g.fill();
   };
   g.beginPath();
   g.arc(0, 0, 78, 0, TAU);
-  g.fillStyle = 'hsl(222, 12%, 30%)';
+  g.fillStyle = 'hsl(100, 8%, 33%)';
   g.fill();
   for (let r0 = 80; r0 < ARENA_R; r0 += 80) {
     const r1 = Math.min(ARENA_R, r0 + 80);
@@ -172,33 +172,66 @@ function paintArenaFloor(g: CanvasRenderingContext2D, rnd: () => number) {
     const off = rnd() * TAU;
     for (let i = 0; i < n; i++) {
       const a0 = off + (i / n) * TAU;
-      tile(r0, r1, a0, a0 + TAU / n, 26 + rnd() * 9);
+      tile(r0, r1, a0, a0 + TAU / n, 25 + rnd() * 10);
     }
   }
-  // A ring of runes between the pillars: short glyph strokes around two thin circles.
-  g.strokeStyle = 'rgba(122, 162, 255, 0.22)';
+  // Moss creeping over the stones
+  for (let i = 0; i < 70; i++) {
+    const a = rnd() * TAU;
+    const r = 60 + rnd() * (ARENA_R - 60);
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    const rad = 20 + rnd() * 60;
+    const grad = g.createRadialGradient(x, y, 0, x, y, rad);
+    grad.addColorStop(0, `rgba(78, 118, 48, ${0.3 + rnd() * 0.25})`);
+    grad.addColorStop(1, 'rgba(78, 118, 48, 0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(x, y, rad, 0, TAU);
+    g.fill();
+  }
+  // Grass tufts and fallen leaves
+  for (let i = 0; i < 420; i++) {
+    const a = rnd() * TAU;
+    const r = 40 + rnd() * (ARENA_R - 45);
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (rnd() < 0.6) {
+      g.strokeStyle = `hsla(${95 + rnd() * 25}, 45%, ${28 + rnd() * 18}%, 0.85)`;
+      g.lineWidth = 1.4;
+      g.beginPath();
+      for (let k = 0; k < 4; k++) {
+        g.moveTo(x + k * 2 - 3, y);
+        g.lineTo(x + k * 2 - 3 + (rnd() - 0.5) * 6, y - 5 - rnd() * 6);
+      }
+      g.stroke();
+    } else {
+      g.fillStyle = `hsla(${70 + rnd() * 40}, 50%, ${30 + rnd() * 15}%, 0.8)`;
+      g.beginPath();
+      g.ellipse(x, y, 3.2, 1.6, rnd() * TAU, 0, TAU);
+      g.fill();
+    }
+  }
+  // A ring of elven runes between the pillars, softly glowing
+  g.strokeStyle = 'rgba(190, 255, 220, 0.2)';
   g.lineWidth = 2;
   for (const r of [262, 298]) {
     g.beginPath();
     g.arc(0, 0, r, 0, TAU);
     g.stroke();
   }
-  g.strokeStyle = 'rgba(140, 180, 255, 0.3)';
+  g.strokeStyle = 'rgba(200, 255, 225, 0.32)';
   g.lineWidth = 2.4;
   for (let i = 0; i < 48; i++) {
     const a = (i / 48) * TAU;
     const ca = Math.cos(a);
     const sa = Math.sin(a);
-    const kind = Math.floor(rnd() * 3);
     g.beginPath();
     g.moveTo(ca * 270, sa * 270);
-    g.lineTo(ca * 290, sa * 290);
-    if (kind === 0) {
-      g.moveTo(ca * 280 - sa * 6, sa * 280 + ca * 6);
-      g.lineTo(ca * 280 + sa * 6, sa * 280 - ca * 6);
-    } else if (kind === 1) {
-      g.moveTo(ca * 290, sa * 290);
-      g.lineTo(ca * 284 - sa * 7, sa * 284 + ca * 7);
+    g.quadraticCurveTo(ca * 280 - sa * 8, sa * 280 + ca * 8, ca * 290, sa * 290);
+    if (i % 3 === 0) {
+      g.moveTo(ca * 278 + sa * 5, sa * 278 - ca * 5);
+      g.lineTo(ca * 284 - sa * 5, sa * 284 + ca * 5);
     }
     g.stroke();
   }
@@ -286,7 +319,7 @@ export interface Brazier {
   seed: number;
 }
 
-/** Drifting motes (arena) or rising embers (castle): one Points object, moved on the CPU. */
+/** Fireflies (ruins) or rising embers (castle): one Points object, moved on the CPU. */
 export interface Ambient {
   points: THREE.Points;
   speeds: Float32Array;
@@ -317,18 +350,18 @@ function buildAmbient(theme: MapTheme, glowTex: THREE.Texture): Ambient {
     const a = rnd() * TAU;
     const r = Math.sqrt(rnd()) * (ARENA_R + 60);
     pos[i * 3] = Math.cos(a) * r;
-    pos[i * 3 + 1] = rnd() * AMBIENT_TOP;
+    pos[i * 3 + 1] = castle ? rnd() * AMBIENT_TOP : 15 + rnd() * 70;
     pos[i * 3 + 2] = Math.sin(a) * r;
-    speeds[i] = (castle ? 18 : 5) + rnd() * (castle ? 30 : 8);
+    speeds[i] = (castle ? 18 : 6) + rnd() * (castle ? 30 : 10);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   const mat = new THREE.PointsMaterial({
     map: glowTex,
-    color: castle ? '#ff6a3a' : '#8fb4ff',
-    size: castle ? 7 : 9,
+    color: castle ? '#ff6a3a' : '#d8ff7a',
+    size: castle ? 7 : 6,
     transparent: true,
-    opacity: castle ? 0.85 : 0.5,
+    opacity: castle ? 0.85 : 0.9,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     toneMapped: false,
@@ -346,13 +379,16 @@ export function updateAmbient(a: Ambient, t: number, dt: number) {
       pos[i * 3] += Math.sin(t * 1.3 + i) * 6 * dt;
       if (pos[i * 3 + 1] > AMBIENT_TOP) pos[i * 3 + 1] = 0;
     } else {
+      // Fireflies wander in small loops.
+      pos[i * 3] += Math.sin(t * 0.7 + i * 2.3) * a.speeds[i] * dt;
       pos[i * 3 + 1] += Math.sin(t * 0.6 + i * 1.7) * a.speeds[i] * dt;
+      pos[i * 3 + 2] += Math.cos(t * 0.5 + i * 1.1) * a.speeds[i] * dt;
     }
   }
   attr.needsUpdate = true;
 }
 
-export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: MapTheme = 'arena'): ArenaModel {
+export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: MapTheme = 'ruins'): ArenaModel {
   const castle = theme === 'castle';
   const look = THEME_LOOKS[theme];
   const root = new THREE.Group();
@@ -373,7 +409,7 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   ground.receiveShadow = true;
   root.add(ground);
 
-  // Wall: a ring of uneven stone blocks (bluish in the arena, warm in the castle).
+  // Wall: a ring of uneven stone blocks (pale and mossy in the ruins, warm in the castle).
   const N = 64;
   const wall = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), stone('#ffffff'), N);
   const m = new THREE.Matrix4();
@@ -395,7 +431,7 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a);
     m.compose(new THREE.Vector3(Math.cos(a) * r, h / 2, Math.sin(a) * r), q, new THREE.Vector3(depth, h, ((TAU * r) / N) * (tall ? 1.05 : 0.95)));
     wall.setMatrixAt(i, m);
-    col.set(castle ? (tall ? '#5a4c4a' : '#463b3a') : tall ? '#4a556e' : '#394357').multiplyScalar(0.85 + rnd() * 0.3);
+    col.set(castle ? (tall ? '#5a4c4a' : '#463b3a') : tall ? '#6f7868' : '#59614f').multiplyScalar(0.85 + rnd() * 0.3);
     wall.setColorAt(i, col);
   }
   wall.castShadow = true;
@@ -405,14 +441,14 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   // Faint glowing edge so the boundary reads clearly.
   const rim = new THREE.Mesh(
     new THREE.RingGeometry(ARENA_R - 3, ARENA_R + 1, 160),
-    new THREE.MeshBasicMaterial({ color: castle ? '#ff4058' : '#7aa2ff', transparent: true, opacity: castle ? 0.32 : 0.4, blending: THREE.AdditiveBlending, depthWrite: false }),
+    new THREE.MeshBasicMaterial({ color: castle ? '#ff4058' : '#9dffc8', transparent: true, opacity: castle ? 0.32 : 0.3, blending: THREE.AdditiveBlending, depthWrite: false }),
   );
   rim.rotation.x = -Math.PI / 2;
   rim.position.y = 0.6;
   root.add(rim);
 
   // Orb pedestal
-  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 4, 32), stone(castle ? '#4a3c3a' : '#3e475c', 0.7));
+  const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(52, 58, 4, 32), stone(castle ? '#4a3c3a' : '#5d6656', 0.7));
   pedestal.position.y = 2;
   pedestal.receiveShadow = true;
   root.add(pedestal);
@@ -424,27 +460,42 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   pedestalInlay.position.y = 4.2;
   root.add(pedestalInlay);
 
-  // Braziers outside the wall (red fire at the castle)
+  // Braziers outside the wall: pale green moonfire in the ruins, red fire at the castle
   const braziers: Brazier[] = [];
   for (let i = 0; i < 4; i++) {
     const a = TAU / 8 + (i / 4) * TAU;
     const r = ARENA_R + 85;
     const x = Math.cos(a) * r;
     const z = Math.sin(a) * r;
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(13, 18, 46, 8), stone(castle ? '#3e3434' : '#353e51'));
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(13, 18, 46, 8), stone(castle ? '#3e3434' : '#4c5446'));
     base.position.set(x, 23, z);
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(22, 12, 12, 8), new THREE.MeshStandardMaterial({ color: '#2a2622', metalness: 0.6, roughness: 0.5, flatShading: true }));
     bowl.position.set(x, 52, z);
     root.add(shadowed(base), shadowed(bowl));
 
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(11, 30, 6), new THREE.MeshBasicMaterial({ color: castle ? '#ff7a4a' : '#ffb35c', toneMapped: false }));
+    const flame = new THREE.Mesh(new THREE.ConeGeometry(11, 30, 6), new THREE.MeshBasicMaterial({ color: castle ? '#ff7a4a' : '#dcffe8', toneMapped: false }));
     flame.position.set(x, 72, z);
-    const glow = glowSprite(glowTex, castle ? '#ff4a2a' : '#ff8a3a', 130, 0.8);
+    const glow = glowSprite(glowTex, castle ? '#ff4a2a' : '#6dffa8', 130, 0.8);
     glow.position.set(x, 72, z);
-    const light = new THREE.PointLight(castle ? '#ff6a48' : '#ff9b50', 18000, 700, 2);
+    const light = new THREE.PointLight(castle ? '#ff6a48' : '#a8ffcc', 18000, 700, 2);
     light.position.set(x, 90, z);
     root.add(flame, glow, light);
     braziers.push({ light, flame, glow, seed: i * 1.7 });
+  }
+
+  if (!castle) {
+    // Moss and ferns along the foot of the outer wall
+    const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(1, 1, 5), toon('#4f7a34'), 90);
+    for (let i = 0; i < 90; i++) {
+      const a = rnd() * TAU;
+      const r = ARENA_R - 6 - rnd() * 16;
+      const size = 4 + rnd() * 7;
+      q.setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.6, rnd() * 3, (rnd() - 0.5) * 0.6));
+      m.compose(new THREE.Vector3(Math.cos(a) * r, size * 0.45, Math.sin(a) * r), q, new THREE.Vector3(size * 0.8, size, size * 0.8));
+      tufts.setMatrixAt(i, m);
+      tufts.setColorAt(i, col.set('#5e8a3c').multiplyScalar(0.7 + rnd() * 0.5));
+    }
+    root.add(tufts);
   }
 
   if (castle) {
@@ -484,10 +535,11 @@ export function buildArena(scene: THREE.Scene, glowTex: THREE.Texture, theme: Ma
   return { root, braziers, pedestalInlay, ambient };
 }
 
-export function buildPillar(r: number): THREE.Group {
+/** A rune column; `overgrown` makes it pale ruin stone wrapped in ivy, with moss at its foot. */
+export function buildPillar(r: number, overgrown = false): THREE.Group {
   const g = new THREE.Group();
-  const mat = stone('#4b556c');
-  const dark = stone('#3a4357');
+  const mat = stone(overgrown ? '#7a8272' : '#4b556c');
+  const dark = stone(overgrown ? '#5d6656' : '#3a4357');
   const parts: [THREE.BufferGeometry, THREE.Material, number][] = [
     [new THREE.CylinderGeometry(r * 1.22, r * 1.34, 10, 8), dark, 5],
     [new THREE.CylinderGeometry(r * 0.9, r, 62, 8), mat, 41],
@@ -502,12 +554,195 @@ export function buildPillar(r: number): THREE.Group {
   // Rune band
   const band = new THREE.Mesh(
     new THREE.CylinderGeometry(r * 0.955, r * 0.965, 4, 8, 1, true),
-    new THREE.MeshBasicMaterial({ color: '#79c8ff', transparent: true, opacity: 0.55, toneMapped: false }),
+    new THREE.MeshBasicMaterial({ color: overgrown ? '#bfffd8' : '#79c8ff', transparent: true, opacity: overgrown ? 0.45 : 0.55, toneMapped: false }),
   );
   band.position.y = 52;
+  if (overgrown) addIvy(g, r);
   shadowed(g);
   g.add(band);
   return g;
+}
+
+/** Two ivy vines spiralling up a column, leaves along them, and a ring of moss at its foot. */
+function addIvy(g: THREE.Group, r: number) {
+  const vineMat = toon('#3f5f2a');
+  const leaves = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 6, 4), toon('#ffffff'), 64);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  const col = new THREE.Color();
+  let n = 0;
+  for (const phase of [0, Math.PI * 0.9]) {
+    const pts: THREE.Vector3[] = [];
+    for (let k = 0; k <= 24; k++) {
+      const t = k / 24;
+      const a = phase + t * Math.PI * 2.2;
+      const rr = r * (1.0 - 0.1 * t) + 1.2;
+      pts.push(new THREE.Vector3(Math.cos(a) * rr, 4 + t * 74, Math.sin(a) * rr));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 48, 0.9, 5), vineMat));
+    for (let k = 0; k < 32 && n < 64; k++, n++) {
+      const t = (k + 0.5) / 32;
+      const p = curve.getPoint(t);
+      const s = 2.2 + ((k * 7) % 5) * 0.5;
+      q.setFromEuler(new THREE.Euler(k * 1.3, k * 2.1, k * 0.7));
+      m.compose(p, q, new THREE.Vector3(s, s * 0.35, s * 0.8));
+      leaves.setMatrixAt(n, m);
+      leaves.setColorAt(n, col.set(k % 3 ? '#5f9a3a' : '#7bbf4a'));
+    }
+  }
+  leaves.count = n;
+  g.add(leaves);
+  const moss = new THREE.Mesh(new THREE.TorusGeometry(r * 1.25, 4, 5, 16), toon('#4c7432'));
+  moss.rotation.x = Math.PI / 2;
+  moss.position.y = 2;
+  moss.scale.set(1, 1, 0.5);
+  g.add(moss);
+}
+
+export interface RiverModel {
+  root: THREE.Group;
+  /** Scrolled every frame so the water flows. */
+  flow: THREE.CanvasTexture;
+}
+
+/** Ripple streaks on dark teal, repeated along the river and scrolled to make it flow. */
+function makeWaterTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.fillStyle = '#1d5a62';
+  g.fillRect(0, 0, 64, 256);
+  let seed = 5;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  for (let i = 0; i < 40; i++) {
+    g.strokeStyle = `rgba(170, 235, 230, ${0.08 + rnd() * 0.18})`;
+    g.lineWidth = 1 + rnd() * 1.5;
+    const x = rnd() * 64;
+    const y = rnd() * 256;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.quadraticCurveTo(x + (rnd() - 0.5) * 10, y + 12, x + (rnd() - 0.5) * 6, y + 24 + rnd() * 20);
+    g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+/**
+ * The river down the middle (sim y = world z): flowing water running out under the wall,
+ * mossy stone curbs on both banks, lily pads and reeds, and stone bridges with railings.
+ */
+export function buildRiver(river: River): RiverModel {
+  const root = new THREE.Group();
+  const half = river.half;
+  const len = (ARENA_R + 60) * 2;
+  const flow = makeWaterTexture();
+  flow.repeat.set(1, len / 140);
+  const water = new THREE.Mesh(
+    new THREE.PlaneGeometry(half * 2 + 6, len),
+    new THREE.MeshStandardMaterial({ map: flow, color: '#9fd8d2', emissive: '#0b3a40', emissiveIntensity: 0.6, roughness: 0.15, metalness: 0.1, transparent: true, opacity: 0.93 }),
+  );
+  water.rotation.x = -Math.PI / 2;
+  water.position.y = 0.35;
+  water.receiveShadow = true;
+  root.add(water);
+
+  const curbMat = stone('#6c7564');
+  const mossMat = toon('#4f7a34');
+  const deckMat = stone('#8a917f');
+  const railMat = stone('#6f7868');
+  let seed = 9;
+  const rnd = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const onBridge = (z: number, pad: number) => river.bridges.some((b) => Math.abs(z - b.y) < b.half + pad);
+
+  // Bank curbs and a strip of moss and foam along them, broken where the bridges are
+  for (const side of [-1, 1]) {
+    for (let z = -ARENA_R; z < ARENA_R; z += 24) {
+      if (onBridge(z + 12, 24)) continue;
+      const curb = new THREE.Mesh(new THREE.BoxGeometry(7, 4 + rnd() * 2, 22), curbMat);
+      curb.position.set(side * (half + 3), 2, z + 12);
+      root.add(curb);
+      if (rnd() < 0.6) {
+        const moss = new THREE.Mesh(new THREE.SphereGeometry(4, 6, 4), mossMat);
+        moss.position.set(side * (half + 8), 1.2, z + 12 + (rnd() - 0.5) * 14);
+        moss.scale.set(1.2, 0.35, 1.6);
+        root.add(moss);
+      }
+    }
+    const foam = new THREE.Mesh(
+      new THREE.PlaneGeometry(3, len),
+      new THREE.MeshBasicMaterial({ color: '#d6fff6', transparent: true, opacity: 0.25, depthWrite: false }),
+    );
+    foam.rotation.x = -Math.PI / 2;
+    foam.position.set(side * (half - 2), 0.5, 0);
+    root.add(foam);
+  }
+
+  // Lily pads and reeds
+  for (let i = 0; i < 14; i++) {
+    const z = (rnd() - 0.5) * ARENA_R * 1.8;
+    if (onBridge(z, 30)) continue;
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(4 + rnd() * 3, 10, 0.4, TAU - 0.5), toon('#4f8a3a'));
+    pad.rotation.x = -Math.PI / 2;
+    pad.rotation.z = rnd() * TAU;
+    pad.position.set((rnd() - 0.5) * half * 1.4, 0.6, z);
+    root.add(pad);
+  }
+  const reeds = new THREE.InstancedMesh(new THREE.ConeGeometry(0.8, 1, 4), toon('#5e7f3a'), 60);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion();
+  let n = 0;
+  for (let i = 0; i < 60; i++) {
+    const z = (rnd() - 0.5) * ARENA_R * 1.9;
+    if (onBridge(z, 30)) continue;
+    const side = rnd() < 0.5 ? -1 : 1;
+    const h = 10 + rnd() * 12;
+    q.setFromEuler(new THREE.Euler((rnd() - 0.5) * 0.4, 0, (rnd() - 0.5) * 0.4));
+    m.compose(new THREE.Vector3(side * (half - 3 - rnd() * 6), h / 2, z), q, new THREE.Vector3(1, h, 1));
+    reeds.setMatrixAt(n++, m);
+  }
+  reeds.count = n;
+  root.add(reeds);
+
+  // Bridges: a pale stone deck flush with the floor, railings outside the walkable band
+  for (const b of river.bridges) {
+    const width = (half + PLAYER_R) * 2 + 24;
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(width, 2, (b.half + 24) * 2), deckMat);
+    deck.position.set(0, 1, b.y);
+    root.add(deck);
+    for (let k = -2; k <= 2; k++) {
+      const seam = new THREE.Mesh(new THREE.BoxGeometry(1, 0.3, (b.half + 22) * 2), stone('#6c7364'));
+      seam.position.set((k * width) / 6, 2.1, b.y);
+      root.add(seam);
+    }
+    for (const sz of [-1, 1]) {
+      const z = b.y + sz * (b.half + 22);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(width - 10, 7, 4), railMat);
+      rail.position.set(0, 5.5, z);
+      root.add(rail);
+      for (const sx of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 4, 16, 6), railMat);
+        post.position.set(sx * (width / 2 - 4), 8, z);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(4.6, 8, 6), mossMat);
+        cap.position.set(sx * (width / 2 - 4), 17, z);
+        cap.scale.set(1, 0.5, 1);
+        root.add(post, cap);
+      }
+    }
+  }
+  shadowed(root);
+  water.castShadow = false;
+  return { root, flow };
 }
 
 /**

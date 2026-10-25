@@ -1,6 +1,6 @@
 import { PLAYER_R, PROJ } from '../sim/constants';
 import { BTN, type GameState, type Input } from '../sim/types';
-import { solidsOf } from '../sim/vision';
+import { solidsOf, walkTarget } from '../sim/vision';
 
 export type DummyMove = 'still' | 'flee' | 'chase';
 
@@ -28,16 +28,19 @@ export class DummyController {
     let wy = 0;
 
     if (this.move === 'still') {
-      // Walk back to the middle after being pushed or pulled away.
-      const home = Math.hypot(me.x, me.y);
+      // Walk back to the middle after being pushed or pulled away (over a bridge if need be).
+      const goal = walkTarget(s, me.x, me.y, 0, 0);
+      const home = Math.hypot(goal.x - me.x, goal.y - me.y);
       if (home > 6) {
-        wx = -me.x / home;
-        wy = -me.y / home;
+        wx = (goal.x - me.x) / home;
+        wy = (goal.y - me.y) / home;
       }
     } else if (this.move === 'chase') {
       if (d > CHASE_STOP) {
-        wx = dx / d;
-        wy = dy / d;
+        const goal = walkTarget(s, me.x, me.y, foe.x, foe.y);
+        const gd = Math.max(1, Math.hypot(goal.x - me.x, goal.y - me.y));
+        wx = (goal.x - me.x) / gd;
+        wy = (goal.y - me.y) / gd;
       }
     } else {
       wx = -dx / d;

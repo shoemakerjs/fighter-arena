@@ -1,6 +1,6 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, KATANA, LEAP, LONGSHOT, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, KATANA, LEAP, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
-import { canSee, solidsOf, teamSees } from '../sim/vision';
+import { canSee, solidsOf, teamSees, walkTarget } from '../sim/vision';
 import type { Pillar } from '../sim/constants';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -130,14 +130,33 @@ export class Bot {
     let wy = 0;
     const pref = assassin ? (foeMelee ? 300 : 230) : archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
     const radial = melee ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
-    wx += nx * radial * (melee ? 1.4 : 1);
-    wy += ny * radial * (melee ? 1.4 : 1);
+    // With the river in between, close in by a bridge, or (melee, near the water, mobility
+    // ready) walk straight at it and hop over like a person would.
+    let gx = nx;
+    let gy = ny;
+    let detour = false;
+    let hop = false;
+    const river = MAPS[s.map].river;
+    if (radial > 0) {
+      const goal = walkTarget(s, me.x, me.y, tx, ty);
+      const across = goal.x !== tx || goal.y !== ty;
+      if (across && river && melee && !hidden && me.cast === null && ready(SLOT.SPACE) && Math.abs(me.x) < 220) {
+        hop = Math.abs(me.x) < river.half + PLAYER_R / 2 + 25;
+      } else if (across) {
+        const gd = Math.max(1, Math.hypot(goal.x - me.x, goal.y - me.y));
+        gx = (goal.x - me.x) / gd;
+        gy = (goal.y - me.y) / gd;
+        detour = true;
+      }
+    }
+    wx += gx * radial * (melee ? 1.4 : 1);
+    wy += gy * radial * (melee ? 1.4 : 1);
 
     if (--this.strafeT <= 0) {
       this.strafe = r() < 0.5 ? -1 : 1;
       this.strafeT = 40 + Math.floor(r() * 90);
     }
-    const strafe = melee ? (dist > 160 ? 0.8 : samurai ? 0.6 : 0.3) : 0.9;
+    const strafe = (melee ? (dist > 160 ? 0.8 : samurai ? 0.6 : 0.3) : 0.9) * (detour ? 0.3 : 1);
     wx += -ny * this.strafe * strafe;
     wy += nx * this.strafe * strafe;
 
@@ -163,6 +182,7 @@ export class Bot {
 
     // --- Dodging.
     let buttons = 0;
+    if (hop) buttons |= BTN.SPACE;
     let dodging = false;
     let dodgeX = 0;
     let dodgeY = 0;
@@ -361,7 +381,11 @@ export class Bot {
     }
     let ax: number;
     let ay: number;
-    if (deflecting || me.deflectT > 0) {
+    if (hop) {
+      // Hopping the river: dash, leap or skip straight at the target.
+      ax = tx;
+      ay = ty;
+    } else if (deflecting || me.deflectT > 0) {
       // Face the incoming projectile, or else the shooter, so the deflect catches it.
       ax = threatT < Infinity ? threatX : tx;
       ay = threatT < Infinity ? threatY : ty;

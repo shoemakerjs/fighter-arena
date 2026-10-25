@@ -75,6 +75,7 @@ import {
   WHIRL,
   type AbilityDef,
   type AbilityId,
+  type River,
 } from './constants';
 import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
 import { lineClear, solidsOf } from './vision';
@@ -1058,6 +1059,9 @@ function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: 
 }
 
 function collideWorld(s: GameState, p: Player) {
+  // Mid-dash (or mid-leap) you fly over the river; land in it and you're put on the nearest dry spot.
+  const river = MAPS[s.map].river;
+  if (river && p.dashT === 0) keepOutOfRiver(river, p);
   for (const pl of solidsOf(s)) {
     let dx = p.x - pl.x;
     let dy = p.y - pl.y;
@@ -1075,6 +1079,28 @@ function collideWorld(s: GameState, p: Player) {
     }
   }
   clampToArena(s, p);
+}
+
+/**
+ * Push a player standing in the river out by the shortest way: back to its bank, or
+ * sideways onto the bridge it is walking off.
+ */
+function keepOutOfRiver(river: River, p: Player) {
+  const bank = river.half + PLAYER_R / 2;
+  const ax = Math.abs(p.x);
+  if (ax >= bank) return;
+  let bestDy = Infinity;
+  let toY = p.y;
+  for (const b of river.bridges) {
+    const dy = Math.abs(p.y - b.y);
+    if (dy < b.half) return;
+    if (dy - b.half < bestDy) {
+      bestDy = dy - b.half;
+      toY = b.y + (p.y > b.y ? 1 : -1) * (b.half - 0.01);
+    }
+  }
+  if (bestDy < bank - ax) p.y = toY;
+  else p.x = p.x >= 0 ? bank : -bank;
 }
 
 function clampToArena(s: GameState, p: Player) {

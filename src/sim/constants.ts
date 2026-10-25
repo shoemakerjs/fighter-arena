@@ -30,17 +30,28 @@ export interface Wall {
   r: number;
 }
 
+/**
+ * A river down the middle (|x| < half) that can't be walked or pushed into, only crossed
+ * on its bridges (|y - bridge.y| < bridge.half) or by dashing, leaping or blinking over.
+ * Projectiles and sight pass over it.
+ */
+export interface River {
+  half: number;
+  bridges: { y: number; half: number }[];
+}
+
 export interface MapDef {
   name: string;
-  /** How the renderer dresses it: rune columns, or castle walls and statues. */
-  theme: 'arena' | 'castle';
+  /** How the renderer dresses it: overgrown elven ruins, or castle walls and statues. */
+  theme: 'ruins' | 'castle';
+  river: River | null;
   pillars: Pillar[];
   walls: Wall[];
   /** What movement, projectiles and sight test against: the pillars plus every wall as a row of overlapping circles. */
   solids: Pillar[];
 }
 
-function makeMap(name: string, theme: MapDef['theme'], pillars: Pillar[], walls: Wall[]): MapDef {
+function makeMap(name: string, theme: MapDef['theme'], pillars: Pillar[], walls: Wall[], river: River | null = null): MapDef {
   const solids = pillars.slice();
   for (const w of walls) {
     const dx = w.x1 - w.x0;
@@ -49,7 +60,7 @@ function makeMap(name: string, theme: MapDef['theme'], pillars: Pillar[], walls:
     const n = Math.ceil(Math.sqrt(dx * dx + dy * dy) / w.r);
     for (let i = 0; i <= n; i++) solids.push({ x: w.x0 + (dx * i) / n, y: w.y0 + (dy * i) / n, r: w.r });
   }
-  return { name, theme, pillars, walls, solids };
+  return { name, theme, river, pillars, walls, solids };
 }
 
 /** One L-shaped wall per corner of the courtyard, opening onto the outer ring. */
@@ -66,18 +77,20 @@ function courtyardWalls(): Wall[] {
 
 /** Index = GameState.map. Every map is mirrored left/right so neither spawn is favored. */
 export const MAPS: MapDef[] = [
+  // Overgrown elven ruins split by a river: bridges in the middle (with the orb) and near
+  // either end. Its banks are 2 * (half + PLAYER_R / 2) = 90 apart, under the shortest hop
+  // in the game (Time Skip, 125), so every champion can jump it.
   makeMap(
-    'Arena',
-    'arena',
+    'Moonlit Ruins',
+    'ruins',
     [
       { x: -193, y: -193, r: 42 },
       { x: 193, y: -193, r: 42 },
       { x: -193, y: 193, r: 42 },
       { x: 193, y: 193, r: 42 },
-      { x: 0, y: -330, r: 36 },
-      { x: 0, y: 330, r: 36 },
     ],
     [],
+    { half: 34, bridges: [{ y: 0, half: 48 }, { y: -330, half: 40 }, { y: 330, half: 40 }] },
   ),
   // Castle courtyard: an open cross of avenues, corner nooks behind the walls, two statues.
   makeMap(

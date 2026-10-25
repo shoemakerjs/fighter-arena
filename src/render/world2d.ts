@@ -204,6 +204,14 @@ export class World2D implements WorldView {
 
   private drawPillars(s: GameState) {
     const { ctx } = this;
+    // The river (water strip, then the bridge decks over it)
+    const river = MAPS[s.map].river;
+    if (river) {
+      ctx.fillStyle = '#1d5a62';
+      ctx.fillRect(-river.half, -ARENA_R, river.half * 2, ARENA_R * 2);
+      ctx.fillStyle = '#7a8272';
+      for (const b of river.bridges) ctx.fillRect(-river.half - PLAYER_R - 12, b.y - b.half - 24, (river.half + PLAYER_R + 12) * 2, (b.half + 24) * 2);
+    }
     for (const pl of MAPS[s.map].solids) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath();
