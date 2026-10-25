@@ -1,4 +1,4 @@
-import { ARENA_R, PILLARS, VISION_R } from '../sim/constants';
+import { ARENA_R, VISION_R, type Pillar } from '../sim/constants';
 import type { Player } from '../sim/types';
 
 /** Half-size of the square of world the fog mask covers. */
@@ -23,22 +23,22 @@ export class FogMask {
 
   private scratch = document.createElement('canvas');
 
-  /** Redraw for these viewers (a team shares its vision); empty or null clears the fog (attract mode). */
-  update(viewers: Player[] | Player | null) {
+  /** Redraw for these viewers (a team shares its vision) around the map's `solids`; empty or null clears the fog (attract mode). */
+  update(viewers: Player[] | Player | null, solids: Pillar[]) {
     const list = viewers === null ? [] : Array.isArray(viewers) ? viewers : [viewers];
     const g = this.ctx;
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.clearRect(0, 0, SIZE, SIZE);
     if (list.length === 0) return;
     // Opaque masks first: fog stays only where every viewer is fogged.
-    this.draw(g, list[0]);
+    this.draw(g, list[0], solids);
     if (list.length > 1) {
       if (this.scratch.width !== SIZE) this.scratch.width = this.scratch.height = SIZE;
       const sg = this.scratch.getContext('2d')!;
       for (const v of list.slice(1)) {
         sg.setTransform(1, 0, 0, 1, 0, 0);
         sg.clearRect(0, 0, SIZE, SIZE);
-        this.draw(sg, v);
+        this.draw(sg, v, solids);
         g.setTransform(1, 0, 0, 1, 0, 0);
         g.globalCompositeOperation = 'destination-in';
         g.drawImage(this.scratch, 0, 0);
@@ -53,7 +53,7 @@ export class FogMask {
   }
 
   /** One viewer's fog as an opaque mask: everywhere except its vision circle, plus pillar shadows. */
-  private draw(g: CanvasRenderingContext2D, viewer: Player) {
+  private draw(g: CanvasRenderingContext2D, viewer: Player, solids: Pillar[]) {
     const k = SIZE / (2 * FOG_EXTENT);
     g.setTransform(k, 0, 0, k, SIZE / 2, SIZE / 2);
     g.globalCompositeOperation = 'source-over';
@@ -73,7 +73,7 @@ export class FogMask {
     // Put the fog back in each pillar's shadow.
     g.globalCompositeOperation = 'source-over';
     g.fillStyle = MASK;
-    for (const pl of PILLARS) {
+    for (const pl of solids) {
       const dx = pl.x - viewer.x;
       const dy = pl.y - viewer.y;
       const d = Math.hypot(dx, dy);

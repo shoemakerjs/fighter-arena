@@ -1,5 +1,5 @@
 import { Bot } from '../input/bot';
-import { CHAMPIONS } from '../sim/constants';
+import { CHAMPIONS, MAPS } from '../sim/constants';
 import { roughen } from '../ui/rough';
 import { setStatusChip, type ChampionSelect } from '../ui/select';
 import { HOST, NetLink, type NetMsg } from './link';
@@ -258,8 +258,9 @@ export class Lobby {
     // People play their picks; the bots of empty seats get a random champion.
     const champs = this.seats.map((id) => (id ? (this.picks.get(id) ?? 0) : Math.floor(Math.random() * CHAMPIONS.length)));
     const m = this.match + 1;
-    this.link!.send({ t: 'start', m, champs, seats: this.seats });
-    this.begin(m, champs, this.seats);
+    const map = Math.floor(Math.random() * MAPS.length);
+    this.link!.send({ t: 'start', m, champs, seats: this.seats, map });
+    this.begin(m, champs, this.seats, map);
   }
 
   // ---------------------------------------------------------------- messages
@@ -302,7 +303,7 @@ export class Lobby {
         if (!this.isHost) this.openSelect();
         break;
       case 'start':
-        if (!this.isHost) this.begin(msg.m, msg.champs, msg.seats);
+        if (!this.isHost) this.begin(msg.m, msg.champs, msg.seats, msg.map);
         break;
       case 'input':
         if (!s || msg.m !== this.match) break;
@@ -335,7 +336,7 @@ export class Lobby {
     }
   }
 
-  private begin(m: number, champs: number[], seats: (string | null)[]) {
+  private begin(m: number, champs: number[], seats: (string | null)[], map: number) {
     const link = this.link!;
     this.match = m;
     this.seats = seats;
@@ -344,7 +345,7 @@ export class Lobby {
     const bots = new Map<number, InputSource>();
     if (this.isHost) seats.forEach((id, i) => !id && bots.set(i, new Bot(i, BOT_LEVEL, Math.floor(Math.random() * 1e6))));
     const session = new RollbackSession(
-      { localId: this.mySeat, champs, hostSlot, humans, bots },
+      { localId: this.mySeat, champs, map, hostSlot, humans, bots },
       {
         sendInput: (slot, frame, input) => {
           if (this.isHost) {

@@ -288,6 +288,63 @@ export function buildPillar(r: number): THREE.Group {
   return g;
 }
 
+/**
+ * Castle wall `len` long between its end posts (along local X, centered), `r` thick on
+ * each side: a stone block with a plinth, crenellations on top and square end towers.
+ */
+export function buildWall(len: number, r: number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = stone('#4f4a55');
+  const dark = stone('#3b3741');
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z = 0) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    g.add(mesh);
+    return mesh;
+  };
+  add(new THREE.BoxGeometry(len + r * 2.4, 8, r * 2.5), dark, 0, 4);
+  add(new THREE.BoxGeometry(len, 58, r * 2), mat, 0, 37);
+  add(new THREE.BoxGeometry(len + 2, 4, r * 2.3), dark, 0, 67);
+  const merlons = Math.max(2, Math.round(len / 16));
+  for (let i = 0; i < merlons; i++) {
+    const x = -len / 2 + (len * (i + 0.5)) / merlons;
+    add(new THREE.BoxGeometry((len / merlons) * 0.55, 9, r * 2), mat, x, 73.5);
+  }
+  for (const x of [-len / 2, len / 2]) {
+    add(new THREE.BoxGeometry(r * 2.4, 78, r * 2.4), mat, x, 39);
+    add(new THREE.BoxGeometry(r * 2.8, 6, r * 2.8), dark, x, 81);
+  }
+  shadowed(g);
+  return g;
+}
+
+/** A hooded stone knight on a plinth, leaning on a sword — the courtyard's statues. */
+export function buildStatue(r: number): THREE.Group {
+  const g = new THREE.Group();
+  const mat = stone('#5a5560');
+  const dark = stone('#3b3741');
+  const add = (geo: THREE.BufferGeometry, m: THREE.Material, x: number, y: number, z = 0) => {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.position.set(x, y, z);
+    g.add(mesh);
+    return mesh;
+  };
+  add(new THREE.CylinderGeometry(r * 1.15, r * 1.3, 10, 8), dark, 0, 5);
+  add(new THREE.CylinderGeometry(r, r * 1.05, 26, 8), mat, 0, 23);
+  add(new THREE.CylinderGeometry(r * 1.1, r, 5, 8), dark, 0, 38.5);
+  // Cloaked figure: a tall cone, shoulders, a hooded head
+  add(new THREE.ConeGeometry(r * 0.75, 46, 10), mat, 0, 64);
+  add(new THREE.SphereGeometry(r * 0.5, 10, 8), mat, 0, 78).scale.set(1.2, 0.7, 1.2);
+  add(new THREE.SphereGeometry(r * 0.33, 10, 8), mat, 0, 90);
+  add(new THREE.ConeGeometry(r * 0.38, 12, 10), dark, -1, 95);
+  // Sword point-down in front, hands on the pommel
+  add(new THREE.BoxGeometry(2.4, 40, 1), dark, r * 0.7, 60);
+  add(new THREE.BoxGeometry(2.4, 2.4, 12), dark, r * 0.7, 79);
+  add(new THREE.SphereGeometry(3, 8, 6), mat, r * 0.7, 82);
+  shadowed(g);
+  return g;
+}
+
 // ---------------------------------------------------------------- champion
 
 export interface ChampionRig {

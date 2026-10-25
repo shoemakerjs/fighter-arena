@@ -1,5 +1,6 @@
-import { PILLARS, PLAYER_R, PROJ } from '../sim/constants';
+import { PLAYER_R, PROJ } from '../sim/constants';
 import { BTN, type GameState, type Input } from '../sim/types';
+import { solidsOf } from '../sim/vision';
 
 export type DummyMove = 'still' | 'flee' | 'chase';
 
@@ -52,9 +53,9 @@ export class DummyController {
       }
     }
 
-    // Slide around pillars instead of getting stuck on them.
+    // Slide around pillars and walls instead of getting stuck on them.
     if (wx !== 0 || wy !== 0) {
-      for (const pl of PILLARS) {
+      for (const pl of solidsOf(s)) {
         const pd = Math.hypot(me.x - pl.x, me.y - pl.y);
         if (pd < pl.r + PLAYER_R + 30) {
           wx += ((me.x - pl.x) / pd) * 0.8;

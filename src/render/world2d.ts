@@ -1,4 +1,4 @@
-import { ARENA_R, CONVERGE, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
+import { ARENA_R, CONVERGE, MAPS, METEOR, ORB_HP, ORB_R, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
 import { abilityOf } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -67,7 +67,7 @@ export class World2D implements WorldView {
     this.drawMeteors(cur);
     this.drawZones(cur, opts.localId);
     this.drawOrb(cur);
-    this.drawPillars();
+    this.drawPillars(cur);
     this.drawAimGuide(cur, opts);
 
     const players = cur.players.map((p, i) => lerpPlayer(prev.players[i], p, alpha));
@@ -80,7 +80,7 @@ export class World2D implements WorldView {
     this.drawFx(fx);
 
     const me = opts.localId === null ? null : cur.players[opts.localId];
-    this.fog.update(!me || cur.training ? null : players.filter((p) => p.team === me.team && (!p.out || p.id === me.id)));
+    this.fog.update(!me || cur.training ? null : players.filter((p) => p.team === me.team && (!p.out || p.id === me.id)), MAPS[cur.map].solids);
     ctx.drawImage(this.fog.canvas, -FOG_EXTENT, -FOG_EXTENT, FOG_EXTENT * 2, FOG_EXTENT * 2);
 
     ctx.restore();
@@ -202,9 +202,9 @@ export class World2D implements WorldView {
     }
   }
 
-  private drawPillars() {
+  private drawPillars(s: GameState) {
     const { ctx } = this;
-    for (const pl of PILLARS) {
+    for (const pl of MAPS[s.map].solids) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.beginPath();
       ctx.ellipse(pl.x + 6, pl.y + 10, pl.r, pl.r * 0.9, 0, 0, TAU);

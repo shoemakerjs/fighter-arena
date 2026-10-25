@@ -14,13 +14,81 @@ export const SPAWNS = [
   { x: -352, y: 0 },
   { x: 352, y: 0 },
 ];
-export const PILLARS = [
-  { x: -193, y: -193, r: 42 },
-  { x: 193, y: -193, r: 42 },
-  { x: -193, y: 193, r: 42 },
-  { x: 193, y: 193, r: 42 },
-  { x: 0, y: -330, r: 36 },
-  { x: 0, y: 330, r: 36 },
+
+export interface Pillar {
+  x: number;
+  y: number;
+  r: number;
+}
+
+/** A straight wall from (x0, y0) to (x1, y1), `r` thick on each side. */
+export interface Wall {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  r: number;
+}
+
+export interface MapDef {
+  name: string;
+  /** How the renderer dresses it: rune columns, or castle walls and statues. */
+  theme: 'arena' | 'castle';
+  pillars: Pillar[];
+  walls: Wall[];
+  /** What movement, projectiles and sight test against: the pillars plus every wall as a row of overlapping circles. */
+  solids: Pillar[];
+}
+
+function makeMap(name: string, theme: MapDef['theme'], pillars: Pillar[], walls: Wall[]): MapDef {
+  const solids = pillars.slice();
+  for (const w of walls) {
+    const dx = w.x1 - w.x0;
+    const dy = w.y1 - w.y0;
+    // Circles a radius apart overlap, so no line of sight slips between them.
+    const n = Math.ceil(Math.sqrt(dx * dx + dy * dy) / w.r);
+    for (let i = 0; i <= n; i++) solids.push({ x: w.x0 + (dx * i) / n, y: w.y0 + (dy * i) / n, r: w.r });
+  }
+  return { name, theme, pillars, walls, solids };
+}
+
+/** One L-shaped wall per corner of the courtyard, opening onto the outer ring. */
+function courtyardWalls(): Wall[] {
+  const walls: Wall[] = [];
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      walls.push({ x0: sx * 250, y0: sy * 150, x1: sx * 340, y1: sy * 150, r: 18 });
+      walls.push({ x0: sx * 250, y0: sy * 150, x1: sx * 250, y1: sy * 280, r: 18 });
+    }
+  }
+  return walls;
+}
+
+/** Index = GameState.map. Every map is mirrored left/right so neither spawn is favored. */
+export const MAPS: MapDef[] = [
+  makeMap(
+    'Arena',
+    'arena',
+    [
+      { x: -193, y: -193, r: 42 },
+      { x: 193, y: -193, r: 42 },
+      { x: -193, y: 193, r: 42 },
+      { x: 193, y: 193, r: 42 },
+      { x: 0, y: -330, r: 36 },
+      { x: 0, y: 330, r: 36 },
+    ],
+    [],
+  ),
+  // Castle courtyard: an open cross of avenues, corner nooks behind the walls, two statues.
+  makeMap(
+    'Courtyard',
+    'castle',
+    [
+      { x: 0, y: -260, r: 30 },
+      { x: 0, y: 260, r: 30 },
+    ],
+    courtyardWalls(),
+  ),
 ];
 
 // Fog of war: you see within this radius, pillars block line of sight.

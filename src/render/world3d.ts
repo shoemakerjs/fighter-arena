@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, METEOR, ORB_HP, ORB_R, PILLARS, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, MAPS, METEOR, ORB_HP, ORB_R, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
 import { abilityOf, airborne, rewindPoint } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
-import { buildArena, buildChampion, buildPillar, buildTrainingDummy, glowSprite, lighten, makeGlowTexture, type ArenaModel, type ChampionRig } from './models';
+import { buildArena, buildChampion, buildPillar, buildStatue, buildTrainingDummy, buildWall, glowSprite, lighten, makeGlowTexture, type ArenaModel, type ChampionRig } from './models';
 import { abilityColor, COLORS } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
@@ -117,6 +117,9 @@ export class World3D implements WorldView {
   private aimLane: THREE.Group;
   private aimLaneMesh: THREE.Mesh;
   private aimCircle: THREE.Mesh;
+  /** Obstacles of the map on screen (rebuilt when the map changes). */
+  private mapGroup: THREE.Group | null = null;
+  private mapShown = -1;
   /** Where Rewind would land (shown to Rustic's own player). */
   private recallMark: THREE.Mesh;
 
@@ -160,11 +163,6 @@ export class World3D implements WorldView {
     scene.add(fill);
 
     this.arena = buildArena(scene, this.glowTex);
-    for (const pl of PILLARS) {
-      const p = buildPillar(pl.r);
-      p.position.set(pl.x, 0, pl.y);
-      scene.add(p);
-    }
 
 
     for (let i = 0; i < LIGHT_POOL; i++) {
@@ -450,7 +448,8 @@ export class World3D implements WorldView {
         : cur.players
             .filter((p) => p.team === cur.players[opts.localId!].team && (!p.out || p.id === opts.localId))
             .map((p) => lerpPlayer(prev.players[p.id], p, alpha));
-    this.fog.update(viewers);
+    this.showMap(cur.map);
+    this.fog.update(viewers, MAPS[cur.map].solids);
     this.fogTex.needsUpdate = true;
     this.updateArena(cur);
     this.updateOrb(cur);
@@ -768,6 +767,34 @@ export class World3D implements WorldView {
       const ringMat = rig.ring.material as THREE.MeshBasicMaterial;
       ringMat.opacity = pc.hasteT > 0 ? 0.55 + 0.45 * Math.abs(Math.sin(this.time * 14)) : 0.75;
     }
+  }
+
+  // ---------------------------------------------------------------- map
+
+  /** Build the obstacles of `map` (once per change of map). */
+  private showMap(map: number) {
+    if (map === this.mapShown) return;
+    this.mapShown = map;
+    if (this.mapGroup) this.scene.remove(this.mapGroup);
+    const g = new THREE.Group();
+    const def = MAPS[map];
+    for (const pl of def.pillars) {
+      const p = def.theme === 'castle' ? buildStatue(pl.r) : buildPillar(pl.r);
+      p.position.set(pl.x, 0, pl.y);
+      // Statues look toward the middle of the arena.
+      if (def.theme === 'castle') p.rotation.y = Math.atan2(pl.y, -pl.x);
+      g.add(p);
+    }
+    for (const w of def.walls) {
+      const dx = w.x1 - w.x0;
+      const dy = w.y1 - w.y0;
+      const wall = buildWall(Math.hypot(dx, dy), w.r);
+      wall.position.set((w.x0 + w.x1) / 2, 0, (w.y0 + w.y1) / 2);
+      wall.rotation.y = -Math.atan2(dy, dx);
+      g.add(wall);
+    }
+    this.scene.add(g);
+    this.mapGroup = g;
   }
 
   // ---------------------------------------------------------------- projectiles

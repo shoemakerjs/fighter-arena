@@ -185,6 +185,8 @@ export interface GameState {
   training: boolean;
   /** Champion picked for each player slot: 2 players (1v1) or 4 (2v2, teams by id % 2). */
   champs: number[];
+  /** Index into MAPS. */
+  map: number;
   phase: Phase;
   phaseT: number;
   round: number;

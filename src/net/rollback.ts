@@ -61,6 +61,8 @@ export interface SessionSetup {
   localId: number;
   /** One champion per slot (2 = 1v1, 4 = 2v2). */
   champs: number[];
+  /** Index into MAPS. */
+  map: number;
   /** The host's slot. */
   hostSlot: number;
   /** Slots played by people (the others are bots run by the host). */
@@ -111,7 +113,7 @@ export class RollbackSession {
     this.humans = setup.humans;
     this.bots = this.isHost ? (setup.bots ?? new Map()) : new Map();
     const n = setup.champs.length;
-    this.state = createMatch(setup.champs);
+    this.state = createMatch(setup.champs, false, setup.map);
     this.inputs = Array.from({ length: n }, () => new Map<number, Input>());
     this.lastKnown = Array.from({ length: n }, () => NO_INPUT);
     this.heardFrame = Array.from({ length: n }, () => -1);

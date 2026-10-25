@@ -2,15 +2,20 @@
  * Fog of war. Pure functions of the state: they never change it, so they can be
  * used by the renderer, the HUD and the bot alike.
  */
-import { PILLARS, SONIC, VISION_R } from './constants';
+import { MAPS, SONIC, VISION_R, type Pillar } from './constants';
 import type { GameState, Player } from './types';
 
-/** True if no pillar blocks the straight line between the two points. */
-export function lineClear(x0: number, y0: number, x1: number, y1: number): boolean {
+/** Pillars and walls of the map being played. */
+export function solidsOf(s: GameState): Pillar[] {
+  return MAPS[s.map].solids;
+}
+
+/** True if none of `solids` blocks the straight line between the two points. */
+export function lineClear(x0: number, y0: number, x1: number, y1: number, solids: Pillar[]): boolean {
   const dx = x1 - x0;
   const dy = y1 - y0;
   const len2 = dx * dx + dy * dy;
-  for (const pl of PILLARS) {
+  for (const pl of solids) {
     let t = len2 > 0 ? ((pl.x - x0) * dx + (pl.y - y0) * dy) / len2 : 0;
     t = Math.max(0, Math.min(1, t));
     const cx = x0 + dx * t - pl.x;
@@ -21,20 +26,21 @@ export function lineClear(x0: number, y0: number, x1: number, y1: number): boole
 }
 
 /** Can `viewer` see the floor point (x, y)? */
-export function pointVisible(viewer: Player, x: number, y: number): boolean {
+export function pointVisible(viewer: Player, x: number, y: number, solids: Pillar[]): boolean {
   const dx = x - viewer.x;
   const dy = y - viewer.y;
   if (dx * dx + dy * dy > VISION_R * VISION_R) return false;
-  return lineClear(viewer.x, viewer.y, x, y);
+  return lineClear(viewer.x, viewer.y, x, y, solids);
 }
 
 /** Can anyone on `viewerId`'s team see the floor point (x, y)? Teams share vision. */
 export function teamSees(s: GameState, viewerId: number, x: number, y: number): boolean {
   const team = s.players[viewerId].team;
+  const solids = solidsOf(s);
   for (const p of s.players) {
     // The knocked out stop scouting (the viewer still sees around itself).
     if (p.team !== team || (p.out && p.id !== viewerId)) continue;
-    if (pointVisible(p, x, y)) return true;
+    if (pointVisible(p, x, y, solids)) return true;
   }
   return false;
 }

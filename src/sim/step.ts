@@ -46,7 +46,7 @@ import {
   ORB_R,
   ORB_RESPAWN,
   ORB_SPAWN_AT,
-  PILLARS,
+  MAPS,
   PLAYER_R,
   POISON,
   PROJ,
@@ -77,17 +77,19 @@ import {
   type AbilityId,
 } from './constants';
 import { BTN, type GameEvent, type GameState, type HitKind, type Input, type Player, type Projectile, type ProjKind } from './types';
-import { lineClear } from './vision';
+import { lineClear, solidsOf } from './vision';
 
 /**
  * `champs` has one entry per player: two for 1v1, four for 2v2 (teams by id % 2).
  * `training`: player 1 is a training dummy standing in the middle (champs[1] is ignored).
+ * `map`: index into MAPS.
  */
-export function createMatch(champs: number[] = [0, 0], training = false): GameState {
+export function createMatch(champs: number[] = [0, 0], training = false, map = 0): GameState {
   return {
     frame: 0,
     training,
     champs: champs.slice(),
+    map: Math.max(0, Math.min(MAPS.length - 1, map)),
     phase: training ? 'fight' : 'countdown',
     phaseT: training ? 0 : COUNTDOWN_TICKS,
     round: 1,
@@ -668,7 +670,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       const dx = foe.x - p.x;
       const dy = foe.y - p.y;
       const d2 = dx * dx + dy * dy;
-      if (d2 <= bestD && foe.hp > 0 && !untargetable(foe) && lineClear(p.x, p.y, foe.x, foe.y)) {
+      if (d2 <= bestD && foe.hp > 0 && !untargetable(foe) && lineClear(p.x, p.y, foe.x, foe.y, solidsOf(s))) {
         best = foe;
         bestD = d2;
       }
@@ -1056,7 +1058,7 @@ function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: 
 }
 
 function collideWorld(s: GameState, p: Player) {
-  for (const pl of PILLARS) {
+  for (const pl of solidsOf(s)) {
     let dx = p.x - pl.x;
     let dy = p.y - pl.y;
     const min = pl.r + PLAYER_R;
@@ -1182,7 +1184,7 @@ function drainPulse(s: GameState, p: Player, ev: GameEvent[]) {
   const dx = t.x - p.x;
   const dy = t.y - p.y;
   const reach = DRAIN.range * 1.15;
-  if (!t || t.out || t.hp <= 0 || untargetable(t) || dx * dx + dy * dy > reach * reach || !lineClear(p.x, p.y, t.x, t.y)) {
+  if (!t || t.out || t.hp <= 0 || untargetable(t) || dx * dx + dy * dy > reach * reach || !lineClear(p.x, p.y, t.x, t.y, solidsOf(s))) {
     p.drainT = 0;
     return;
   }
@@ -1259,8 +1261,8 @@ function damageOrb(s: GameState, owner: number, dmg: number, x: number, y: numbe
   }
 }
 
-function hitsPillar(x: number, y: number, r: number): boolean {
-  for (const pl of PILLARS) {
+function hitsPillar(s: GameState, x: number, y: number, r: number): boolean {
+  for (const pl of solidsOf(s)) {
     const dx = x - pl.x;
     const dy = y - pl.y;
     const min = pl.r + r;
@@ -1285,7 +1287,7 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
       continue;
     }
     const ad = Math.sqrt(pr.x * pr.x + pr.y * pr.y);
-    if (ad > s.arenaR - pr.r * 0.5 || hitsPillar(pr.x, pr.y, pr.r)) {
+    if (ad > s.arenaR - pr.r * 0.5 || hitsPillar(s, pr.x, pr.y, pr.r)) {
       fizzle(s, pr, ev);
       continue;
     }
@@ -1399,7 +1401,7 @@ function clockTick(s: GameState, pr: Projectile, ev: GameEvent[]): boolean {
   });
   const orbR = CLOCK.r + ORB_R;
   const orbNear = s.orb.active && pr.x * pr.x + pr.y * pr.y < orbR * orbR;
-  if (foeNear || orbNear || pr.bounces === 0 || hitsPillar(pr.x, pr.y, pr.r)) {
+  if (foeNear || orbNear || pr.bounces === 0 || hitsPillar(s, pr.x, pr.y, pr.r)) {
     clockBurst(s, pr, ev);
     return false;
   }

@@ -13,8 +13,8 @@ export type NetMsg =
   | { t: 'lobby'; champ: number; ready: boolean }
   /** Host → guests: leave the lobby for champion select. */
   | { t: 'go' }
-  /** Host → guests: start match `m` with these champions per seat. */
-  | { t: 'start'; m: number; champs: number[]; seats: (string | null)[] }
+  /** Host → guests: start match `m` on this map with these champions per seat. */
+  | { t: 'start'; m: number; champs: number[]; seats: (string | null)[]; map: number }
   /**
    * In-match messages carry `m`, the match number in this lobby, so late packets
    * from a previous match are ignored. `adv`: guest → host, the guest's frame

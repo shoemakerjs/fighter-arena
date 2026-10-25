@@ -1,6 +1,7 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, KATANA, LEAP, LONGSHOT, METEOR, PILLARS, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, KATANA, LEAP, LONGSHOT, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
-import { canSee, teamSees } from '../sim/vision';
+import { canSee, solidsOf, teamSees } from '../sim/vision';
+import type { Pillar } from '../sim/constants';
 
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
@@ -145,8 +146,9 @@ export class Bot {
       wx -= (me.x / ed) * 1.6;
       wy -= (me.y / ed) * 1.6;
     }
-    // Slide around pillars instead of grinding into them.
-    for (const pl of PILLARS) {
+    // Slide around pillars and walls instead of grinding into them.
+    const solids = solidsOf(s);
+    for (const pl of solids) {
       const pd = Math.hypot(me.x - pl.x, me.y - pl.y);
       if (pd < pl.r + PLAYER_R + 30) {
         wx += ((me.x - pl.x) / pd) * 0.8;
@@ -247,7 +249,7 @@ export class Bot {
     }
 
     // --- Attacking.
-    const los = this.lineOfSight(me.x, me.y, tx, ty);
+    const los = this.lineOfSight(me.x, me.y, tx, ty, solids);
     let aimId: AbilityId = me.cast ? kit[me.cast.ability].id : kit[SLOT.M1].id;
     const busy = me.cast !== null || me.counterT > 0 || me.dashT > 0;
     // A samurai deflecting towards us would send any projectile straight back: hold fire, like a person would.
@@ -453,11 +455,11 @@ export class Bot {
     return d;
   }
 
-  private lineOfSight(x0: number, y0: number, x1: number, y1: number): boolean {
+  private lineOfSight(x0: number, y0: number, x1: number, y1: number, solids: Pillar[]): boolean {
     const dx = x1 - x0;
     const dy = y1 - y0;
     const len2 = dx * dx + dy * dy;
-    for (const pl of PILLARS) {
+    for (const pl of solids) {
       const t = Math.max(0, Math.min(1, ((pl.x - x0) * dx + (pl.y - y0) * dy) / len2));
       const cx = x0 + dx * t - pl.x;
       const cy = y0 + dy * t - pl.y;

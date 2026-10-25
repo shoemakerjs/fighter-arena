@@ -9,7 +9,7 @@ import { World2D } from './render/world2d';
 import { World3D } from './render/world3d';
 import { Lobby } from './net/lobby';
 import type { RollbackSession } from './net/rollback';
-import { CHAMPIONS, TICK_MS } from './sim/constants';
+import { CHAMPIONS, MAPS, TICK_MS } from './sim/constants';
 import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
 import { BotSetup } from './ui/botsetup';
@@ -71,8 +71,9 @@ let endTimer = 0;
 /** Online match in progress (null when playing the bot). */
 let session: RollbackSession | null = null;
 
+/** Every match is played on a random map. */
 function newMatch(ctrl: (Controller | null)[], champs: number[], training = false) {
-  state = createMatch(champs, training);
+  state = createMatch(champs, training, Math.floor(Math.random() * MAPS.length));
   prev = cloneState(state);
   controllers = ctrl;
   session = null;
