@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, MAPS, METEOR, ORB_HP, ORB_R, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, MAPS, type MapDef, METEOR, ORB_HP, ORB_R, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
 import { abilityOf, airborne, rewindPoint } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -807,7 +807,6 @@ export class World3D implements WorldView {
     if (map === this.mapShown) return;
     this.mapShown = map;
     if (this.mapGroup) dropTree(this.scene, this.mapGroup, this.glowTex);
-    const g = new THREE.Group();
     const def = MAPS[map];
     if (this.arena.root.userData.theme !== def.theme) {
       dropTree(this.scene, this.arena.root, this.glowTex);
@@ -824,32 +823,10 @@ export class World3D implements WorldView {
       this.rimLight.color.set(look.rim);
       this.rimLight.intensity = look.rimIntensity;
     }
-    for (const pl of def.pillars) {
-      const p =
-        def.theme === 'castle' ? buildStatue(pl.r)
-        : def.theme === 'mine' ? buildCrystal(pl.r, this.glowTex)
-        : def.theme === 'grove' ? buildTree(pl.r)
-        : buildPillar(pl.r, true);
-      p.position.set(pl.x, 0, pl.y);
-      // Statues look toward the middle of the arena.
-      if (def.theme === 'castle') p.rotation.y = Math.atan2(pl.y, -pl.x);
-      g.add(p);
-    }
-    for (const w of def.walls) {
-      const dx = w.x1 - w.x0;
-      const dy = w.y1 - w.y0;
-      const wall = def.theme === 'mine' ? buildRidge(Math.hypot(dx, dy), w.r) : buildWall(Math.hypot(dx, dy), w.r);
-      wall.position.set((w.x0 + w.x1) / 2, 0, (w.y0 + w.y1) / 2);
-      wall.rotation.y = -Math.atan2(dy, dx);
-      g.add(wall);
-    }
-    this.river = null;
-    if (def.river) {
-      this.river = buildRiver(def.river);
-      g.add(this.river.root);
-    }
-    this.scene.add(g);
-    this.mapGroup = g;
+    const props = buildMapProps(def, this.glowTex);
+    this.river = props.river;
+    this.scene.add(props.root);
+    this.mapGroup = props.root;
   }
 
   // ---------------------------------------------------------------- projectiles
@@ -860,19 +837,7 @@ export class World3D implements WorldView {
     if (l) return l;
     const color = abilityColor(kind, owner);
     const size = PROJ[kind].r;
-    const core = ARROWS.includes(kind)
-      ? arrowGeometry(size)
-      : kind === 'crescent'
-        ? crescentGeometry(size)
-      : kind === 'blast'
-        ? new THREE.IcosahedronGeometry(size * 0.75, 0)
-        : kind === 'frost' || kind === 'hook'
-          ? new THREE.OctahedronGeometry(size * 0.85, 0)
-          : kind === 'transfusion' || kind === 'pulse'
-            ? new THREE.IcosahedronGeometry(size * 0.7, 0)
-            : kind === 'clock'
-              ? new THREE.SphereGeometry(size * 0.75, 14, 10)
-              : new THREE.SphereGeometry(size * 0.6, 12, 8);
+    const core = projectileGeometry(kind, size);
     const sprite = (opacity: number) =>
       new THREE.SpriteMaterial({ map: this.glowTex, color, opacity, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     l = {
@@ -1299,6 +1264,53 @@ export class World3D implements WorldView {
 
 function kitCd(champ: number, slot: number): number {
   return CHAMPIONS[champ].abilities[slot].cooldown;
+}
+
+/** Obstacles and river of a map, dressed for its theme. */
+export function buildMapProps(def: MapDef, glowTex: THREE.Texture): { root: THREE.Group; river: RiverModel | null } {
+  const root = new THREE.Group();
+  for (const pl of def.pillars) {
+    const p =
+      def.theme === 'castle' ? buildStatue(pl.r)
+      : def.theme === 'mine' ? buildCrystal(pl.r, glowTex)
+      : def.theme === 'grove' ? buildTree(pl.r)
+      : buildPillar(pl.r, true);
+    p.position.set(pl.x, 0, pl.y);
+    // Statues look toward the middle of the arena.
+    if (def.theme === 'castle') p.rotation.y = Math.atan2(pl.y, -pl.x);
+    root.add(p);
+  }
+  for (const w of def.walls) {
+    const dx = w.x1 - w.x0;
+    const dy = w.y1 - w.y0;
+    const wall = def.theme === 'mine' ? buildRidge(Math.hypot(dx, dy), w.r) : buildWall(Math.hypot(dx, dy), w.r);
+    wall.position.set((w.x0 + w.x1) / 2, 0, (w.y0 + w.y1) / 2);
+    wall.rotation.y = -Math.atan2(dy, dx);
+    root.add(wall);
+  }
+  let river: RiverModel | null = null;
+  if (def.river) {
+    river = buildRiver(def.river);
+    root.add(river.root);
+  }
+  return { root, river };
+}
+
+/** Core mesh of a projectile in flight: arrows, a crescent, or a gem shaped by kind. */
+export function projectileGeometry(kind: ProjKind, size: number): THREE.BufferGeometry {
+  return ARROWS.includes(kind)
+    ? arrowGeometry(size)
+    : kind === 'crescent'
+      ? crescentGeometry(size)
+    : kind === 'blast'
+      ? new THREE.IcosahedronGeometry(size * 0.75, 0)
+      : kind === 'frost' || kind === 'hook'
+        ? new THREE.OctahedronGeometry(size * 0.85, 0)
+        : kind === 'transfusion' || kind === 'pulse'
+          ? new THREE.IcosahedronGeometry(size * 0.7, 0)
+          : kind === 'clock'
+            ? new THREE.SphereGeometry(size * 0.75, 14, 10)
+            : new THREE.SphereGeometry(size * 0.6, 12, 8);
 }
 
 /** A flat crescent lying on the floor plane, its curve bulging along +X. */
