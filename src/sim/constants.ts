@@ -325,7 +325,7 @@ export const CHAMPIONS: ChampionDef[] = [
     abilities: [
       { id: 'jab', name: 'Spear Jab', desc: 'quick narrow spear thrust, hold to keep jabbing', cooldown: 5, cast: 9, castSlow: 0.6, energyCost: 0 },
       { id: 'tongue', name: 'Tongue Snap', desc: 'short tongue lash; a hit yanks you to the enemy, slows it, and your next Jab hits harder', cooldown: 240, cast: 10, castSlow: 0.5, energyCost: 0 },
-      { id: 'lily', name: 'Lily Leap', desc: 'hop to the cursor, untargetable in the air, and dive under on landing: unseen for 3 s (attacking reveals you)', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'lily', name: 'Lily Leap', desc: 'hop to the cursor, untargetable in the air, and dive under on landing: unseen for 1.5 s (attacking reveals you)', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'submerge', name: 'Submerge', desc: 'sink into a pool of swamp water, untargetable, then burst out near the cursor (or press again), hitting and slowing where you land', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'marsh', name: 'Marsh Pool', desc: 'a pool of swamp water for 3 s: you and allies in it are faster, enemies slower', cooldown: 480, cast: 8, castSlow: 0.5, energyCost: 0 },
       { id: 'toad', name: 'Ancestor Toad', desc: 'throw a lotus bait that sticks to the first enemy it hits (or lands); 1 s later the great toad bursts up under it, swallowing and stunning enemies in the middle and throwing out the rest, 100 energy', cooldown: 60, cast: 14, castSlow: 0.4, energyCost: 100 },
@@ -479,7 +479,7 @@ export const JAB = { len: 84, half: 20, dmg: 8, energy: 7, bonus: 7 };
 /** On a hit the frog dashes to `gap` short of the target over `ticks`; the next Jab within `window` is empowered. */
 export const TONGUE = { ticks: 8, gap: 2 * PLAYER_R + 6, window: 90 };
 /** A hop toward the cursor, untargetable in the air; on landing the frog dives under, unseen for `dive` ticks. */
-export const LILY = { ticks: 16, range: 200, dive: 180 };
+export const LILY = { ticks: 16, range: 200, dive: 90 };
 /**
  * Under the water for `ticks` (untargetable, can't move or attack), then leaping out up to
  * `range` toward the cursor over `jump` ticks; the landing hits within `r` and slows.

@@ -919,7 +919,9 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         landed = true;
         // Coated knives poison whoever they cut.
         if (p.venom > 0) {
-          foe.poisonT = POISON.ticks;
+          // Refreshing keeps the next tick on schedule, or rapid stabs would keep putting it off.
+          const toTick = foe.poisonT > 0 ? foe.poisonT % POISON.every || POISON.every : POISON.every;
+          foe.poisonT = POISON.ticks - POISON.every + toTick;
           foe.poisonBy = p.id;
         }
       }
