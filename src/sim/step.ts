@@ -25,7 +25,6 @@ import {
   COUNTDOWN_TICKS,
   COUNTER,
   CRY,
-  DAGGER,
   DASH,
   DUMMY,
   DEFLECT,
@@ -51,7 +50,7 @@ import {
   ORB_RESPAWN,
   ORB_SPAWN_AT,
   MAPS,
-  PERCH,
+  SUBMERGE,
   PICKUP,
   PLAYER_R,
   POISON,
@@ -70,6 +69,7 @@ import {
   SOUL,
   SONIC,
   SPAWNS,
+  STAB,
   STEP,
   SWARM,
   SUDDEN_DEATH_AT,
@@ -194,7 +194,7 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     charges: FLICKER.charges,
     chargeT: 0,
     trail: [],
-    perchT: 0,
+    submergeT: 0,
     pickT: 0,
     counterT: 0,
     slowT: 0,
@@ -368,14 +368,14 @@ export function airborne(p: Player): boolean {
   return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7);
 }
 
-/** Leaping, executing or perched on a spear: nothing can hit them and they pass through the enemy. */
+/** Leaping, executing or under the water: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
-  return p.perchT > 0 || (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5 || p.dashKind === 6 || p.dashKind === 7));
+  return p.submergeT > 0 || (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5 || p.dashKind === 6 || p.dashKind === 7));
 }
 
-/** Leaping, executing, sweeping or perched: moves through the enemy instead of bumping it. */
+/** Leaping, executing, sweeping or submerged: moves through the enemy instead of bumping it. */
 function passesThrough(p: Player): boolean {
-  return p.perchT > 0 || (p.dashT > 0 && p.dashKind >= 1);
+  return p.submergeT > 0 || (p.dashT > 0 && p.dashKind >= 1);
 }
 
 function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
@@ -427,8 +427,8 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   }
 
   aimAt(p, inp);
-  // Perched too long: drop off the spear toward the cursor.
-  if (p.perchT > 0 && --p.perchT === 0) perchDrop(p, inp, ev);
+  // Out of breath: leap out of the water toward the cursor.
+  if (p.submergeT > 0 && --p.submergeT === 0) emerge(p, inp, ev);
 
   const pressed = inp.buttons & ~p.prevButtons;
   p.prevButtons = inp.buttons;
@@ -484,14 +484,14 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
         p.stealthT = LILY.dive;
         ev.push({ type: 'stealth', player: p.id, x: p.x, y: p.y });
       }
-      if (p.dashKind === 7) perchLand(s, p, ev);
+      if (p.dashKind === 7) surface(s, p, ev);
     }
     if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
     if (p.dashKind === 3 && !p.dashHit) bladeContact(s, p, ev);
     if (p.dashKind === 4) stepContact(s, p, ev);
     if (p.dashKind === 5) swarmContact(s, p, ev);
   } else {
-    const held = p.rootT > 0 || stunned || p.perchT > 0;
+    const held = p.rootT > 0 || stunned || p.submergeT > 0;
     const mx = held ? 0 : Math.sign(inp.mx);
     const my = held ? 0 : Math.sign(inp.my);
     let speed = CHAMPIONS[p.champ].speed;
@@ -525,28 +525,28 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     soulReturn(s, p, ev);
     return true;
   }
-  // Perched on the spear: pressing Spear Perch again drops off it; nothing else works up there.
-  if (p.perchT > 0) {
-    if (def.id !== 'perch') return false;
-    p.perchT = 0;
-    perchDrop(p, inp, ev);
+  // Under the water: pressing Submerge again leaps out; nothing else works down there.
+  if (p.submergeT > 0) {
+    if (def.id !== 'submerge') return false;
+    p.submergeT = 0;
+    emerge(p, inp, ev);
     return true;
   }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall' || def.id === 'lily' || def.id === 'perch';
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall' || def.id === 'lily' || def.id === 'submerge';
   if (p.rootT > 0 && mobility) return false;
 
-  // Spear Perch: up on the spear at once, cancelling any cast.
-  if (def.id === 'perch') {
+  // Submerge: under the water at once, cancelling any cast.
+  if (def.id === 'submerge') {
     if (p.dashT > 0) return false;
     p.cast = null;
     p.counterT = 0;
     p.vx = 0;
     p.vy = 0;
-    p.perchT = PERCH.ticks;
+    p.submergeT = SUBMERGE.ticks;
     p.cooldowns[slot] = def.cooldown;
-    ev.push({ type: 'perch', player: p.id, x: p.x, y: p.y });
+    ev.push({ type: 'submerge', player: p.id, x: p.x, y: p.y });
     return true;
   }
 
@@ -811,17 +811,15 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       return;
     }
 
-    case 'marsh':
-    case 'toad': {
-      const range = def.id === 'marsh' ? MARSH.range : TOAD.range;
+    case 'marsh': {
       let tx = inp.ax - p.x;
       let ty = inp.ay - p.y;
       const d = Math.sqrt(tx * tx + ty * ty);
-      if (d > range) {
-        tx = (tx / d) * range;
-        ty = (ty / d) * range;
+      if (d > MARSH.range) {
+        tx = (tx / d) * MARSH.range;
+        ty = (ty / d) * MARSH.range;
       }
-      s.zones.push({ id: s.nextId++, owner: p.id, kind: def.id, x: p.x + tx, y: p.y + ty, t: def.id === 'marsh' ? MARSH.ticks : TOAD.delay, target: -1 });
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: 'marsh', x: p.x + tx, y: p.y + ty, t: MARSH.ticks, target: -1 });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
       return;
     }
@@ -898,6 +896,19 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         if (inCone(p, foe.x, foe.y, reach, SLASH.minDot)) hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       }
       if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + SLASH.reach, SLASH.minDot)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'dagger': {
+      // Someone in reach: Shade stabs instead of throwing.
+      const reach = 2 * PLAYER_R + STAB.reach;
+      const near = foes.filter((foe) => inCone(p, foe.x, foe.y, reach, STAB.minDot));
+      if (near.length === 0) {
+        fireProjectile(s, p, 'dagger', draw, ev, def.id);
+        return;
+      }
+      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: STAB.reach });
+      for (const foe of near) hit(p, foe, STAB.dmg, STAB.energy, 'stab', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       return;
     }
 
@@ -1307,7 +1318,7 @@ function drainPulse(s: GameState, p: Player, ev: GameEvent[]) {
 /** Tongue Snap landed: the frog is yanked to just short of the target, and its next Jab is empowered. */
 function yank(p: Player, target: Player, ev: GameEvent[]) {
   p.quickT = TONGUE.window;
-  if (p.out || p.stunT > 0 || p.rootT > 0 || p.dashT > 0 || p.perchT > 0) return;
+  if (p.out || p.stunT > 0 || p.rootT > 0 || p.dashT > 0 || p.submergeT > 0) return;
   const dx = target.x - p.x;
   const dy = target.y - p.y;
   const d = Math.sqrt(dx * dx + dy * dy);
@@ -1321,27 +1332,27 @@ function yank(p: Player, target: Player, ev: GameEvent[]) {
   ev.push({ type: 'yank', player: p.id, x0: p.x, y0: p.y, x: p.x + (dx / d) * travel, y: p.y + (dy / d) * travel });
 }
 
-/** Off the spear: a short drop toward the cursor (PERCH.range at most), landing in perchLand. */
-function perchDrop(p: Player, inp: Input, ev: GameEvent[]) {
+/** Out of the water: a short leap toward the cursor (SUBMERGE.range at most), landing in surface(). */
+function emerge(p: Player, inp: Input, ev: GameEvent[]) {
   let tx = inp.ax - p.x;
   let ty = inp.ay - p.y;
   const d = Math.sqrt(tx * tx + ty * ty);
-  if (d > PERCH.range) {
-    tx = (tx / d) * PERCH.range;
-    ty = (ty / d) * PERCH.range;
+  if (d > SUBMERGE.range) {
+    tx = (tx / d) * SUBMERGE.range;
+    ty = (ty / d) * SUBMERGE.range;
   }
   p.dashKind = 7;
-  p.dashT = PERCH.drop;
-  p.dashX = tx / PERCH.drop;
-  p.dashY = ty / PERCH.drop;
+  p.dashT = SUBMERGE.jump;
+  p.dashX = tx / SUBMERGE.jump;
+  p.dashY = ty / SUBMERGE.jump;
   ev.push({ type: 'leap', player: p.id, x: p.x, y: p.y });
 }
 
-function perchLand(s: GameState, p: Player, ev: GameEvent[]) {
-  ev.push({ type: 'perchLand', player: p.id, x: p.x, y: p.y });
-  for (const foe of areaHit(s, p, p.x, p.y, PERCH.r, PERCH.dmg, PERCH.energy, 0, 'perch', ev)) {
-    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, PERCH.slowMul) : PERCH.slowMul;
-    foe.slowT = Math.max(foe.slowT, PERCH.slowT);
+function surface(s: GameState, p: Player, ev: GameEvent[]) {
+  ev.push({ type: 'surface', player: p.id, x: p.x, y: p.y });
+  for (const foe of areaHit(s, p, p.x, p.y, SUBMERGE.r, SUBMERGE.dmg, SUBMERGE.energy, 0, 'submerge', ev)) {
+    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, SUBMERGE.slowMul) : SUBMERGE.slowMul;
+    foe.slowT = Math.max(foe.slowT, SUBMERGE.slowT);
   }
 }
 
@@ -1465,19 +1476,17 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         alive.push(pr);
         continue;
       }
-      // A Blasting Charge doesn't hurt on contact: it sticks (a counter knocks it away).
-      if (pr.kind === 'pulse') {
+      // A Blasting Charge or a lotus bait doesn't hurt on contact: it sticks (a counter knocks it away).
+      if (pr.kind === 'pulse' || pr.kind === 'toad') {
         if (target.counterT > 0) block(target, pr.x, pr.y, ev);
         else {
-          s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'pulse', x: target.x, y: target.y, t: PULSE.fuse, target: target.id });
-          ev.push({ type: 'stick', player: target.id, x: target.x, y: target.y });
+          s.zones.push({ id: s.nextId++, owner: pr.owner, kind: pr.kind, x: target.x, y: target.y, t: pr.kind === 'pulse' ? PULSE.fuse : TOAD.delay, target: target.id });
+          ev.push({ type: 'stick', player: target.id, owner: pr.owner, x: target.x, y: target.y });
         }
         continue;
       }
       const pd = PROJ[pr.kind];
-      // A dagger cuts deep only close to where it was thrown.
-      const dmg = pr.kind === 'dagger' && pr.age * pd.speed <= DAGGER.close ? DAGGER.dmg : pr.dmg;
-      if (hit(s.players[pr.owner], target, dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
+      if (hit(s.players[pr.owner], target, pr.dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
         if (pr.kb !== 0) {
           const sp = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy);
           knockback(target, pr.vx / sp, pr.vy / sp, pr.kb);
@@ -1533,8 +1542,9 @@ function fizzle(s: GameState, pr: Projectile, ev: GameEvent[], impact = true) {
     s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'sonic', x: pr.x, y: pr.y, t: SONIC.ticks, target: -1 });
     ev.push({ type: 'sensor', owner: pr.owner, x: pr.x, y: pr.y });
   }
-  // A Blasting Charge that hit nothing lies where it stopped, still ticking.
+  // A Blasting Charge or a lotus bait that hit nothing lies where it stopped, still ticking.
   if (pr.kind === 'pulse') s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'pulse', x: pr.x, y: pr.y, t: PULSE.fuse, target: -1 });
+  if (pr.kind === 'toad') s.zones.push({ id: s.nextId++, owner: pr.owner, kind: 'toad', x: pr.x, y: pr.y, t: TOAD.delay, target: -1 });
 }
 
 /**
@@ -1602,7 +1612,7 @@ function updateZones(s: GameState, ev: GameEvent[]) {
         }
       }
     }
-    if (z.kind === 'pulse' && z.target >= 0) {
+    if ((z.kind === 'pulse' || z.kind === 'toad') && z.target >= 0) {
       const t = s.players[z.target];
       if (t.out) z.target = -1;
       else {

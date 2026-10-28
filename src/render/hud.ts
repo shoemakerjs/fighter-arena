@@ -528,29 +528,27 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
       ctx.arc(-13, 6, 4, 0, TAU);
       ctx.fill();
       break;
-    case 'perch':
-      // A frog standing on top of an upright spear
-      ctx.strokeStyle = '#8a6a48';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(0, 15);
-      ctx.lineTo(0, -2);
-      ctx.stroke();
+    case 'submerge':
+      // Just the eyes above the water line, ripples spreading out
       ctx.fillStyle = '#7d9a5a';
       ctx.beginPath();
-      ctx.ellipse(0, -8, 8, 6, 0, 0, TAU);
+      ctx.ellipse(0, 4, 10, 6, 0, Math.PI, TAU);
       ctx.fill();
       ctx.fillStyle = '#e2b45a';
-      for (const ex of [-4, 4]) {
+      for (const ex of [-5, 5]) {
         ctx.beginPath();
-        ctx.arc(ex, -12, 2.2, 0, TAU);
+        ctx.arc(ex, 0, 2.6, 0, TAU);
         ctx.fill();
       }
+      ctx.fillStyle = '#141010';
+      for (const ex of [-5, 5]) ctx.fillRect(ex - 1.8, -0.5, 3.6, 1);
       ctx.strokeStyle = COLORS.bog;
-      ctx.lineWidth = 1.6;
-      ctx.beginPath();
-      ctx.ellipse(0, 15, 9, 2.5, 0, 0, TAU);
-      ctx.stroke();
+      for (const [rx, ry, w] of [[13, 3.5, 2], [17, 5, 1.2]]) {
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.ellipse(0, 5, rx, ry, 0, 0, TAU);
+        ctx.stroke();
+      }
       break;
     case 'marsh':
       // A pool with ripples and a lily pad

@@ -104,6 +104,6 @@ export const ROSTER: RosterEntry[] = [
     flip: true,
     portrait: '35% 12%',
     focus: 0.36,
-    lore: 'A frog spearman from the glowing mushroom swamps, sworn to the great toad that sleeps beneath them. It slips under the water, perches out of reach on its own spear, and calls the ancestor up to swallow whoever trespasses.',
+    lore: 'A frog spearman from the glowing mushroom swamps, sworn to the great toad that sleeps beneath them. It slips under the water, bursts out where its foes least expect it, and calls the ancestor up to swallow whoever trespasses.',
   },
 ];

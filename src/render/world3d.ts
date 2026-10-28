@@ -1,20 +1,22 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LILY, LONGSHOT, MAPS, MARSH, PERCH, type MapDef, METEOR, ORB_HP, ORB_R, PICKUP, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES, TOAD } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LILY, LONGSHOT, MAPS, MARSH, SUBMERGE, type MapDef, METEOR, ORB_HP, ORB_R, PICKUP, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES, TOAD } from '../sim/constants';
 import { abilityOf, airborne, rewindPoint } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
-import type { GameState, Meteor, Projectile, ProjKind, Vec, Zone } from '../sim/types';
+import type { GameState, Meteor, Player, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
-import { buildArena, buildChampion, buildCrystal, buildPillar, buildRidge, buildRiver, buildStatue, buildTrainingDummy, buildTree, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig, type RiverModel } from './models';
+import { buildAncestorToad, buildArena, buildChampion, buildCrystal, buildPillar, buildRidge, buildRiver, buildStatue, buildTrainingDummy, buildTree, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig, type RiverModel, type ToadModel } from './models';
 import { abilityColor, COLORS } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
 const TAU = Math.PI * 2;
 /** Height at which projectiles fly. */
 const PROJ_H = 30;
-/** How high Lotan stands while perched on the spear. */
-const PERCH_H = 42;
+/** The ancestor toad's size on screen (its model is built at about half the burst's reach). */
+const TOAD_SCALE = 1.7;
+/** How far under the floor Lotan sinks while submerged (out of sight). */
+const SUBMERGE_DEPTH = 70;
 const MAX_PARTICLES = 4000;
 const LIGHT_POOL = 4;
 
@@ -121,6 +123,10 @@ export class World3D implements WorldView {
   private meteorViews = new Map<number, MeteorView>();
   private zoneViews = new Map<number, ZoneView>();
   private pickupViews = new Map<number, PickupView>();
+  /** Ancestor toads, reused for each burst on screen. */
+  private toads: ToadModel[] = [];
+  /** Lotan's pool per player id while submerged. */
+  private puddles: THREE.Group[] = [];
   /** Where each samurai's body waits during Soul Unbound. */
   private soulMarks: THREE.Group[] = [];
   /** Exsanguinate tethers, one per player. */
@@ -556,6 +562,39 @@ export class World3D implements WorldView {
     }
   }
 
+  /**
+   * Lotan's pool while submerged (and as it leaps out): dark water with rings rippling out,
+   * at the spot it sank. Hidden otherwise.
+   */
+  private updatePuddle(i: number, p: Player, lift: number) {
+    let pool = this.puddles[i];
+    if (!pool) {
+      pool = new THREE.Group();
+      const water = new THREE.Mesh(
+        new THREE.CircleGeometry(PLAYER_R + 12, 32),
+        new THREE.MeshBasicMaterial({ color: '#0d2a3a', transparent: true, opacity: 0.85, depthWrite: false }),
+      );
+      const ripple = new THREE.Mesh(
+        new THREE.RingGeometry(0.85, 1, 40),
+        new THREE.MeshBasicMaterial({ color: COLORS.bog, transparent: true, opacity: 0.7, depthWrite: false, toneMapped: false }),
+      );
+      for (const m of [water, ripple]) m.rotation.x = -Math.PI / 2;
+      water.position.y = 1.6;
+      ripple.position.y = 1.7;
+      pool.add(water, ripple);
+      this.scene.add(pool);
+      this.puddles[i] = pool;
+    }
+    const under = p.submergeT > 0 || lift < 0;
+    pool.visible = under && !p.out;
+    if (!pool.visible) return;
+    if (p.submergeT > 0) pool.position.set(p.x, 0, p.y);
+    const k = (this.time * 1.4) % 1;
+    const ripple = pool.children[1] as THREE.Mesh;
+    ripple.scale.setScalar(PLAYER_R + 6 + k * 30);
+    (ripple.material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - k);
+  }
+
   /** Healing pickups: a glowing green cross over a faint ring showing the area it heals. */
   private updatePickups(s: GameState) {
     const alive = new Set<number>();
@@ -656,16 +695,17 @@ export class World3D implements WorldView {
 
       const dead = pc.hp <= 0;
       a.deadT = dead ? a.deadT + dt : 0;
-      // Leaps arc up and down; Lotan's hop is lower, and its drop starts from up on the spear.
-      const airTicks = pc.dashKind === 6 ? LILY.ticks : pc.dashKind === 7 ? PERCH.drop : LEAP.ticks;
+      // Leaps arc up and down; Lotan's hop is lower, and out of Submerge it shoots up from under the water.
+      const airTicks = pc.dashKind === 6 ? LILY.ticks : pc.dashKind === 7 ? SUBMERGE.jump : LEAP.ticks;
       const leapK = airborne(pc) ? 1 - (pc.dashT - alpha) / airTicks : -1;
       const arc = leapK >= 0 ? Math.sin(Math.min(1, leapK) * Math.PI) : 0;
       const lift =
-        pc.perchT > 0 ? PERCH_H + Math.sin(this.time * 5) * 1.5
+        pc.submergeT > 0 ? -SUBMERGE_DEPTH
         : leapK < 0 ? 0
         : pc.dashKind === 6 ? arc * 55
-        : pc.dashKind === 7 ? PERCH_H * (1 - Math.min(1, leapK)) + arc * 18
+        : pc.dashKind === 7 ? arc * 60 - SUBMERGE_DEPTH * Math.max(0, 1 - leapK * 3)
         : arc * 95;
+      this.updatePuddle(i, pc, lift);
 
       const axis = new THREE.Vector3();
       if (dead) {
@@ -780,14 +820,13 @@ export class World3D implements WorldView {
         twist = def ? ck * 0.25 : 0;
       } else if (pc.champ === CHAMP.FROG) {
         // Spear upright at rest; it tips forward in the windup and drives out on the jab.
-        // Perched, it points straight down under the frog; dropping, it stabs down.
+        // Leaping out of the water it stabs down at where it lands.
         const jabCd = pc.cooldowns[SLOT.M1];
         let swing = 0;
         if (def?.id === 'jab') swing = -ck * 1.1;
         else if (def) swing = ck * 0.5;
         else if (jabCd > 0) swing = -1.55 + (1 - jabCd / kitCd(pc.champ, SLOT.M1)) * 0.6;
-        if (pc.perchT > 0) swing = Math.PI - 0.15;
-        else if (pc.dashT > 0 && pc.dashKind === 7) swing = -2.4;
+        if (pc.dashT > 0 && pc.dashKind === 7) swing = -2.4;
         rig.weapon.rotation.z = swing;
         twist = def?.id === 'jab' ? -ck * 0.3 : 0;
       } else {
@@ -1122,7 +1161,9 @@ export class World3D implements WorldView {
       const fillMat = v.fill.material as THREE.MeshBasicMaterial;
       const ringMat = v.ring.material as THREE.MeshBasicMaterial;
       if (z.kind === 'toad') {
-        // The toad's maw closes in on the mark as it rises.
+        // The toad's maw closes in on the bait as it rises, following whoever the bait is stuck to.
+        v.fill.position.set(z.x, 1.25, z.y);
+        v.ring.position.set(z.x, 1.35, z.y);
         const k = z.t / TOAD.delay;
         v.ring.scale.setScalar(Math.max(0.05, 0.4 + 0.6 * k));
         fillMat.opacity = 0.1 + 0.2 * (1 - k) + 0.05 * Math.sin(this.time * 14);
@@ -1242,7 +1283,7 @@ export class World3D implements WorldView {
     }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue', 'toad'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1269,8 +1310,8 @@ export class World3D implements WorldView {
       this.aimCircle.position.set(p.x, 1.4, p.y);
       this.aimCircle.scale.setScalar((TIDES.r / METEOR.r) * (0.5 + 0.5 * draw));
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.crimson);
-    } else if ((id === 'meteor' || id === 'rain' || id === 'converge' || id === 'clock' || id === 'marsh' || id === 'toad') && opts.cursor) {
-      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : id === 'clock' ? PROJ.clock.range : id === 'marsh' ? MARSH.range : id === 'toad' ? TOAD.range : METEOR.range;
+    } else if ((id === 'meteor' || id === 'rain' || id === 'converge' || id === 'clock' || id === 'marsh') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : id === 'clock' ? PROJ.clock.range : id === 'marsh' ? MARSH.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
@@ -1281,7 +1322,7 @@ export class World3D implements WorldView {
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
-      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : id === 'clock' ? CLOCK.r / METEOR.r : id === 'marsh' ? MARSH.r / METEOR.r : id === 'toad' ? TOAD.r / METEOR.r : 1);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : id === 'clock' ? CLOCK.r / METEOR.r : id === 'marsh' ? MARSH.r / METEOR.r : 1);
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }
@@ -1297,7 +1338,35 @@ export class World3D implements WorldView {
     return col;
   }
 
+  /**
+   * The ancestor toad: bursts up from under the floor with its mouth wide open, snaps it
+   * shut on whoever was there, holds a gulp, then sinks back down.
+   */
+  private updateToads(fx: Fx) {
+    while (this.toads.length < fx.toads.length) {
+      const t = buildAncestorToad(this.glowTex);
+      // Facing the camera, so the open mouth shows.
+      t.root.rotation.y = -Math.PI / 2;
+      this.scene.add(t.root);
+      this.toads.push(t);
+    }
+    this.toads.forEach((t, i) => {
+      const b = fx.toads[i];
+      t.root.visible = !!b;
+      if (!b) return;
+      const k = 1 - b.life / b.max;
+      const rise = Math.min(1, k / 0.18);
+      const sink = Math.max(0, (k - 0.62) / 0.38);
+      t.root.position.set(b.x, (-90 * (1 - rise * (2 - rise)) - 110 * sink * sink) * TOAD_SCALE, b.y);
+      const open = k < 0.2 ? 1 : Math.max(0, 1 - (k - 0.2) / 0.08);
+      t.jaw.rotation.z = open * 1.05;
+      const gulp = k > 0.3 && k < 0.6 ? Math.sin(((k - 0.3) / 0.3) * Math.PI) * 0.08 : 0;
+      t.root.scale.set(TOAD_SCALE * (1 + gulp), TOAD_SCALE * (1 - gulp), TOAD_SCALE * (1 + gulp));
+    });
+  }
+
   private updateFx(fx: Fx) {
+    this.updateToads(fx);
     for (let i = 0; i < this.rings.length; i++) {
       const mesh = this.rings[i];
       const r = fx.rings[i];

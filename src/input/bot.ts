@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DAGGER, DRAIN, EXECUTE, FATE, FLICKER, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, TOAD, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, solidsOf, teamSees, walkTarget } from '../sim/vision';
 import type { Pillar } from '../sim/constants';
@@ -178,9 +178,9 @@ export class Bot {
     // --- Movement: warriors close in, mages hold range (more of it against melee) and strafe.
     let wx = 0;
     let wy = 0;
-    // Shade's daggers cut deep only up close, so it fights at knife range.
-    const pref = assassin ? (foeMelee ? 170 : DAGGER.close - 20) : archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
-    const radial = melee ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
+    const pref = archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
+    // Shade's dagger stabs hard up close and only grazes when thrown, so it walks in to knife range too.
+    const radial = melee || assassin ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
     // With the river in between, close in by a bridge, or (melee, near the water, mobility
     // ready) walk straight at it and hop over like a person would.
     let gx = nx;
@@ -357,7 +357,7 @@ export class Bot {
     // --- Attacking.
     const los = this.lineOfSight(me.x, me.y, tx, ty, solids);
     let aimId: AbilityId = me.cast ? kit[me.cast.ability].id : kit[SLOT.M1].id;
-    const busy = me.cast !== null || me.counterT > 0 || me.dashT > 0 || me.perchT > 0;
+    const busy = me.cast !== null || me.counterT > 0 || me.dashT > 0 || me.submergeT > 0;
     // A samurai deflecting towards us would send any projectile straight back: hold fire, like a person would.
     const foeDeflecting = foe.deflectT > 0 && !hidden && foe.fx * (me.x - foe.x) + foe.fy * (me.y - foe.y) > 0;
     const press = (slot: number) => {
@@ -393,8 +393,8 @@ export class Bot {
         const reach = 2 * PLAYER_R + JAB.len - 8;
         const pinned = foe.stunT > 0 || foe.slowT > 0 || foe.rootT > 0 || foe.cast !== null;
         const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.35;
-        if (ready(SLOT.R) && !hidden && dist < TOAD.range - 40 && r() < (pinned || dist < 140 ? 0.25 : 0.02)) press(SLOT.R);
-        // Perch over a big hit coming (the enemy winding up right next to it).
+        if (ready(SLOT.R) && !hidden && los && dist < PROJ.toad.range - 30 && r() < (pinned || dist < 140 ? 0.25 : 0.02)) press(SLOT.R);
+        // Duck under the water before a big hit lands (the enemy winding up right next to it).
         else if (ready(SLOT.Q) && !hidden && dist < 150 && foe.cast !== null && r() < 0.15) press(SLOT.Q);
         else if (ready(SLOT.M2) && los && !hidden && dist > reach && dist < PROJ.tongue.range - 20 && r() < 0.1 * a) press(SLOT.M2);
         else if (ready(SLOT.SPACE) && !hidden && (lowMe ? dist < 160 : dist > PROJ.tongue.range && dist < PROJ.tongue.range + LILY.range) && r() < 0.05 * a) {
@@ -486,7 +486,7 @@ export class Bot {
       // Hopping the river: dash, leap or skip straight at the target.
       ax = tx;
       ay = ty;
-    } else if (me.perchT > 0) {
+    } else if (me.submergeT > 0) {
       // Up on the spear: drop right onto the target.
       ax = tx + this.tvx * 10 * this.p.lead;
       ay = ty + this.tvy * 10 * this.p.lead;
@@ -526,8 +526,8 @@ export class Bot {
     } else if (aimId === 'marsh') {
       ax = tx;
       ay = ty;
-    } else if (aimId === 'meteor' || aimId === 'rain' || aimId === 'toad') {
-      const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : aimId === 'toad' ? TOAD.delay : METEOR.delay);
+    } else if (aimId === 'meteor' || aimId === 'rain') {
+      const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : METEOR.delay);
       ax = tx + this.tvx * t * this.p.lead * 0.5;
       ay = ty + this.tvy * t * this.p.lead * 0.5;
     } else if (aimId === 'leap') {

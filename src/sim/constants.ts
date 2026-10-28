@@ -189,7 +189,7 @@ export type AbilityId =
   | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
   | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm'
   | 'chrono' | 'clock' | 'flicker' | 'converge' | 'recall' | 'pulse'
-  | 'jab' | 'tongue' | 'lily' | 'perch' | 'marsh' | 'toad';
+  | 'jab' | 'tongue' | 'lily' | 'submerge' | 'marsh' | 'toad';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -248,7 +248,7 @@ export const CHAMPIONS: ChampionDef[] = [
     hp: 125,
     speed: 3.4,
     abilities: [
-      { id: 'dagger', name: 'Dagger', desc: 'quick throws that cut deep up close and only graze further out, hold to keep throwing', cooldown: 8, cast: 8, castSlow: 0.7, energyCost: 0 },
+      { id: 'dagger', name: 'Dagger', desc: 'a deep knife stab up close, or a light thrown dagger further out, hold to keep attacking', cooldown: 8, cast: 8, castSlow: 0.7, energyCost: 0 },
       { id: 'mark', name: 'Mark', desc: 'marks the enemy; your next hit deals +10', cooldown: 300, cast: 16, castSlow: 0.5, energyCost: 0 },
       { id: 'blink', name: 'Shadow Step', desc: 'instant teleport to the cursor', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'smoke', name: 'Veil', desc: 'stealth and haste for 3 s; attacking reveals you, and that first hit deals +50%', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
@@ -324,9 +324,9 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'jab', name: 'Spear Jab', desc: 'quick narrow spear thrust, hold to keep jabbing', cooldown: 5, cast: 9, castSlow: 0.6, energyCost: 0 },
       { id: 'tongue', name: 'Tongue Snap', desc: 'short tongue lash; a hit yanks you to the enemy, slows it, and your next Jab hits harder', cooldown: 240, cast: 10, castSlow: 0.5, energyCost: 0 },
       { id: 'lily', name: 'Lily Leap', desc: 'hop to the cursor, untargetable in the air, and dive under on landing: unseen for 3 s (attacking reveals you)', cooldown: 480, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'perch', name: 'Spear Perch', desc: 'perch on your planted spear, untargetable, then drop near the cursor (or press again), hitting and slowing where you land', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'submerge', name: 'Submerge', desc: 'sink into a pool of swamp water, untargetable, then burst out near the cursor (or press again), hitting and slowing where you land', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'marsh', name: 'Marsh Pool', desc: 'a pool of swamp water for 3 s: you and allies in it are faster, enemies slower', cooldown: 480, cast: 8, castSlow: 0.5, energyCost: 0 },
-      { id: 'toad', name: 'Ancestor Toad', desc: 'mark an area; after 1.2 s the great toad bursts up, stunning enemies in the middle and throwing out the rest, 100 energy', cooldown: 60, cast: 16, castSlow: 0.3, energyCost: 100 },
+      { id: 'toad', name: 'Ancestor Toad', desc: 'throw a lotus bait that sticks to the first enemy it hits (or lands); 1 s later the great toad bursts up under it, swallowing and stunning enemies in the middle and throwing out the rest, 100 energy', cooldown: 60, cast: 14, castSlow: 0.4, energyCost: 100 },
     ],
   },
 ];
@@ -349,7 +349,7 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   blast: { speed: 10, r: 16, range: 620, dmg: 20, energy: 12, kb: 11, slowMul: 1, slowT: 0 },
   frost: { speed: 11, r: 12, range: 520, dmg: 10, energy: 10, kb: 0, slowMul: 0.5, slowT: 100 },
   hook: { speed: 15, r: 10, range: 470, dmg: 12, energy: 10, kb: -22, slowMul: 1, slowT: 0 },
-  // Base (far) damage; DAGGER raises it for a throw that hits close.
+  // Only thrown when nobody is in stabbing reach (STAB).
   dagger: { speed: 14, r: 7, range: 280, dmg: 3, energy: 7, kb: 0, slowMul: 1, slowT: 0 },
   mark: { speed: 14, r: 11, range: 500, dmg: 6, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
   poison: { speed: 15, r: 9, range: 420, dmg: 4, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
@@ -366,6 +366,8 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   clock: { speed: 10, r: 11, range: 380, dmg: 12, energy: 8, kb: 0, slowMul: 0.6, slowT: 45 },
   // Deals nothing itself: it sticks and bursts (PULSE).
   pulse: { speed: 11, r: 10, range: 300, dmg: 0, energy: 0, kb: 0, slowMul: 1, slowT: 0 },
+  // Lotus bait: deals nothing itself; it sticks (or lands) and the toad bursts up under it (TOAD).
+  toad: { speed: 12, r: 10, range: 380, dmg: 0, energy: 0, kb: 0, slowMul: 1, slowT: 0 },
   // A hit yanks the frog to the target (TONGUE).
   tongue: { speed: 17, r: 9, range: 240, dmg: 6, energy: 10, kb: 0, slowMul: 0.65, slowT: 40 },
 };
@@ -393,8 +395,8 @@ export const SMOKE = { ticks: 180, speed: 1.3, ambush: 1.5, window: 45 };
 export const POISON = { ticks: 120, every: 20, dmg: 2 };
 /** Dash through the target for `dmg`; at or below `threshold` of max HP it kills outright. */
 export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.3 };
-/** A dagger that hits within `close` of where it was thrown deals `dmg` instead of PROJ.dagger.dmg. */
-export const DAGGER = { close: 140, dmg: 7 };
+/** Dagger with an enemy within reach in front (like SLASH): a knife stab for `dmg` instead of a throw. */
+export const STAB = { reach: 34, minDot: 0.4, dmg: 9, energy: 9 };
 
 // Archer
 /** Draw at least `minDraw` ticks; a full draw adds these on top of PROJ.longshot. */
@@ -472,17 +474,20 @@ export const PULSE = { fuse: 60, r: 90, dmg: 30, kb: 6 };
 
 // Swamp frog
 /** Thrust in a narrow line; after a Tongue Snap hit (within TONGUE.window) the next one deals `bonus` more. */
-export const JAB = { len: 84, half: 20, dmg: 8, energy: 9, bonus: 7 };
+export const JAB = { len: 84, half: 20, dmg: 8, energy: 7, bonus: 7 };
 /** On a hit the frog dashes to `gap` short of the target over `ticks`; the next Jab within `window` is empowered. */
 export const TONGUE = { ticks: 8, gap: 2 * PLAYER_R + 6, window: 90 };
 /** A hop toward the cursor, untargetable in the air; on landing the frog dives under, unseen for `dive` ticks. */
 export const LILY = { ticks: 16, range: 200, dive: 180 };
 /**
- * Perched on the spear for `ticks` (untargetable, can't move or attack), then dropping up to
- * `range` toward the cursor over `drop` ticks; the landing hits within `r` and slows.
+ * Under the water for `ticks` (untargetable, can't move or attack), then leaping out up to
+ * `range` toward the cursor over `jump` ticks; the landing hits within `r` and slows.
  */
-export const PERCH = { ticks: 45, range: 170, drop: 12, r: 72, dmg: 12, energy: 10, slowMul: 0.6, slowT: 50 };
+export const SUBMERGE = { ticks: 45, range: 170, jump: 12, r: 72, dmg: 12, energy: 10, slowMul: 0.6, slowT: 50 };
 /** A pool up to `range` away lasting `ticks`: allies inside are hasted, enemies slowed to `slow`. */
 export const MARSH = { range: 260, r: 100, ticks: 180, slow: 0.65 };
-/** After `delay` the toad bursts up: within `inner` it deals `dmg` and stuns; out to `r`, `edge` and a throw outward. */
-export const TOAD = { range: 450, delay: 72, r: 120, inner: 55, dmg: 28, stun: 50, edge: 18, kb: 10 };
+/**
+ * The bait sticks to the first enemy hit (or lies where it stops); `delay` later the toad bursts up
+ * under it: within `inner` it deals `dmg` and stuns; out to `r`, `edge` and a throw outward.
+ */
+export const TOAD = { delay: 60, r: 110, inner: 55, dmg: 24, stun: 40, edge: 16, kb: 10 };

@@ -1,4 +1,4 @@
-import { CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PERCH, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
+import { CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, SUBMERGE, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -40,6 +40,14 @@ export interface Ring {
   width: number;
 }
 
+/** Lotan's ancestor toad bursting up at (x, y): rises mouth agape, gulps, sinks back. */
+export interface ToadBurst {
+  x: number;
+  y: number;
+  life: number;
+  max: number;
+}
+
 export interface Banner {
   text: string;
   sub: string;
@@ -56,6 +64,7 @@ export class Fx {
   particles: Particle[] = [];
   texts: FloatText[] = [];
   rings: Ring[] = [];
+  toads: ToadBurst[] = [];
   banner: Banner | null = null;
   shake = 0;
   flash = 0;
@@ -68,6 +77,7 @@ export class Fx {
     this.particles = [];
     this.texts = [];
     this.rings = [];
+    this.toads = [];
     this.banner = null;
     this.shake = 0;
     this.flash = 0;
@@ -165,7 +175,7 @@ export class Fx {
             e.kind === 'pulse' ||
             e.kind === 'resonance' ||
             e.kind === 'toad' ||
-            e.kind === 'perch' ||
+            e.kind === 'submerge' ||
             (e.kind === 'tides' && e.dmg >= TIDES.dmg + TIDES.bonus * 0.8) ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
@@ -432,7 +442,7 @@ export class Fx {
           break;
 
         case 'stick':
-          this.rings.push({ x: e.x, y: e.y, r0: 30, r1: 12, life: 0.25, max: 0.25, color: COLORS.chrono, width: 3 });
+          this.rings.push({ x: e.x, y: e.y, r0: 30, r1: 12, life: 0.25, max: 0.25, color: s.players[e.owner].champ === CHAMP.FROG ? COLORS.bog : COLORS.chrono, width: 3 });
           this.sound('tick');
           break;
 
@@ -471,20 +481,22 @@ export class Fx {
           this.sound('hook');
           break;
 
-        case 'perch':
-          this.rings.push({ x: e.x, y: e.y, r0: 34, r1: 12, life: 0.3, max: 0.3, color: COLORS.bog, width: 3 });
-          this.burst(e.x, e.y, 10, COLORS.bog, 120, 2.6, 0.3, 40);
-          this.sound('counter');
+        case 'submerge':
+          // Sinks with a splash, rings spreading on the water.
+          this.rings.push({ x: e.x, y: e.y, r0: 12, r1: 56, life: 0.4, max: 0.4, color: COLORS.bog, width: 3 });
+          this.burst(e.x, e.y, 18, '#9fd4ff', 160, 3, 0.4, 30);
+          this.sound('frost');
           break;
 
-        case 'perchLand':
-          this.rings.push({ x: e.x, y: e.y, r0: 12, r1: PERCH.r + 10, life: 0.35, max: 0.35, color: COLORS.bog, width: 6 });
+        case 'surface':
+          this.rings.push({ x: e.x, y: e.y, r0: 12, r1: SUBMERGE.r + 10, life: 0.35, max: 0.35, color: COLORS.bog, width: 6 });
           this.burst(e.x, e.y, 22, '#9fd4ff', 260, 3.4, 0.45, 12);
           this.shake += 4;
           this.sound('bigHit');
           break;
 
         case 'toad':
+          this.toads.push({ x: e.x, y: e.y, life: 1.3, max: 1.3 });
           this.rings.push({ x: e.x, y: e.y, r0: 20, r1: TOAD.r + 30, life: 0.5, max: 0.5, color: COLORS.bog, width: 10 });
           this.rings.push({ x: e.x, y: e.y, r0: 10, r1: TOAD.inner + 10, life: 0.4, max: 0.4, color: '#7d9a5a', width: 14 });
           this.burst(e.x, e.y, 46, '#9fd4ff', 420, 4.5, 0.65, 18);
@@ -644,6 +656,9 @@ export class Fx {
     for (const r of this.rings) r.life -= dt;
     this.rings = this.rings.filter((r) => r.life > 0);
 
+    for (const t of this.toads) t.life -= dt;
+    this.toads = this.toads.filter((t) => t.life > 0);
+
     if (this.banner) {
       this.banner.life -= dt;
       if (this.banner.life <= 0) this.banner = null;
@@ -719,8 +734,8 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'swarm':
     case 'flicker':
     case 'recall':
-    case 'perch':
-    case 'perchLand':
+    case 'submerge':
+    case 'surface':
     case 'yank':
     case 'resonance':
     case 'stick':

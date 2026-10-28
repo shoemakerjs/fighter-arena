@@ -3595,3 +3595,92 @@ function buildLotan(color: string, glowTex: THREE.Texture): ChampionRig {
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matSkin, matBelly, matRobe, matLeafA, matLeafB, matLeafC, matHat, matScarf, matWrap, matLeather, matHaft, matStone], ...markers };
 }
+
+export interface ToadModel {
+  root: THREE.Group;
+  /** The upper head, hinged at the back of the mouth: rotation.z opens it (positive = open). */
+  jaw: THREE.Group;
+}
+
+/**
+ * The ancestor toad of Lotan's ult: a huge warty swamp toad with a pale throat, sleepy amber
+ * eyes, moss and glowing blue mushrooms on its back and a red lotus on its head. Faces +X;
+ * the upper head swings open on `jaw` so it can burst up mouth agape and gulp.
+ */
+export function buildAncestorToad(glowTex: THREE.Texture): ToadModel {
+  const matSkin = toonSoft('#82ad4c');
+  const matDark = toon('#5b7f37');
+  const matBelly = toonSoft('#d6cf9e');
+  const matMouth = new THREE.MeshBasicMaterial({ color: '#4a1418', side: THREE.DoubleSide });
+  const matTongue = toon(COLORS.tongue);
+  const matEye = toonSoft('#e2b45a');
+  const matPupil = new THREE.MeshBasicMaterial({ color: '#141010' });
+  const matShroom = new THREE.MeshBasicMaterial({ color: '#7fd0ff', toneMapped: false });
+  const matStem = toon('#d8e4ea');
+  const matLotus = new THREE.MeshToonMaterial({ color: '#e0453a', gradientMap: toonGradient(), emissive: '#5a0d08' });
+
+  const root = new THREE.Group();
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Squat body, pale throat and lower jaw, haunches and front feet
+  keep(add(new THREE.SphereGeometry(48, 24, 16), matSkin, -10, 26, 0, root)).scale.set(1.15, 0.72, 1.05);
+  keep(add(new THREE.SphereGeometry(40, 22, 14), matBelly, 14, 18, 0, root)).scale.set(0.95, 0.55, 1);
+  for (const side of [-1, 1]) {
+    keep(add(new THREE.SphereGeometry(22, 14, 10), matSkin, -30, 16, side * 40, root)).scale.set(1.3, 0.75, 0.8);
+    const foot = keep(add(new THREE.SphereGeometry(10, 12, 8), matSkin, 34, 4, side * 30, root));
+    foot.scale.set(1.5, 0.45, 1.2);
+  }
+  // Warts and moss over the back, with glowing mushrooms growing out of it
+  const wart = new THREE.SphereGeometry(4, 8, 6);
+  for (let i = 0; i < 26; i++) {
+    const a = (i / 26) * TAU * 3.1;
+    const r = 18 + (i % 4) * 7;
+    add(wart, i % 3 ? matDark : matSkin, -18 + Math.cos(a) * r * 0.9, 50 - (r - 18) * 0.5, Math.sin(a) * r, root);
+  }
+  for (const [x, z, h] of [[-30, 14, 12], [-22, -20, 9], [-40, -4, 14], [-12, 26, 8]] as const) {
+    add(new THREE.CylinderGeometry(1.6, 2.2, h, 8), matStem, x, 50 + h / 2, z, root);
+    add(new THREE.SphereGeometry(6, 12, 6, 0, TAU, 0, Math.PI / 2), matShroom, x, 50 + h, z, root).scale.set(1, 0.6, 1);
+    const glow = glowSprite(glowTex, '#7fd0ff', 26, 0.55);
+    glow.position.set(x, 52 + h, z);
+    root.add(glow);
+  }
+  // Inside of the mouth and the tongue, seen when the head swings open
+  keep(add(new THREE.CircleGeometry(30, 24), matMouth, 22, 34, 0, root)).rotation.x = -Math.PI / 2;
+  add(new THREE.CapsuleGeometry(7, 22, 4, 10), matTongue, 22, 35, 0, root).rotation.z = Math.PI / 2;
+
+  // Upper head on a hinge at the back of the mouth
+  const jaw = new THREE.Group();
+  jaw.position.set(-8, 34, 0);
+  root.add(jaw);
+  keep(add(new THREE.SphereGeometry(34, 22, 14, 0, TAU, 0, Math.PI / 2), matSkin, 30, 0, 0, jaw)).scale.set(1.15, 0.55, 1.05);
+  add(new THREE.CircleGeometry(33, 24), matMouth, 31, -0.2, 0, jaw).rotation.x = Math.PI / 2;
+  for (const side of [-1, 1]) {
+    const eye = keep(add(new THREE.SphereGeometry(10, 16, 12), matEye, 26, 16, side * 20, jaw));
+    eye.scale.set(0.9, 0.85, 0.9);
+    const lid = add(new THREE.SphereGeometry(10.6, 16, 8, 0, TAU, 0, Math.PI * 0.45), matSkin, 26, 16.4, side * 20, jaw);
+    lid.rotation.z = -0.5;
+    add(new THREE.BoxGeometry(2.4, 2.4, 8), matPupil, 34.6, 14.4, side * 20, jaw);
+  }
+  // A red lotus on its brow
+  const lotus = new THREE.Group();
+  lotus.position.set(16, 20, 0);
+  jaw.add(lotus);
+  const petal = new THREE.SphereGeometry(4, 10, 8);
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    const p = add(petal, matLotus, Math.cos(a) * 5, 3, Math.sin(a) * 5, lotus);
+    p.scale.set(0.55, 2.2, 1);
+    p.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9);
+  }
+
+  for (const m of outlined) outline(m);
+  shadowed(root);
+  return { root, jaw };
+}

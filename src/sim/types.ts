@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'perch' | 'toad';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -74,7 +74,7 @@ export interface Player {
    * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once),
    * 4 = crimson step (passes through, makes each enemy bleed; dashHit is a bitmask by id),
    * 5 = night swarm (can't be hit, passes through, bites each enemy once; dashHit is a bitmask),
-   * 6 = lily leap (airborne, no landing hit), 7 = drop from Spear Perch (airborne, hits on landing).
+   * 6 = lily leap (airborne, no landing hit), 7 = leap out of Submerge (airborne, hits on landing).
    */
   dashKind: number;
   /** Execute / sweeping blade already connected during this dash (0/1). */
@@ -125,8 +125,8 @@ export interface Player {
   chargeT: number;
   /** Time kobold: recent [x, y, hp] samples, oldest first, for Rewind. */
   trail: number[];
-  /** Swamp frog: perched on its spear (ticks left): untargetable, can't move or attack. */
-  perchT: number;
+  /** Swamp frog: under the water (ticks left): untargetable, can't move or attack. */
+  submergeT: number;
   /** Just took a healing pickup: can't take another for these ticks. */
   pickT: number;
   counterT: number;
@@ -163,7 +163,7 @@ export interface Zone {
   y: number;
   /** Ticks left. Rain is still falling while t > RAIN.ticks; a field or a bomb goes off at 0. */
   t: number;
-  /** Blasting Charge: the player it's stuck to (it moves with them), -1 if on the floor. */
+  /** Blasting Charge or lotus bait: the player it's stuck to (it moves with them), -1 if on the floor. */
   target: number;
 }
 
@@ -270,16 +270,16 @@ export type GameEvent =
   /** Resonance going off on `player`. */
   | { type: 'resonance'; player: number; x: number; y: number }
   | { type: 'converge'; owner: number; x: number; y: number }
-  /** A Blasting Charge sticking to `player`, and bursting. */
-  | { type: 'stick'; player: number; x: number; y: number }
+  /** A Blasting Charge (or `owner`'s lotus bait) sticking to `player`, and the charge bursting. */
+  | { type: 'stick'; player: number; owner: number; x: number; y: number }
   | { type: 'pulse'; owner: number; x: number; y: number }
   /** A Chronobomb bouncing on, and bursting. */
   | { type: 'bounce'; owner: number; x: number; y: number }
   | { type: 'clockBurst'; owner: number; x: number; y: number }
-  /** Swamp frog: tongue yank, perching on the spear, dropping off it, and the toad bursting up. */
+  /** Swamp frog: tongue yank, sinking under the water, surfacing out of it, and the toad bursting up. */
   | { type: 'yank'; player: number; x0: number; y0: number; x: number; y: number }
-  | { type: 'perch'; player: number; x: number; y: number }
-  | { type: 'perchLand'; player: number; x: number; y: number }
+  | { type: 'submerge'; player: number; x: number; y: number }
+  | { type: 'surface'; player: number; x: number; y: number }
   | { type: 'toad'; owner: number; x: number; y: number }
   /** Romulus scatters into bats (Night Swarm). */
   | { type: 'swarm'; player: number; x: number; y: number }
