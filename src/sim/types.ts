@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'perch' | 'toad';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -73,7 +73,8 @@ export interface Player {
    * 0 = ground dash, 1 = leap (airborne: can't be hit, damages on landing),
    * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once),
    * 4 = crimson step (passes through, makes each enemy bleed; dashHit is a bitmask by id),
-   * 5 = night swarm (can't be hit, passes through, bites each enemy once; dashHit is a bitmask).
+   * 5 = night swarm (can't be hit, passes through, bites each enemy once; dashHit is a bitmask),
+   * 6 = lily leap (airborne, no landing hit), 7 = drop from Spear Perch (airborne, hits on landing).
    */
   dashKind: number;
   /** Execute / sweeping blade already connected during this dash (0/1). */
@@ -124,6 +125,10 @@ export interface Player {
   chargeT: number;
   /** Time kobold: recent [x, y, hp] samples, oldest first, for Rewind. */
   trail: number[];
+  /** Swamp frog: perched on its spear (ticks left): untargetable, can't move or attack. */
+  perchT: number;
+  /** Just took a healing pickup: can't take another for these ticks. */
+  pickT: number;
   counterT: number;
   slowT: number;
   slowMul: number;
@@ -149,11 +154,11 @@ export interface Projectile {
   bounces: number;
 }
 
-/** Something on the floor: arrow rain, a sonic sensor, a Cave-In field or a Blasting Charge. */
+/** Something on the floor: arrow rain, a sonic sensor, a Cave-In field, a Blasting Charge, a marsh pool or the toad's mark. */
 export interface Zone {
   id: number;
   owner: number;
-  kind: 'rain' | 'sonic' | 'converge' | 'pulse';
+  kind: 'rain' | 'sonic' | 'converge' | 'pulse' | 'marsh' | 'toad';
   x: number;
   y: number;
   /** Ticks left. Rain is still falling while t > RAIN.ticks; a field or a bomb goes off at 0. */
@@ -168,6 +173,13 @@ export interface Meteor {
   x: number;
   y: number;
   t: number;
+}
+
+/** A healing pickup lying near the edge of the arena. */
+export interface Pickup {
+  id: number;
+  x: number;
+  y: number;
 }
 
 export interface Orb {
@@ -187,6 +199,8 @@ export interface GameState {
   champs: number[];
   /** Index into MAPS. */
   map: number;
+  /** A different map every round (off when a map is forced for testing). */
+  rotateMaps: boolean;
   phase: Phase;
   phaseT: number;
   round: number;
@@ -201,6 +215,9 @@ export interface GameState {
   meteors: Meteor[];
   zones: Zone[];
   orb: Orb;
+  pickups: Pickup[];
+  /** Ticks until the next pair of pickups appears (counts only while none are left). */
+  pickupT: number;
   nextId: number;
 }
 
@@ -215,6 +232,9 @@ export type GameEvent =
   | { type: 'orbSpawn' }
   | { type: 'orbHit'; x: number; y: number }
   | { type: 'orbBreak'; player: number; x: number; y: number }
+  | { type: 'pickupSpawn'; x: number; y: number }
+  /** `player` took the pickup at (x, y), healing the area. */
+  | { type: 'pickup'; player: number; x: number; y: number }
   | { type: 'dash'; player: number; x: number; y: number }
   | { type: 'leap'; player: number; x: number; y: number }
   | { type: 'land'; player: number; x: number; y: number }
@@ -256,6 +276,11 @@ export type GameEvent =
   /** A Chronobomb bouncing on, and bursting. */
   | { type: 'bounce'; owner: number; x: number; y: number }
   | { type: 'clockBurst'; owner: number; x: number; y: number }
+  /** Swamp frog: tongue yank, perching on the spear, dropping off it, and the toad bursting up. */
+  | { type: 'yank'; player: number; x0: number; y0: number; x: number; y: number }
+  | { type: 'perch'; player: number; x: number; y: number }
+  | { type: 'perchLand'; player: number; x: number; y: number }
+  | { type: 'toad'; owner: number; x: number; y: number }
   /** Romulus scatters into bats (Night Swarm). */
   | { type: 'swarm'; player: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */

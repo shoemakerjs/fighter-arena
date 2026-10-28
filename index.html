@@ -75,6 +75,14 @@
           <button type="button" data-format="1v1" class="active">1v1</button>
           <button type="button" data-format="2v2">2v2</button>
         </div>
+        <div class="lobby-bots hidden" id="lobby-bots">
+          <span class="field-label">Bot difficulty</span>
+          <div class="segmented" id="lobby-bot-level">
+            <button type="button" data-level="easy">Easy</button>
+            <button type="button" data-level="normal" class="active">Normal</button>
+            <button type="button" data-level="hard">Hard</button>
+          </div>
+        </div>
         <div class="lobby-slots" id="lobby-seats"></div>
         <button class="pill pill-lg" id="lobby-start" disabled>Start</button>
         <p class="slot-sub hidden" id="lobby-wait">Waiting for the host to start…</p>

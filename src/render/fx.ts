@@ -1,4 +1,4 @@
-import { CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, WHIRL } from '../sim/constants';
+import { CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, PERCH, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -131,6 +131,12 @@ export class Fx {
           } else if (e.ability === 'clock' || e.ability === 'pulse' || e.ability === 'converge') {
             this.burst(e.x, e.y, e.ability === 'clock' ? 6 : 10, COLORS.chrono, 160, 2.6, 0.28);
             this.sound(e.ability === 'clock' ? 'tick' : 'frost');
+          } else if (e.ability === 'tongue') {
+            this.burst(e.x, e.y, 5, COLORS.tongue, 120, 2.4, 0.2);
+            this.sound('hook');
+          } else if (e.ability === 'marsh' || e.ability === 'toad') {
+            this.burst(e.x, e.y, 10, COLORS.bog, 160, 2.6, 0.3);
+            this.sound('frost');
           } else if (e.ability === 'rain') {
             // Volley loosed into the sky.
             for (let i = 0; i < 12; i++) this.particles.push(spark(e.x, e.y, COLORS.vine, 900));
@@ -158,6 +164,8 @@ export class Fx {
             e.kind === 'crescent' ||
             e.kind === 'pulse' ||
             e.kind === 'resonance' ||
+            e.kind === 'toad' ||
+            e.kind === 'perch' ||
             (e.kind === 'tides' && e.dmg >= TIDES.dmg + TIDES.bonus * 0.8) ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
@@ -211,6 +219,16 @@ export class Fx {
           this.sound('counter');
           break;
 
+        case 'pickupSpawn':
+          this.rings.push({ x: e.x, y: e.y, r0: 50, r1: 14, life: 0.45, max: 0.45, color: COLORS.heal, width: 3 });
+          break;
+
+        case 'pickup':
+          this.rings.push({ x: e.x, y: e.y, r0: 14, r1: PICKUP.area, life: 0.45, max: 0.45, color: COLORS.heal, width: 6 });
+          this.burst(e.x, e.y, 24, COLORS.heal, 240, 3.5, 0.55);
+          this.sound('orb');
+          break;
+
         case 'orbHit':
           this.burst(e.x, e.y, 6, COLORS.orb, 180, 2.5, 0.3);
           break;
@@ -237,7 +255,8 @@ export class Fx {
 
         case 'thrust': {
           // A line of wind sparks along the thrust.
-          for (let d = 20; d <= TEMPEST.len; d += 18) {
+          const len = s.players[e.player].champ === CHAMP.FROG ? JAB.len : TEMPEST.len;
+          for (let d = 20; d <= len; d += 18) {
             const x = e.x + e.fx * (PLAYER_R + d);
             const y = e.y + e.fy * (PLAYER_R + d);
             this.burst(x, y, 2, d % 36 < 18 ? '#ffffff' : COLORS.edge, 80, 2.4, 0.2, 28);
@@ -436,8 +455,44 @@ export class Fx {
         }
 
         case 'stealth':
+          if (s.players[e.player].champ === CHAMP.FROG) {
+            // Lotan dives under: a splash and rings on the water.
+            this.rings.push({ x: e.x, y: e.y, r0: 10, r1: 70, life: 0.5, max: 0.5, color: COLORS.bog, width: 4 });
+            this.burst(e.x, e.y, 26, '#9fd4ff', 200, 3.5, 0.5, 30);
+            this.sound('frost');
+            break;
+          }
           this.burst(e.x, e.y, 30, '#8f8aa8', 120, 6, 0.8, 15);
           this.sound('counter');
+          break;
+
+        case 'yank':
+          for (let k = 0; k <= 1; k += 0.2) this.burst(e.x0 + (e.x - e.x0) * k, e.y0 + (e.y - e.y0) * k, 2, COLORS.tongue, 60, 2.4, 0.25, 20);
+          this.sound('hook');
+          break;
+
+        case 'perch':
+          this.rings.push({ x: e.x, y: e.y, r0: 34, r1: 12, life: 0.3, max: 0.3, color: COLORS.bog, width: 3 });
+          this.burst(e.x, e.y, 10, COLORS.bog, 120, 2.6, 0.3, 40);
+          this.sound('counter');
+          break;
+
+        case 'perchLand':
+          this.rings.push({ x: e.x, y: e.y, r0: 12, r1: PERCH.r + 10, life: 0.35, max: 0.35, color: COLORS.bog, width: 6 });
+          this.burst(e.x, e.y, 22, '#9fd4ff', 260, 3.4, 0.45, 12);
+          this.shake += 4;
+          this.sound('bigHit');
+          break;
+
+        case 'toad':
+          this.rings.push({ x: e.x, y: e.y, r0: 20, r1: TOAD.r + 30, life: 0.5, max: 0.5, color: COLORS.bog, width: 10 });
+          this.rings.push({ x: e.x, y: e.y, r0: 10, r1: TOAD.inner + 10, life: 0.4, max: 0.4, color: '#7d9a5a', width: 14 });
+          this.burst(e.x, e.y, 46, '#9fd4ff', 420, 4.5, 0.65, 18);
+          this.burst(e.x, e.y, 20, '#7d9a5a', 300, 5, 0.6, 30);
+          this.shake += 12;
+          this.flash = 0.14;
+          this.flashColor = COLORS.bog;
+          this.sound('boom');
           break;
 
         case 'reveal':
@@ -664,11 +719,15 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'swarm':
     case 'flicker':
     case 'recall':
+    case 'perch':
+    case 'perchLand':
+    case 'yank':
     case 'resonance':
     case 'stick':
       return { x: e.x, y: e.y, player: e.player };
     case 'converge':
     case 'pulse':
+    case 'toad':
     case 'bounce':
     case 'clockBurst':
       return { x: e.x, y: e.y, player: e.owner };

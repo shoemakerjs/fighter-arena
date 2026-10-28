@@ -97,4 +97,13 @@ export const ROSTER: RosterEntry[] = [
     focus: 0.6,
     lore: 'A kobold miner who dug up crystals that turn old tunnels into gateways to other moments. Armed with chronobombs and a clock fused to his helmet, Rustic steals treasures before they are found and settles grudges history forgot.',
   },
+  {
+    hero: 'Lotan',
+    category: 'Assassin',
+    art: art('lotan.webp'),
+    flip: true,
+    portrait: '35% 12%',
+    focus: 0.36,
+    lore: 'A frog spearman from the glowing mushroom swamps, sworn to the great toad that sleeps beneath them. It slips under the water, perches out of reach on its own spear, and calls the ancestor up to swallow whoever trespasses.',
+  },
 ];

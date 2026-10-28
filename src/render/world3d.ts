@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LONGSHOT, MAPS, type MapDef, METEOR, ORB_HP, ORB_R, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LILY, LONGSHOT, MAPS, MARSH, PERCH, type MapDef, METEOR, ORB_HP, ORB_R, PICKUP, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES, TOAD } from '../sim/constants';
 import { abilityOf, airborne, rewindPoint } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -13,6 +13,8 @@ import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } fro
 const TAU = Math.PI * 2;
 /** Height at which projectiles fly. */
 const PROJ_H = 30;
+/** How high Lotan stands while perched on the spear. */
+const PERCH_H = 42;
 const MAX_PARTICLES = 4000;
 const LIGHT_POOL = 4;
 
@@ -52,6 +54,13 @@ interface ZoneView {
   sweep: THREE.Mesh | null;
 }
 
+interface PickupView {
+  /** The floating cross (bobs and turns). */
+  cross: THREE.Group;
+  /** The area it heals, on the floor. */
+  ring: THREE.Mesh;
+}
+
 /** Projectiles drawn as an arrow pointing along their flight instead of a spinning gem. */
 const ARROWS: ProjKind[] = ['arrow', 'longshot', 'sonic', 'snare'];
 
@@ -74,7 +83,7 @@ function dropTree(scene: THREE.Scene, root: THREE.Object3D, keep: THREE.Texture)
 }
 
 function zoneRadius(kind: Zone['kind']): number {
-  return kind === 'rain' ? RAIN.r : kind === 'converge' ? CONVERGE.r : kind === 'pulse' ? PULSE.r : SONIC.r;
+  return kind === 'rain' ? RAIN.r : kind === 'converge' ? CONVERGE.r : kind === 'pulse' ? PULSE.r : kind === 'marsh' ? MARSH.r : kind === 'toad' ? TOAD.r : SONIC.r;
 }
 
 interface KindLook {
@@ -105,11 +114,13 @@ export class World3D implements WorldView {
   private anim: ChampionAnim[] = [];
   private chainGeo = new THREE.BoxGeometry(1, 1, 1);
   private chainMat = new THREE.MeshStandardMaterial({ color: COLORS.steel, metalness: 0.9, roughness: 0.3 });
+  private tongueMat = new THREE.MeshToonMaterial({ color: COLORS.tongue });
   private looks = new Map<string, KindLook>();
   private decalGeo = new THREE.CircleGeometry(1, 24);
   private projViews = new Map<number, ProjView>();
   private meteorViews = new Map<number, MeteorView>();
   private zoneViews = new Map<number, ZoneView>();
+  private pickupViews = new Map<number, PickupView>();
   /** Where each samurai's body waits during Soul Unbound. */
   private soulMarks: THREE.Group[] = [];
   /** Exsanguinate tethers, one per player. */
@@ -482,6 +493,7 @@ export class World3D implements WorldView {
     this.fogTex.needsUpdate = true;
     this.updateArena(cur, dt);
     this.updateOrb(cur);
+    this.updatePickups(cur);
     this.updateChampions(prev, cur, alpha, dt, opts.localId);
     this.updateProjectiles(prev, cur, alpha, opts.localId);
     this.updateMeteors(cur);
@@ -541,6 +553,39 @@ export class World3D implements WorldView {
       this.orbRingHp = orb.hp;
       this.orbRing.geometry.dispose();
       this.orbRing.geometry = new THREE.RingGeometry(ORB_R + 30, ORB_R + 35, 48, 1, Math.PI / 2, TAU * Math.max(0, orb.hp / ORB_HP));
+    }
+  }
+
+  /** Healing pickups: a glowing green cross over a faint ring showing the area it heals. */
+  private updatePickups(s: GameState) {
+    const alive = new Set<number>();
+    for (const pk of s.pickups) {
+      alive.add(pk.id);
+      let v = this.pickupViews.get(pk.id);
+      if (!v) {
+        const mat = new THREE.MeshBasicMaterial({ color: COLORS.heal, toneMapped: false });
+        // Lying flat and turning in place, so it reads as a plus from the camera at any moment.
+        const cross = new THREE.Group();
+        cross.add(new THREE.Mesh(new THREE.BoxGeometry(34, 10, 11), mat), new THREE.Mesh(new THREE.BoxGeometry(11, 10, 34), mat));
+        cross.add(glowSprite(this.glowTex, COLORS.heal, 110, 0.7));
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(PICKUP.area - 4, PICKUP.area, 64),
+          new THREE.MeshBasicMaterial({ color: COLORS.heal, transparent: true, opacity: 0.25, depthWrite: false, toneMapped: false }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(pk.x, 1.3, pk.y);
+        this.scene.add(cross, ring);
+        v = { cross, ring };
+        this.pickupViews.set(pk.id, v);
+      }
+      v.cross.position.set(pk.x, 24 + Math.sin(this.time * 3 + pk.id) * 4, pk.y);
+      v.cross.rotation.y = this.time * 1.2;
+      (v.ring.material as THREE.MeshBasicMaterial).opacity = 0.3 + 0.12 * Math.sin(this.time * 4);
+    }
+    for (const [id, v] of this.pickupViews) {
+      if (alive.has(id)) continue;
+      this.scene.remove(v.cross, v.ring);
+      this.pickupViews.delete(id);
     }
   }
 
@@ -611,8 +656,16 @@ export class World3D implements WorldView {
 
       const dead = pc.hp <= 0;
       a.deadT = dead ? a.deadT + dt : 0;
-      const leapK = airborne(pc) ? 1 - (pc.dashT - alpha) / LEAP.ticks : -1;
-      const lift = leapK >= 0 ? Math.sin(Math.min(1, leapK) * Math.PI) * 95 : 0;
+      // Leaps arc up and down; Lotan's hop is lower, and its drop starts from up on the spear.
+      const airTicks = pc.dashKind === 6 ? LILY.ticks : pc.dashKind === 7 ? PERCH.drop : LEAP.ticks;
+      const leapK = airborne(pc) ? 1 - (pc.dashT - alpha) / airTicks : -1;
+      const arc = leapK >= 0 ? Math.sin(Math.min(1, leapK) * Math.PI) : 0;
+      const lift =
+        pc.perchT > 0 ? PERCH_H + Math.sin(this.time * 5) * 1.5
+        : leapK < 0 ? 0
+        : pc.dashKind === 6 ? arc * 55
+        : pc.dashKind === 7 ? PERCH_H * (1 - Math.min(1, leapK)) + arc * 18
+        : arc * 95;
 
       const axis = new THREE.Vector3();
       if (dead) {
@@ -725,6 +778,18 @@ export class World3D implements WorldView {
         else if (cutCd > 0) swing = -0.5 * (cutCd / kitCd(pc.champ, SLOT.M1));
         rig.weapon.rotation.z = swing;
         twist = def ? ck * 0.25 : 0;
+      } else if (pc.champ === CHAMP.FROG) {
+        // Spear upright at rest; it tips forward in the windup and drives out on the jab.
+        // Perched, it points straight down under the frog; dropping, it stabs down.
+        const jabCd = pc.cooldowns[SLOT.M1];
+        let swing = 0;
+        if (def?.id === 'jab') swing = -ck * 1.1;
+        else if (def) swing = ck * 0.5;
+        else if (jabCd > 0) swing = -1.55 + (1 - jabCd / kitCd(pc.champ, SLOT.M1)) * 0.6;
+        if (pc.perchT > 0) swing = Math.PI - 0.15;
+        else if (pc.dashT > 0 && pc.dashKind === 7) swing = -2.4;
+        rig.weapon.rotation.z = swing;
+        twist = def?.id === 'jab' ? -ck * 0.3 : 0;
       } else {
         rig.weapon.rotation.z = -0.22 - ck * 0.95;
       }
@@ -871,8 +936,8 @@ export class World3D implements WorldView {
     group.add(core, glow, decal);
     this.scene.add(group);
     let chain: THREE.Mesh | null = null;
-    if (pr.kind === 'hook') {
-      chain = new THREE.Mesh(this.chainGeo, this.chainMat);
+    if (pr.kind === 'hook' || pr.kind === 'tongue') {
+      chain = new THREE.Mesh(this.chainGeo, pr.kind === 'tongue' ? this.tongueMat : this.chainMat);
       chain.castShadow = true;
       this.scene.add(chain);
     }
@@ -930,12 +995,13 @@ export class World3D implements WorldView {
 
       if (v.chain) {
         const hand = this.champions[pr.owner].root.position;
-        const from = new THREE.Vector3(hand.x, 32, hand.z);
+        // The hook's chain runs back to the warrior's hand, the tongue to the frog's mouth.
+        const from = new THREE.Vector3(hand.x, pr.kind === 'tongue' ? 40 : 32, hand.z);
         const dir = new THREE.Vector3(x, PROJ_H, y).sub(from);
         const len = dir.length();
         v.chain.position.copy(from).addScaledVector(dir, 0.5);
         v.chain.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), dir.normalize());
-        v.chain.scale.set(len, 1.8, 1.8);
+        v.chain.scale.set(len, pr.kind === 'tongue' ? 3 : 1.8, pr.kind === 'tongue' ? 3 : 1.8);
       }
 
       if (seen && li < this.lights.length) {
@@ -1055,7 +1121,17 @@ export class World3D implements WorldView {
       v.fill.visible = v.ring.visible = seen;
       const fillMat = v.fill.material as THREE.MeshBasicMaterial;
       const ringMat = v.ring.material as THREE.MeshBasicMaterial;
-      if (z.kind === 'converge') {
+      if (z.kind === 'toad') {
+        // The toad's maw closes in on the mark as it rises.
+        const k = z.t / TOAD.delay;
+        v.ring.scale.setScalar(Math.max(0.05, 0.4 + 0.6 * k));
+        fillMat.opacity = 0.1 + 0.2 * (1 - k) + 0.05 * Math.sin(this.time * 14);
+        ringMat.opacity = 0.9;
+      } else if (z.kind === 'marsh') {
+        const fade = Math.min(1, z.t / 30);
+        fillMat.opacity = (0.16 + 0.04 * Math.sin(this.time * 3)) * fade;
+        ringMat.opacity = 0.55 * fade;
+      } else if (z.kind === 'converge') {
         // The field closes in as the moment comes.
         const k = z.t / CONVERGE.delay;
         v.ring.scale.setScalar(Math.max(0.05, k));
@@ -1166,7 +1242,7 @@ export class World3D implements WorldView {
     }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1193,8 +1269,8 @@ export class World3D implements WorldView {
       this.aimCircle.position.set(p.x, 1.4, p.y);
       this.aimCircle.scale.setScalar((TIDES.r / METEOR.r) * (0.5 + 0.5 * draw));
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.crimson);
-    } else if ((id === 'meteor' || id === 'rain' || id === 'converge' || id === 'clock') && opts.cursor) {
-      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : id === 'clock' ? PROJ.clock.range : METEOR.range;
+    } else if ((id === 'meteor' || id === 'rain' || id === 'converge' || id === 'clock' || id === 'marsh' || id === 'toad') && opts.cursor) {
+      const range = id === 'rain' ? RAIN.range : id === 'converge' ? CONVERGE.range : id === 'clock' ? PROJ.clock.range : id === 'marsh' ? MARSH.range : id === 'toad' ? TOAD.range : METEOR.range;
       const w = this.screenToWorld(opts.cursor.x, opts.cursor.y);
       let dx = w.x - p.x;
       let dy = w.y - p.y;
@@ -1205,7 +1281,7 @@ export class World3D implements WorldView {
       }
       this.aimCircle.visible = true;
       this.aimCircle.position.set(p.x + dx, 1.4, p.y + dy);
-      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : id === 'clock' ? CLOCK.r / METEOR.r : 1);
+      this.aimCircle.scale.setScalar(id === 'rain' ? RAIN.r / METEOR.r : id === 'converge' ? CONVERGE.r / METEOR.r : id === 'clock' ? CLOCK.r / METEOR.r : id === 'marsh' ? MARSH.r / METEOR.r : id === 'toad' ? TOAD.r / METEOR.r : 1);
       (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
     }
   }

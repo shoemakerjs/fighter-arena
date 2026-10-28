@@ -1,4 +1,4 @@
-import { ARENA_R, CONVERGE, MAPS, METEOR, ORB_HP, ORB_R, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, WHIRL } from '../sim/constants';
+import { ARENA_R, CONVERGE, MAPS, MARSH, METEOR, ORB_HP, ORB_R, PICKUP, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SONIC, SPAWNS, SUDDEN_DEATH_AT, TOAD, WHIRL } from '../sim/constants';
 import { abilityOf } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -67,6 +67,7 @@ export class World2D implements WorldView {
     this.drawMeteors(cur);
     this.drawZones(cur, opts.localId);
     this.drawOrb(cur);
+    this.drawPickups(cur);
     this.drawPillars(cur);
     this.drawAimGuide(cur, opts);
 
@@ -238,6 +239,28 @@ export class World2D implements WorldView {
     }
   }
 
+  /** Healing pickups: a green cross over a faint ring showing the area it heals. */
+  private drawPickups(s: GameState) {
+    const { ctx } = this;
+    for (const pk of s.pickups) {
+      ctx.strokeStyle = COLORS.heal;
+      ctx.globalAlpha = 0.2 + 0.1 * Math.sin(this.time * 4);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(pk.x, pk.y, PICKUP.area, 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      const bob = Math.sin(this.time * 3 + pk.id) * 2;
+      ctx.save();
+      ctx.shadowColor = COLORS.heal;
+      ctx.shadowBlur = 18;
+      ctx.fillStyle = COLORS.heal;
+      ctx.fillRect(pk.x - 12, pk.y + bob - 4, 24, 8);
+      ctx.fillRect(pk.x - 4, pk.y + bob - 12, 8, 24);
+      ctx.restore();
+    }
+  }
+
   private drawOrb(s: GameState) {
     const { ctx } = this;
     const orb = s.orb;
@@ -314,10 +337,10 @@ export class World2D implements WorldView {
     const { ctx } = this;
     for (const z of s.zones) {
       if (z.kind === 'sonic' && localId !== null && z.owner !== localId) continue;
-      const r = z.kind === 'rain' ? RAIN.r : z.kind === 'converge' ? CONVERGE.r : z.kind === 'pulse' ? PULSE.r : SONIC.r;
+      const r = z.kind === 'rain' ? RAIN.r : z.kind === 'converge' ? CONVERGE.r : z.kind === 'pulse' ? PULSE.r : z.kind === 'marsh' ? MARSH.r : z.kind === 'toad' ? TOAD.r : SONIC.r;
       const falling = z.kind === 'rain' && z.t > RAIN.ticks;
       ctx.save();
-      ctx.fillStyle = ctx.strokeStyle = z.kind === 'rain' ? COLORS.vine : z.kind === 'sonic' ? COLORS.sonic : COLORS.chrono;
+      ctx.fillStyle = ctx.strokeStyle = z.kind === 'rain' ? COLORS.vine : z.kind === 'sonic' ? COLORS.sonic : z.kind === 'marsh' || z.kind === 'toad' ? COLORS.bog : COLORS.chrono;
       ctx.globalAlpha = z.kind === 'rain' ? (falling ? 0.12 : 0.2) : 0.06;
       ctx.beginPath();
       ctx.arc(z.x, z.y, r, 0, TAU);

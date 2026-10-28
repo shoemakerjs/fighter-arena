@@ -1192,6 +1192,7 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   if (champ === CHAMP.SAMURAI) return buildSamurai(color, glowTex);
   if (champ === CHAMP.BLOOD) return buildVampire(color, glowTex);
   if (champ === CHAMP.CHRONO) return buildRustic(color, glowTex);
+  if (champ === CHAMP.FROG) return buildLotan(color, glowTex);
   // No modeled skin yet: the test mannequin.
   return buildDummy(color, glowTex);
 }
@@ -3370,4 +3371,227 @@ function buildRustic(color: string, glowTex: THREE.Texture): ChampionRig {
 
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matFur, matBelly, matPink, matRags, matScarf, matLeather, matBronze, matIron, matSteel, matHaft], ...markers };
+}
+
+/** A serrated leaf lying in the XY plane, stem at the origin, pointing down -Y. */
+function leafGeometry(width: number, length: number): THREE.ShapeGeometry {
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0);
+  const teeth = 5;
+  for (let i = 1; i <= teeth; i++) {
+    const t = i / teeth;
+    const w = Math.sin(Math.PI * Math.min(1, t * 1.1)) * width * 0.5;
+    shape.lineTo(w * (i % 2 ? 1 : 0.8), -length * (t - 0.08));
+  }
+  shape.lineTo(0, -length);
+  for (let i = teeth; i >= 1; i--) {
+    const t = i / teeth;
+    const w = Math.sin(Math.PI * Math.min(1, t * 1.1)) * width * 0.5;
+    shape.lineTo(-w * (i % 2 ? 1 : 0.8), -length * (t - 0.08));
+  }
+  shape.closePath();
+  return new THREE.ShapeGeometry(shape);
+}
+
+/**
+ * Lotan — swamp frog spearman (from the concept sheet), toon style: a stocky green frog
+ * with sleepy amber eyes under a wide leaf hat crowned with a red lotus, red bead strings
+ * and leaf charms swaying from the brim, a red scarf, a cloak of olive and rust leaves over
+ * a pale robe, wrapped shins and big webbed feet, a net bag on the back, and a stone-tipped
+ * spear wound with red cloth in the right hand (the weapon). Team color: the scarf knot
+ * and a band on the spear.
+ */
+function buildLotan(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team);
+  const matSkin = toonSoft('#7d9a5a');
+  const matBelly = toonSoft('#d9d2a8');
+  const matRobe = toon('#d6ccb4', { side: THREE.DoubleSide });
+  const matLeafA = toon('#5f7a34', { side: THREE.DoubleSide });
+  const matLeafB = toon('#8c3a2a', { side: THREE.DoubleSide });
+  const matLeafC = toon('#a86a32', { side: THREE.DoubleSide });
+  const matHat = toon('#6b7f3c', { side: THREE.DoubleSide });
+  const matScarf = toon('#a8282c', { side: THREE.DoubleSide });
+  const matBead = toon('#b3262c');
+  const matWrap = toon('#8a7558');
+  const matLeather = toon('#5a4330');
+  const matNet = toon('#6a4a2e');
+  const matHaft = toon('#5c4128');
+  const matStone = toon('#8d8e94');
+  const matLotus = new THREE.MeshToonMaterial({ color: '#e0453a', gradientMap: toonGradient(), emissive: '#5a0d08' });
+  const matPollen = new THREE.MeshBasicMaterial({ color: '#ffcf4a', toneMapped: false });
+  const matEye = toonSoft('#e2b45a');
+  const matPupil = new THREE.MeshBasicMaterial({ color: '#141010' });
+  const matFlower = toon('#f2efe6');
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+
+  // Short legs with wrapped shins and big webbed feet
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0, 14, side * 5.5), v(1.5, 4, side * 6.5), 2.8, matSkin));
+    wraps(body, v(0.6, 10, side * 6.1), v(1.4, 4.5, side * 6.5), 2.9, 3, matWrap);
+    const foot = keep(add(new THREE.SphereGeometry(4, 12, 8), matSkin, 4.5, 1.2, side * 7));
+    foot.scale.set(1.5, 0.35, 1.05);
+    for (let k = -1; k <= 1; k++) keep(add(new THREE.SphereGeometry(1.1, 8, 6), matSkin, 9.5, 1, side * 7 + k * 2.4));
+  }
+
+  // Pale robe under the cloak
+  keep(add(raggedLathe([[11, 6], [10.5, 12], [9.6, 20], [8.6, 26]], 24, 3, 41), matRobe, 0, 0, 0));
+  keep(add(new THREE.SphereGeometry(9, 16, 12), matRobe, 0, 24, 0)).scale.set(1, 1, 1.12);
+  const belt = add(new THREE.TorusGeometry(9.4, 1.1, 6, 24), matScarf, 0, 18, 0);
+  belt.rotation.x = Math.PI / 2;
+  add(new THREE.BoxGeometry(3.4, 4, 3), matLeather, 9, 16, 4);
+
+  // Cloak of leaves: olive layers with rust and amber leaves hanging from the shoulders
+  keep(add(raggedLathe([[14, 9], [13, 15], [11.5, 22], [9, 29], [6, 33]], 26, 5, 13, Math.PI * 0.35, Math.PI * 1.3), matLeafA, 0, 0, 0));
+  keep(add(raggedLathe([[12.5, 16], [11, 23], [8.6, 30], [6, 34]], 22, 4, 29, Math.PI * 0.2, Math.PI * 1.6), matLeafB, 0, 1.5, 0));
+  const leafGeo = leafGeometry(6, 13);
+  const leafMats = [matLeafA, matLeafB, matLeafC];
+  for (let i = 0; i < 26; i++) {
+    const a = Math.PI * 0.3 + (i / 26) * Math.PI * 1.4;
+    const row = i % 2;
+    const r = 10.5 - row * 1.2;
+    const leaf = add(leafGeo, leafMats[(i * 7) % 3], Math.cos(a) * r, 33 - row * 7, Math.sin(a) * r);
+    leaf.rotation.y = -a + Math.PI / 2;
+    leaf.rotation.x = -0.25 - row * 0.1;
+    leaf.scale.setScalar(0.9 + ((i * 13) % 5) * 0.08);
+  }
+
+  // Red scarf around the neck, a tail flapping on the chest, the team knot
+  const scarf = keep(add(new THREE.TorusGeometry(8, 2.6, 8, 22), matScarf, 0.6, 35, 0));
+  scarf.rotation.x = Math.PI / 2;
+  scarf.scale.set(1, 1.1, 0.8);
+  const tail = add(raggedPanel(5, 11, 4, 53), matScarf, 7.6, 34, -3);
+  tail.rotation.y = Math.PI / 2 - 0.2;
+  add(new THREE.OctahedronGeometry(1.8, 0), matTeam, 8.4, 33.5, -1.5);
+  add(new THREE.CircleGeometry(1.6, 8), matFlower, 7.8, 36, 4.8).rotation.y = Math.PI / 2 - 0.5;
+
+  // Net bag on the back: a round sack with a cord net over it
+  const bag = new THREE.Group();
+  bag.position.set(-11, 25, -1);
+  body.add(bag);
+  keep(add(new THREE.SphereGeometry(7, 14, 10), matNet, 0, 0, 0, bag));
+  add(new THREE.SphereGeometry(7.3, 8, 6), new THREE.MeshBasicMaterial({ color: '#2e2016', wireframe: true }), 0, 0, 0, bag);
+  add(new THREE.SphereGeometry(2.4, 10, 8), toon('#a5743c'), 2, 6, 5, bag);
+
+  // Head: a wide frog head with a pale chin and sleepy amber eyes
+  const head = new THREE.Group();
+  head.position.set(1.5, 42, 0);
+  body.add(head);
+  keep(add(new THREE.SphereGeometry(9, 20, 14), matSkin, 0, 0, 0, head)).scale.set(1, 0.72, 1.12);
+  keep(add(new THREE.SphereGeometry(8.4, 18, 12), matBelly, 1.6, -2.2, 0, head)).scale.set(0.92, 0.5, 1.02);
+  // Mouth line
+  const mouth = add(new THREE.TorusGeometry(7.4, 0.35, 4, 20, Math.PI * 0.8), matPupil, 2, -1.4, 0, head);
+  mouth.rotation.set(Math.PI / 2, 0, -Math.PI * 0.4 - Math.PI / 2);
+  for (const side of [-1, 1]) {
+    const eye = keep(add(new THREE.SphereGeometry(3.4, 14, 10), matEye, 5.6, 3.6, side * 5, head));
+    eye.scale.set(0.8, 0.95, 1);
+    // Heavy lid over the top half, and a slit pupil
+    const lid = add(new THREE.SphereGeometry(3.6, 14, 8, 0, TAU, 0, Math.PI * 0.45), matSkin, 5.6, 3.7, side * 5, head);
+    lid.rotation.z = -0.45;
+    lid.scale.set(0.85, 1, 1.05);
+    add(new THREE.BoxGeometry(0.8, 0.9, 2.6), matPupil, 8.3, 3.1, side * 5, head);
+    add(new THREE.SphereGeometry(0.5, 6, 4), matTeam, 7, -0.4, side * 6.4, head);
+  }
+
+  // Wide leaf hat with a ragged brim, a red lotus on top, bead strings around the brim
+  const hat = new THREE.Group();
+  hat.position.set(0, 7, 0);
+  hat.rotation.z = -0.08;
+  head.add(hat);
+  keep(add(lathe([[24, -1.2], [22, 0], [15, 2.2], [8, 5], [3, 7.5], [0.2, 8]], 30), matHat, 0, 0, 0, hat));
+  for (let i = 0; i < 18; i++) {
+    const a = (i / 18) * TAU;
+    const leaf = add(leafGeo, i % 4 === 0 ? matLeafC : matLeafA, Math.cos(a) * 17, 2.4, Math.sin(a) * 17, hat);
+    leaf.rotation.y = -a - Math.PI / 2;
+    leaf.rotation.x = -Math.PI / 2 + 0.35;
+    leaf.scale.set(1.1, 0.75, 1);
+  }
+  const lotus = new THREE.Group();
+  lotus.position.set(-1, 8, 0);
+  hat.add(lotus);
+  const petal = new THREE.SphereGeometry(2.2, 10, 8);
+  for (let ring = 0; ring < 2; ring++) {
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * TAU + ring * 0.45;
+      const p = add(petal, matLotus, Math.cos(a) * (3 - ring * 1.3), 2 + ring * 1.6, Math.sin(a) * (3 - ring * 1.3), lotus);
+      p.scale.set(0.55, 2.4 - ring * 0.6, 1);
+      p.rotation.set(Math.sin(a) * (1 - ring * 0.45), 0, -Math.cos(a) * (1 - ring * 0.45));
+    }
+  }
+  add(new THREE.SphereGeometry(1.3, 8, 6), matPollen, 0, 3.4, 0, lotus);
+  const lotusGlow = glowSprite(glowTex, '#ff6a4a', 18, 0.5);
+  lotusGlow.position.set(0, 4, 0);
+  lotus.add(lotusGlow);
+  add(new THREE.CircleGeometry(4.2, 14), matLeafA, 4.5, 6.4, 3, hat).rotation.x = -Math.PI / 2 + 0.3;
+  // Bead strings swaying from the brim, each ending in a little leaf charm
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * TAU + 0.3;
+    const x = Math.cos(a) * 19;
+    const z = Math.sin(a) * 19;
+    limb(hat, v(x, -1, z), v(x, -12, z), 0.18, matLeather);
+    for (let k = 0; k < 3; k++) add(new THREE.SphereGeometry(1.15, 8, 6), matBead, x, -3.5 - k * 2.8, z, hat);
+    const charm = add(new THREE.ConeGeometry(1.1, 4, 5), matLeafC, x, -14, z, hat);
+    charm.rotation.x = Math.PI;
+  }
+
+  // Left arm hangs at the side
+  keep(limb(body, v(1, 31, -10), v(4, 22, -12), 2.4, matRobe));
+  keep(add(new THREE.SphereGeometry(2.4, 10, 8), matSkin, 5, 20, -12));
+
+  // Right arm: the weapon, holding the spear upright from the shoulder
+  const weapon = new THREE.Group();
+  weapon.position.set(1, 31, 10);
+  body.add(weapon);
+  const hand = v(6, -9, 2.5);
+  keep(limb(weapon, v(0, 0, 0), hand, 2.4, matRobe));
+  keep(add(new THREE.SphereGeometry(2.4, 10, 8), matSkin, hand.x, hand.y, hand.z, weapon));
+  const spear = new THREE.Group();
+  spear.position.copy(hand);
+  weapon.add(spear);
+  keep(add(new THREE.CylinderGeometry(0.85, 1, 64, 8), matHaft, 0, 12, 0, spear));
+  wraps(spear, v(0, -2, 0), v(0, 3, 0), 1.2, 3, matLeather);
+  add(new THREE.CylinderGeometry(1.2, 1.2, 2, 8), matTeam, 0, 30, 0, spear);
+  // Red cloth wound under the head, with beads and a feather hanging off it
+  wraps(spear, v(0, 35, 0), v(0, 41, 0), 1.3, 4, matScarf);
+  const rag = add(raggedPanel(3, 12, 3, 61), matScarf, 0.8, 37, 0, spear);
+  rag.rotation.y = Math.PI / 2;
+  for (let k = 0; k < 3; k++) add(new THREE.SphereGeometry(0.9, 6, 4), matBead, -1.2, 33 - k * 2.2, 1, spear);
+  const feather = add(leafGeometry(2.4, 8), matLeafC, -1.2, 26.5, 1, spear);
+  feather.rotation.y = Math.PI / 2;
+  // Knapped stone head
+  const head2 = keep(add(new THREE.OctahedronGeometry(3.2, 0), matStone, 0, 47, 0, spear));
+  head2.scale.set(1, 2.6, 0.45);
+  const tip = add(new THREE.SphereGeometry(0.6, 8, 6), matPollen, 0, 55, 0, spear);
+  const tipGlow = glowSprite(glowTex, COLORS.bog, 14, 0.7);
+  tipGlow.position.copy(tip.position);
+  spear.add(tipGlow);
+
+  shadowed(body);
+  tip.castShadow = false;
+  body.traverse((o) => {
+    const m = (o as THREE.Mesh).material;
+    if (m === matPupil || m === matPollen || (o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry === leafGeo) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matSkin, matBelly, matRobe, matLeafA, matLeafB, matLeafC, matHat, matScarf, matWrap, matLeather, matHaft, matStone], ...markers };
 }

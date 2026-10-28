@@ -422,6 +422,16 @@ button {
   width: 200px;
 }
 
+.lobby-bots {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.lobby-bots .segmented {
+  width: 270px;
+}
+
 .lobby-slots.duo {
   gap: 40px;
 }

@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, KATANA, LEAP, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DAGGER, DRAIN, EXECUTE, FATE, FLICKER, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, TOAD, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, solidsOf, teamSees, walkTarget } from '../sim/vision';
 import type { Pillar } from '../sim/constants';
@@ -15,13 +15,52 @@ interface Profile {
   aggression: number;
   /** How much of the target's movement it leads its shots by. */
   lead: number;
+  /** Chance that a stretch of aiming is way off (a clear miss). */
+  wild: number;
 }
 
 const PROFILES: Record<Difficulty, Profile> = {
-  easy: { reaction: 22, aimError: 0.16, dodge: 0.25, aggression: 0.45, lead: 0.4 },
-  normal: { reaction: 14, aimError: 0.09, dodge: 0.55, aggression: 0.75, lead: 0.8 },
-  hard: { reaction: 8, aimError: 0.04, dodge: 0.85, aggression: 1, lead: 1 },
+  easy: { reaction: 30, aimError: 0.22, dodge: 0.15, aggression: 0.35, lead: 0.2, wild: 0.35 },
+  normal: { reaction: 22, aimError: 0.16, dodge: 0.25, aggression: 0.45, lead: 0.4, wild: 0 },
+  hard: { reaction: 8, aimError: 0.04, dodge: 0.85, aggression: 1, lead: 1, wild: 0 },
 };
+
+/** Obstacles grown by (just under) a champion's radius, per map, for path checks: sliding along a wall still counts as a way. */
+const padded = new Map<Pillar[], Pillar[]>();
+function paddedSolids(solids: Pillar[]): Pillar[] {
+  let out = padded.get(solids);
+  if (!out) {
+    out = solids.map((pl) => ({ x: pl.x, y: pl.y, r: pl.r + PLAYER_R - 2 }));
+    padded.set(solids, out);
+  }
+  return out;
+}
+
+/**
+ * Can a champion walk straight from (x0, y0) to (x1, y1) past the padded obstacles? One it is
+ * already brushing (standing against a wall) only blocks if the way leads into it.
+ */
+function walkable(x0: number, y0: number, x1: number, y1: number, pads: Pillar[]): boolean {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len2 = dx * dx + dy * dy;
+  for (const pl of pads) {
+    const ox = x0 - pl.x;
+    const oy = y0 - pl.y;
+    if (ox * ox + oy * oy < pl.r * pl.r) {
+      if (ox * dx + oy * dy < 0) return false;
+      continue;
+    }
+    const t = len2 > 0 ? Math.max(0, Math.min(1, -(ox * dx + oy * dy) / len2)) : 0;
+    const cx = ox + dx * t;
+    const cy = oy + dy * t;
+    if (cx * cx + cy * cy < pl.r * pl.r) return false;
+  }
+  return true;
+}
+
+/** Directions to try for a detour: 16 around the circle. */
+const AROUND = Array.from({ length: 16 }, (_, i) => [Math.cos((i / 16) * Math.PI * 2), Math.sin((i / 16) * Math.PI * 2)]);
 
 const PREFERRED_RANGE = 300;
 
@@ -62,6 +101,15 @@ export class Bot {
   private targetId = -1;
   /** Per-projectile decision: will the bot react to it at all? */
   private judged = new Map<number, boolean>();
+  /** Detour point while a wall is in the way, and how long to keep heading for it. */
+  private wpX = 0;
+  private wpY = 0;
+  private wpT = 0;
+  /** Where it was a moment ago, to notice being stuck; while unstickT runs it heads for the middle. */
+  private stuckX = 0;
+  private stuckY = 0;
+  private stuckT = 0;
+  private unstickT = 0;
 
   constructor(
     readonly id: number,
@@ -83,6 +131,7 @@ export class Bot {
       this.lastTy = this.seenY = foe.y;
       this.tvx = this.tvy = 0;
       this.judged.clear();
+      this.wpT = this.unstickT = this.stuckT = 0;
       return { mx: 0, my: 0, ax: Math.round(foe.x), ay: Math.round(foe.y), buttons: 0 };
     }
 
@@ -117,9 +166,10 @@ export class Bot {
     const samurai = me.champ === CHAMP.SAMURAI;
     const blood = me.champ === CHAMP.BLOOD;
     const chrono = me.champ === CHAMP.CHRONO;
+    const frog = me.champ === CHAMP.FROG;
     // Champions that fight up close and walk in rather than kite.
-    const melee = warrior || samurai || chrono;
-    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO;
+    const melee = warrior || samurai || chrono || frog;
+    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO || foe.champ === CHAMP.FROG;
     const foeLow = foe.hp <= CHAMPIONS[foe.champ].hp * EXECUTE.threshold;
     const kit = CHAMPIONS[me.champ].abilities;
     const ready = (slot: number) => me.cooldowns[slot] === 0 && me.energy >= kit[slot].energyCost;
@@ -128,7 +178,8 @@ export class Bot {
     // --- Movement: warriors close in, mages hold range (more of it against melee) and strafe.
     let wx = 0;
     let wy = 0;
-    const pref = assassin ? (foeMelee ? 300 : 230) : archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
+    // Shade's daggers cut deep only up close, so it fights at knife range.
+    const pref = assassin ? (foeMelee ? 170 : DAGGER.close - 20) : archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
     const radial = melee ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
     // With the river in between, close in by a bridge, or (melee, near the water, mobility
     // ready) walk straight at it and hop over like a person would.
@@ -137,20 +188,40 @@ export class Bot {
     let detour = false;
     let hop = false;
     const river = MAPS[s.map].river;
-    if (radial > 0) {
-      const goal = walkTarget(s, me.x, me.y, tx, ty);
-      const across = goal.x !== tx || goal.y !== ty;
-      if (across && river && melee && !hidden && me.cast === null && ready(SLOT.SPACE) && Math.abs(me.x) < 220) {
+    const solids = solidsOf(s);
+    // Barely moved for a while (wedged in a nook behind a wall): walk out toward the middle.
+    if (--this.stuckT <= 0) {
+      const moved = Math.hypot(me.x - this.stuckX, me.y - this.stuckY);
+      if (moved < 20 && me.dashT === 0 && me.rootT === 0 && me.stunT === 0 && me.cast === null && dist > 120) this.unstickT = 70;
+      this.stuckX = me.x;
+      this.stuckY = me.y;
+      this.stuckT = 40;
+    }
+    let walk = radial;
+    let goal = { x: tx, y: ty };
+    if (this.unstickT > 0) {
+      this.unstickT--;
+      walk = 1;
+      goal = { x: 0, y: 0 };
+    }
+    if (walk > 0) {
+      const target = goal;
+      goal = walkTarget(s, me.x, me.y, target.x, target.y);
+      const across = goal.x !== target.x || goal.y !== target.y;
+      if (across && river && melee && !hidden && me.cast === null && ready(SLOT.SPACE) && Math.abs(me.x) < 220 && this.unstickT === 0) {
         hop = Math.abs(me.x) < river.half + PLAYER_R / 2 + 25;
-      } else if (across) {
-        const gd = Math.max(1, Math.hypot(goal.x - me.x, goal.y - me.y));
-        gx = (goal.x - me.x) / gd;
-        gy = (goal.y - me.y) / gd;
-        detour = true;
+      } else {
+        // A wall or pillar in the way: head for a detour point around it.
+        const via = this.waypoint(me, goal.x, goal.y, solids, s.arenaR);
+        detour = across || via !== null || this.unstickT > 0;
+        const to = via ?? goal;
+        const gd = Math.max(1, Math.hypot(to.x - me.x, to.y - me.y));
+        gx = (to.x - me.x) / gd;
+        gy = (to.y - me.y) / gd;
       }
     }
-    wx += gx * radial * (melee ? 1.4 : 1);
-    wy += gy * radial * (melee ? 1.4 : 1);
+    wx += gx * walk * (melee || detour ? 1.4 : 1);
+    wy += gy * walk * (melee || detour ? 1.4 : 1);
 
     if (--this.strafeT <= 0) {
       this.strafe = r() < 0.5 ? -1 : 1;
@@ -161,12 +232,12 @@ export class Bot {
     wy += nx * this.strafe * strafe;
 
     const ed = Math.hypot(me.x, me.y);
-    if (ed > s.arenaR - 120) {
+    // Off the edge (unless that is the way round a wall).
+    if (ed > s.arenaR - 120 && !detour) {
       wx -= (me.x / ed) * 1.6;
       wy -= (me.y / ed) * 1.6;
     }
     // Slide around pillars and walls instead of grinding into them.
-    const solids = solidsOf(s);
     for (const pl of solids) {
       const pd = Math.hypot(me.x - pl.x, me.y - pl.y);
       if (pd < pl.r + PLAYER_R + 30) {
@@ -178,6 +249,18 @@ export class Bot {
     if (s.orb.active && Math.hypot(me.x, me.y) < Math.hypot(tx, ty) && r() < 0.5) {
       wx -= me.x / Math.max(1, ed);
       wy -= me.y / Math.max(1, ed);
+    }
+
+    // Hurt, with a healing pickup close by: go and take it.
+    if (me.hp < CHAMPIONS[me.champ].hp * 0.7 && me.pickT === 0) {
+      for (const pk of s.pickups) {
+        const pd = Math.hypot(pk.x - me.x, pk.y - me.y);
+        if (pd < 260 && pd > 1) {
+          wx += ((pk.x - me.x) / pd) * 1.5;
+          wy += ((pk.y - me.y) / pd) * 1.5;
+          break;
+        }
+      }
     }
 
     // --- Dodging.
@@ -243,7 +326,10 @@ export class Bot {
       dodging = true;
       wx = dodgeX * 2;
       wy = dodgeY * 2;
-      if (samurai && threatT < 18 && ready(SLOT.Q) && r() < 0.5) {
+      if (frog && threatT < 14 && ready(SLOT.Q) && r() < 0.6) {
+        // Up on the spear and out of reach.
+        buttons |= BTN.Q;
+      } else if (samurai && threatT < 18 && ready(SLOT.Q) && r() < 0.5) {
         // Deflect, facing the incoming projectile.
         buttons |= BTN.Q;
         deflecting = true;
@@ -271,7 +357,7 @@ export class Bot {
     // --- Attacking.
     const los = this.lineOfSight(me.x, me.y, tx, ty, solids);
     let aimId: AbilityId = me.cast ? kit[me.cast.ability].id : kit[SLOT.M1].id;
-    const busy = me.cast !== null || me.counterT > 0 || me.dashT > 0;
+    const busy = me.cast !== null || me.counterT > 0 || me.dashT > 0 || me.perchT > 0;
     // A samurai deflecting towards us would send any projectile straight back: hold fire, like a person would.
     const foeDeflecting = foe.deflectT > 0 && !hidden && foe.fx * (me.x - foe.x) + foe.fy * (me.y - foe.y) > 0;
     const press = (slot: number) => {
@@ -303,6 +389,20 @@ export class Bot {
           engage = true;
         } else if (ready(SLOT.M2) && los && dist < (crescent ? PROJ.crescent.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
         else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
+      } else if (frog) {
+        const reach = 2 * PLAYER_R + JAB.len - 8;
+        const pinned = foe.stunT > 0 || foe.slowT > 0 || foe.rootT > 0 || foe.cast !== null;
+        const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.35;
+        if (ready(SLOT.R) && !hidden && dist < TOAD.range - 40 && r() < (pinned || dist < 140 ? 0.25 : 0.02)) press(SLOT.R);
+        // Perch over a big hit coming (the enemy winding up right next to it).
+        else if (ready(SLOT.Q) && !hidden && dist < 150 && foe.cast !== null && r() < 0.15) press(SLOT.Q);
+        else if (ready(SLOT.M2) && los && !hidden && dist > reach && dist < PROJ.tongue.range - 20 && r() < 0.1 * a) press(SLOT.M2);
+        else if (ready(SLOT.SPACE) && !hidden && (lowMe ? dist < 160 : dist > PROJ.tongue.range && dist < PROJ.tongue.range + LILY.range) && r() < 0.05 * a) {
+          press(SLOT.SPACE);
+          engage = !lowMe;
+          escape = lowMe;
+        } else if (ready(SLOT.E) && !hidden && dist < MARSH.range && r() < 0.03 * a) press(SLOT.E);
+        else if (dist < reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (chrono) {
         const reach = 2 * PLAYER_R + CHRONO.reach;
         // Rewind after a bad trade (it lost a lot over the last three seconds), or when low and cornered.
@@ -376,8 +476,9 @@ export class Bot {
     // --- Aim with lead + slowly drifting error.
     if (--this.errT <= 0) {
       this.errT = 25 + Math.floor(r() * 20);
-      this.errX = (r() * 2 - 1) * this.p.aimError * dist;
-      this.errY = (r() * 2 - 1) * this.p.aimError * dist;
+      const err = this.p.aimError * (r() < this.p.wild ? 2.5 : 1);
+      this.errX = (r() * 2 - 1) * err * dist;
+      this.errY = (r() * 2 - 1) * err * dist;
     }
     let ax: number;
     let ay: number;
@@ -385,6 +486,10 @@ export class Bot {
       // Hopping the river: dash, leap or skip straight at the target.
       ax = tx;
       ay = ty;
+    } else if (me.perchT > 0) {
+      // Up on the spear: drop right onto the target.
+      ax = tx + this.tvx * 10 * this.p.lead;
+      ay = ty + this.tvy * 10 * this.p.lead;
     } else if (deflecting || me.deflectT > 0) {
       // Face the incoming projectile, or else the shooter, so the deflect catches it.
       ax = threatT < Infinity ? threatX : tx;
@@ -418,8 +523,11 @@ export class Bot {
       const away = me.hp < CHAMPIONS[me.champ].hp * 0.3 && foe.hp >= CHAMPIONS[foe.champ].hp * 0.4;
       ax = away ? me.x - nx * SWARM.range : tx + nx * 80;
       ay = away ? me.y - ny * SWARM.range : ty + ny * 80;
-    } else if (aimId === 'meteor' || aimId === 'rain') {
-      const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : METEOR.delay);
+    } else if (aimId === 'marsh') {
+      ax = tx;
+      ay = ty;
+    } else if (aimId === 'meteor' || aimId === 'rain' || aimId === 'toad') {
+      const t = kit[SLOT.R].cast + (aimId === 'rain' ? RAIN.delay : aimId === 'toad' ? TOAD.delay : METEOR.delay);
       ax = tx + this.tvx * t * this.p.lead * 0.5;
       ay = ty + this.tvy * t * this.p.lead * 0.5;
     } else if (aimId === 'leap') {
@@ -466,6 +574,43 @@ export class Bot {
       this.lastTy = this.seenY = best.y;
       this.tvx = this.tvy = 0;
     }
+    return best;
+  }
+
+  /**
+   * A detour point on the way to (gx, gy), or null when nothing blocks the straight way: the
+   * reachable point around the obstacle that leaves the shortest way on (kept for a while
+   * so the bot doesn't dither between two).
+   */
+  private waypoint(me: Player, gx: number, gy: number, solids: Pillar[], arenaR: number): { x: number; y: number } | null {
+    const pads = paddedSolids(solids);
+    if (walkable(me.x, me.y, gx, gy, pads)) {
+      this.wpT = 0;
+      return null;
+    }
+    if (this.wpT > 0 && Math.hypot(this.wpX - me.x, this.wpY - me.y) > 25 && walkable(me.x, me.y, this.wpX, this.wpY, pads)) {
+      this.wpT--;
+      return { x: this.wpX, y: this.wpY };
+    }
+    const lim = arenaR - PLAYER_R - 12;
+    let best: { x: number; y: number } | null = null;
+    let bestCost = Infinity;
+    for (const reach of [90, 170, 260]) {
+      for (const [cx, cy] of AROUND) {
+        const x = me.x + cx * reach;
+        const y = me.y + cy * reach;
+        if (Math.hypot(x, y) > lim || !walkable(me.x, me.y, x, y, pads)) continue;
+        const cost = reach + Math.hypot(gx - x, gy - y) + (walkable(x, y, gx, gy, pads) ? 0 : 300);
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = { x, y };
+        }
+      }
+    }
+    if (!best) return null;
+    this.wpX = best.x;
+    this.wpY = best.y;
+    this.wpT = 30;
     return best;
   }
 

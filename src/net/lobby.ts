@@ -1,4 +1,4 @@
-import { Bot } from '../input/bot';
+import { Bot, type Difficulty } from '../input/bot';
 import { CHAMPIONS, MAPS } from '../sim/constants';
 import { roughen } from '../ui/rough';
 import { setStatusChip, type ChampionSelect } from '../ui/select';
@@ -18,9 +18,6 @@ export interface LobbyHooks {
 
 const $ = (id: string) => document.getElementById(id)!;
 
-/** Bots the host runs for empty 2v2 seats. */
-const BOT_LEVEL = 'normal';
-
 /**
  * Online lobby, 1v1 or 2v2. The host opens it and shares a link; guests join and
  * take seats (team 1 = seats 0 and 2, team 2 = seats 1 and 3; in 2v2 empty seats
@@ -34,6 +31,8 @@ export class Lobby {
   private link: NetLink | null = null;
   private isHost = false;
   private format: Format = '1v1';
+  /** How good the bots in empty 2v2 seats are (the host picks; they run on the host). */
+  private botLevel: Difficulty = 'normal';
   /** Who sits where: HOST, a guest's peer id, or null (empty / bot). */
   private seats: (string | null)[] = [HOST, null];
   /** Name per seat ("Host", "Player 2"…), null where empty. */
@@ -72,6 +71,14 @@ export class Lobby {
       btn.addEventListener('click', () => {
         (document.activeElement as HTMLElement | null)?.blur();
         if (this.isHost) this.setFormat(btn.dataset.format as Format);
+      });
+    }
+    for (const btn of $('lobby-bot-level').querySelectorAll<HTMLButtonElement>('button')) {
+      btn.addEventListener('click', () => {
+        (document.activeElement as HTMLElement | null)?.blur();
+        if (!this.isHost || this.session) return;
+        this.botLevel = btn.dataset.level as Difficulty;
+        this.broadcastRoom();
       });
     }
   }
@@ -168,6 +175,7 @@ export class Lobby {
     this.link?.close();
     this.isHost = host;
     this.format = '1v1';
+    this.botLevel = 'normal';
     this.seats = host ? [HOST, null] : [null, null];
     this.names = host ? ['Host', null] : [null, null];
     this.ready = [false, false];
@@ -247,7 +255,7 @@ export class Lobby {
 
   /** Host: the room to every guest, then our own screen. */
   private broadcastRoom() {
-    this.link?.send({ t: 'room', format: this.format, seats: this.seats, names: this.names, ready: this.ready });
+    this.link?.send({ t: 'room', format: this.format, seats: this.seats, names: this.names, ready: this.ready, bots: this.botLevel });
     this.refresh();
   }
 
@@ -275,6 +283,7 @@ export class Lobby {
       case 'room':
         if (this.isHost) break;
         this.format = msg.format;
+        this.botLevel = msg.bots;
         this.seats = msg.seats;
         this.names = msg.names;
         this.ready = msg.ready;
@@ -343,7 +352,7 @@ export class Lobby {
     const hostSlot = seats.indexOf(HOST);
     const humans = seats.map((id, i) => (id ? i : -1)).filter((i) => i >= 0);
     const bots = new Map<number, InputSource>();
-    if (this.isHost) seats.forEach((id, i) => !id && bots.set(i, new Bot(i, BOT_LEVEL, Math.floor(Math.random() * 1e6))));
+    if (this.isHost) seats.forEach((id, i) => !id && bots.set(i, new Bot(i, this.botLevel, Math.floor(Math.random() * 1e6))));
     const session = new RollbackSession(
       { localId: this.mySeat, champs, map, hostSlot, humans, bots },
       {
@@ -390,6 +399,12 @@ export class Lobby {
       b.classList.toggle('active', b.dataset.format === this.format);
       const people = this.seats.filter((id) => id !== null).length;
       b.disabled = !this.isHost || (b.dataset.format === '1v1' && people > 2);
+    }
+    // Bot difficulty: 2v2 only (empty seats); the host sets it, guests see it.
+    $('lobby-bots').classList.toggle('hidden', this.format !== '2v2');
+    for (const b of $('lobby-bot-level').querySelectorAll<HTMLButtonElement>('button')) {
+      b.classList.toggle('active', b.dataset.level === this.botLevel);
+      b.disabled = !this.isHost;
     }
     this.renderSeats();
 

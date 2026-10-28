@@ -1,12 +1,13 @@
 import { Peer, type DataConnection } from 'peerjs';
+import type { Difficulty } from '../input/bot';
 import type { GameState, Input } from '../sim/types';
 
 /** Everything the players say to each other. Guests talk only to the host; the host relays. */
 export type NetMsg =
   /** First thing each side says: which build it runs (they must match). */
   | { t: 'hello'; build: string }
-  /** Host → everyone: the room — format, who sits where (peer ids, null = empty/bot), names, who's locked in. */
-  | { t: 'room'; format: '1v1' | '2v2'; seats: (string | null)[]; names: (string | null)[]; ready: boolean[] }
+  /** Host → everyone: the room — format, who sits where (peer ids, null = empty/bot), names, who's locked in, how good the bots are. */
+  | { t: 'room'; format: '1v1' | '2v2'; seats: (string | null)[]; names: (string | null)[]; ready: boolean[]; bots: Difficulty }
   /** Guest → host: move me to this empty seat. */
   | { t: 'sit'; seat: number }
   /** Our pick and ready flag (guest → host). */

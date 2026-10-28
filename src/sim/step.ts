@@ -25,6 +25,7 @@ import {
   COUNTDOWN_TICKS,
   COUNTER,
   CRY,
+  DAGGER,
   DASH,
   DUMMY,
   DEFLECT,
@@ -33,11 +34,14 @@ import {
   FATE,
   FLICKER,
   HASTE_MUL,
+  JAB,
   KATANA,
   KB_DECAY,
   LEAP,
+  LILY,
   LONGSHOT,
   MARK,
+  MARSH,
   MAX_ENERGY,
   METEOR,
   ORB_ENERGY,
@@ -47,6 +51,8 @@ import {
   ORB_RESPAWN,
   ORB_SPAWN_AT,
   MAPS,
+  PERCH,
+  PICKUP,
   PLAYER_R,
   POISON,
   PROJ,
@@ -70,6 +76,8 @@ import {
   TEAM_SPREAD,
   TEMPEST,
   TIDES,
+  TOAD,
+  TONGUE,
   TRANSFUSION,
   VAULT,
   WHIRL,
@@ -83,14 +91,15 @@ import { lineClear, solidsOf } from './vision';
 /**
  * `champs` has one entry per player: two for 1v1, four for 2v2 (teams by id % 2).
  * `training`: player 1 is a training dummy standing in the middle (champs[1] is ignored).
- * `map`: index into MAPS.
+ * `map`: index into MAPS, the first round's map; `rotateMaps` picks another one every round after.
  */
-export function createMatch(champs: number[] = [0, 0], training = false, map = 0): GameState {
+export function createMatch(champs: number[] = [0, 0], training = false, map = 0, rotateMaps = true): GameState {
   return {
     frame: 0,
     training,
     champs: champs.slice(),
     map: Math.max(0, Math.min(MAPS.length - 1, map)),
+    rotateMaps,
     phase: training ? 'fight' : 'countdown',
     phaseT: training ? 0 : COUNTDOWN_TICKS,
     round: 1,
@@ -104,6 +113,8 @@ export function createMatch(champs: number[] = [0, 0], training = false, map = 0
     zones: [],
     // No orb in training: it would sit right under the dummy.
     orb: { active: false, hp: ORB_HP, timer: training ? Number.MAX_SAFE_INTEGER : ORB_SPAWN_AT },
+    pickups: [],
+    pickupT: PICKUP.first,
     nextId: 1,
   };
 }
@@ -183,6 +194,8 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     charges: FLICKER.charges,
     chargeT: 0,
     trail: [],
+    perchT: 0,
+    pickT: 0,
     counterT: 0,
     slowT: 0,
     slowMul: 1,
@@ -192,6 +205,12 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
 }
 
 function resetRound(s: GameState) {
+  if (s.rotateMaps && MAPS.length > 1) {
+    // Any map but the last one. The frame the round ends on varies from round to round,
+    // so it serves as the dice while every peer still picks the same.
+    const k = (Math.imul(s.frame, 2654435761) >>> 0) % (MAPS.length - 1);
+    s.map = k >= s.map ? k + 1 : k;
+  }
   s.round++;
   s.roundFrame = 0;
   s.phase = 'countdown';
@@ -202,6 +221,8 @@ function resetRound(s: GameState) {
   s.meteors = [];
   s.zones = [];
   s.orb = { active: false, hp: ORB_HP, timer: ORB_SPAWN_AT };
+  s.pickups = [];
+  s.pickupT = PICKUP.first;
 }
 
 export function step(s: GameState, inputs: Input[]): GameEvent[] {
@@ -270,6 +291,7 @@ function fight(s: GameState, inputs: Input[], ev: GameEvent[]) {
   updateProjectiles(s, ev);
   updateMeteors(s, ev);
   updateZones(s, ev);
+  if (!s.training) updatePickups(s, ev);
 
   if (s.training) for (const p of s.players) restTraining(p);
 
@@ -341,19 +363,19 @@ export function rewindPoint(s: GameState, p: Player): { x: number; y: number; hp
   return { x: t[0] + (t[3] - t[0]) * k, y: t[1] + (t[4] - t[1]) * k, hp: t[2] + (t[5] - t[2]) * k };
 }
 
-/** Mid-leap: in the air, flies over pillars. */
+/** Mid-leap or mid-hop: in the air, flies over pillars. */
 export function airborne(p: Player): boolean {
-  return p.dashT > 0 && p.dashKind === 1;
+  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7);
 }
 
-/** Leaping or executing: nothing can hit them and they pass through the enemy. */
+/** Leaping, executing or perched on a spear: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
-  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5);
+  return p.perchT > 0 || (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5 || p.dashKind === 6 || p.dashKind === 7));
 }
 
-/** Leaping, executing or sweeping: moves through the enemy instead of bumping it. */
+/** Leaping, executing, sweeping or perched: moves through the enemy instead of bumping it. */
 function passesThrough(p: Player): boolean {
-  return p.dashT > 0 && p.dashKind >= 1;
+  return p.perchT > 0 || (p.dashT > 0 && p.dashKind >= 1);
 }
 
 function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
@@ -362,6 +384,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.hasteT > 0) p.hasteT--;
   if (p.counterT > 0) p.counterT--;
   if (p.hitT > 0) p.hitT--;
+  if (p.pickT > 0) p.pickT--;
   if (p.markT > 0) p.markT--;
   if (p.ambushT > 0) p.ambushT--;
   if (p.rootT > 0) p.rootT--;
@@ -404,6 +427,8 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   }
 
   aimAt(p, inp);
+  // Perched too long: drop off the spear toward the cursor.
+  if (p.perchT > 0 && --p.perchT === 0) perchDrop(p, inp, ev);
 
   const pressed = inp.buttons & ~p.prevButtons;
   p.prevButtons = inp.buttons;
@@ -451,16 +476,22 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     p.dashT--;
     p.x += p.dashX;
     p.y += p.dashY;
-    if (p.dashT === 0 && p.dashKind === 1) {
+    if (p.dashT === 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7)) {
       collideWorld(s, p);
-      land(s, p, ev);
+      if (p.dashKind === 1) land(s, p, ev);
+      if (p.dashKind === 6) {
+        // Lily Leap: dives under where it lands, unseen until it attacks or the dive runs out.
+        p.stealthT = LILY.dive;
+        ev.push({ type: 'stealth', player: p.id, x: p.x, y: p.y });
+      }
+      if (p.dashKind === 7) perchLand(s, p, ev);
     }
     if (p.dashKind === 2 && !p.dashHit) executeContact(s, p, ev);
     if (p.dashKind === 3 && !p.dashHit) bladeContact(s, p, ev);
     if (p.dashKind === 4) stepContact(s, p, ev);
     if (p.dashKind === 5) swarmContact(s, p, ev);
   } else {
-    const held = p.rootT > 0 || stunned;
+    const held = p.rootT > 0 || stunned || p.perchT > 0;
     const mx = held ? 0 : Math.sign(inp.mx);
     const my = held ? 0 : Math.sign(inp.my);
     let speed = CHAMPIONS[p.champ].speed;
@@ -494,10 +525,30 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     soulReturn(s, p, ev);
     return true;
   }
+  // Perched on the spear: pressing Spear Perch again drops off it; nothing else works up there.
+  if (p.perchT > 0) {
+    if (def.id !== 'perch') return false;
+    p.perchT = 0;
+    perchDrop(p, inp, ev);
+    return true;
+  }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall';
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall' || def.id === 'lily' || def.id === 'perch';
   if (p.rootT > 0 && mobility) return false;
+
+  // Spear Perch: up on the spear at once, cancelling any cast.
+  if (def.id === 'perch') {
+    if (p.dashT > 0) return false;
+    p.cast = null;
+    p.counterT = 0;
+    p.vx = 0;
+    p.vy = 0;
+    p.perchT = PERCH.ticks;
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'perch', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
 
   // Time Skip: instant short blink along the movement (the aim when standing), on charges. Works mid-cast.
   if (def.id === 'flicker') {
@@ -591,7 +642,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
 
   // Mobility works mid-cast and cancels the cast.
-  if (def.id === 'dash' || def.id === 'leap' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul' || def.id === 'step') {
+  if (def.id === 'dash' || def.id === 'leap' || def.id === 'lily' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul' || def.id === 'step') {
     if (p.dashT > 0) return false;
     p.cast = null;
     p.counterT = 0;
@@ -644,17 +695,21 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       }
       ev.push({ type: 'vault', player: p.id, x: p.x, y: p.y });
     } else {
+      // Leap (warrior) or Lily Leap (frog): toward the cursor, through the air.
+      const lily = def.id === 'lily';
+      const range = lily ? LILY.range : LEAP.range;
+      const ticks = lily ? LILY.ticks : LEAP.ticks;
       let tx = inp.ax - p.x;
       let ty = inp.ay - p.y;
       const d = Math.sqrt(tx * tx + ty * ty);
-      if (d > LEAP.range) {
-        tx = (tx / d) * LEAP.range;
-        ty = (ty / d) * LEAP.range;
+      if (d > range) {
+        tx = (tx / d) * range;
+        ty = (ty / d) * range;
       }
-      p.dashKind = 1;
-      p.dashT = LEAP.ticks;
-      p.dashX = tx / LEAP.ticks;
-      p.dashY = ty / LEAP.ticks;
+      p.dashKind = lily ? 6 : 1;
+      p.dashT = ticks;
+      p.dashX = tx / ticks;
+      p.dashY = ty / ticks;
       ev.push({ type: 'leap', player: p.id, x: p.x, y: p.y });
     }
     return true;
@@ -722,10 +777,10 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
   p.cooldowns[slot] = def.cooldown;
   p.energy -= def.energyCost;
   const foes = enemiesOf(s, p);
-  // Attacking out of stealth reveals you, and the hit it lands is an ambush.
+  // Attacking out of stealth reveals you; out of Shade's Veil the hit it lands is an ambush.
   if (p.stealthT > 0) {
     p.stealthT = 0;
-    p.ambushT = SMOKE.window;
+    if (p.champ === CHAMP.ASSASSIN) p.ambushT = SMOKE.window;
     ev.push({ type: 'reveal', player: p.id, x: p.x, y: p.y });
   }
 
@@ -753,6 +808,38 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       }
       s.zones.push({ id: s.nextId++, owner: p.id, kind: 'rain', x: p.x + tx, y: p.y + ty, t: RAIN.delay + RAIN.ticks, target: -1 });
       ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'marsh':
+    case 'toad': {
+      const range = def.id === 'marsh' ? MARSH.range : TOAD.range;
+      let tx = inp.ax - p.x;
+      let ty = inp.ay - p.y;
+      const d = Math.sqrt(tx * tx + ty * ty);
+      if (d > range) {
+        tx = (tx / d) * range;
+        ty = (ty / d) * range;
+      }
+      s.zones.push({ id: s.nextId++, owner: p.id, kind: def.id, x: p.x + tx, y: p.y + ty, t: def.id === 'marsh' ? MARSH.ticks : TOAD.delay, target: -1 });
+      ev.push({ type: 'release', player: p.id, ability: def.id, x: p.x, y: p.y });
+      return;
+    }
+
+    case 'jab': {
+      // Right after a Tongue Snap hit, the jab strikes harder.
+      const dmg = JAB.dmg + (p.quickT > 0 ? JAB.bonus : 0);
+      p.quickT = 0;
+      ev.push({ type: 'thrust', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      const x0 = p.x + p.fx * PLAYER_R;
+      const y0 = p.y + p.fy * PLAYER_R;
+      const x1 = x0 + p.fx * JAB.len;
+      const y1 = y0 + p.fy * JAB.len;
+      const reach = JAB.half + PLAYER_R;
+      for (const foe of foes) {
+        if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach) hit(p, foe, dmg, JAB.energy, 'jab', foe.x, foe.y, ev);
+      }
+      if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (JAB.half + ORB_R) * (JAB.half + ORB_R)) damageOrb(s, p.id, dmg, 0, 0, ev);
       return;
     }
 
@@ -974,7 +1061,7 @@ function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
   p.dashHit = 1;
   const lethal = foe.hp <= maxHp(foe) * EXECUTE.threshold;
   ev.push({ type: 'execute', player: p.id, x: foe.x, y: foe.y, lethal });
-  hit(p, foe, lethal ? EXECUTE.dmg * 2 : EXECUTE.dmg, 0, 'execute', foe.x, foe.y, ev);
+  hit(p, foe, lethal ? Math.max(EXECUTE.dmg, foe.hp) : EXECUTE.dmg, 0, 'execute', foe.x, foe.y, ev);
 }
 
 /** Sweeping Blade cuts the first enemy it passes through. */
@@ -1217,6 +1304,47 @@ function drainPulse(s: GameState, p: Player, ev: GameEvent[]) {
   if (--p.drainT % DRAIN.every === 0 && hit(p, t, DRAIN.dmg, DRAIN.energy, 'drain', t.x, t.y, ev)) heal(p, DRAIN.heal, ev);
 }
 
+/** Tongue Snap landed: the frog is yanked to just short of the target, and its next Jab is empowered. */
+function yank(p: Player, target: Player, ev: GameEvent[]) {
+  p.quickT = TONGUE.window;
+  if (p.out || p.stunT > 0 || p.rootT > 0 || p.dashT > 0 || p.perchT > 0) return;
+  const dx = target.x - p.x;
+  const dy = target.y - p.y;
+  const d = Math.sqrt(dx * dx + dy * dy);
+  const travel = d - TONGUE.gap;
+  if (travel <= 0) return;
+  p.cast = null;
+  p.dashKind = 0;
+  p.dashT = TONGUE.ticks;
+  p.dashX = (dx / d) * (travel / TONGUE.ticks);
+  p.dashY = (dy / d) * (travel / TONGUE.ticks);
+  ev.push({ type: 'yank', player: p.id, x0: p.x, y0: p.y, x: p.x + (dx / d) * travel, y: p.y + (dy / d) * travel });
+}
+
+/** Off the spear: a short drop toward the cursor (PERCH.range at most), landing in perchLand. */
+function perchDrop(p: Player, inp: Input, ev: GameEvent[]) {
+  let tx = inp.ax - p.x;
+  let ty = inp.ay - p.y;
+  const d = Math.sqrt(tx * tx + ty * ty);
+  if (d > PERCH.range) {
+    tx = (tx / d) * PERCH.range;
+    ty = (ty / d) * PERCH.range;
+  }
+  p.dashKind = 7;
+  p.dashT = PERCH.drop;
+  p.dashX = tx / PERCH.drop;
+  p.dashY = ty / PERCH.drop;
+  ev.push({ type: 'leap', player: p.id, x: p.x, y: p.y });
+}
+
+function perchLand(s: GameState, p: Player, ev: GameEvent[]) {
+  ev.push({ type: 'perchLand', player: p.id, x: p.x, y: p.y });
+  for (const foe of areaHit(s, p, p.x, p.y, PERCH.r, PERCH.dmg, PERCH.energy, 0, 'perch', ev)) {
+    foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, PERCH.slowMul) : PERCH.slowMul;
+    foe.slowT = Math.max(foe.slowT, PERCH.slowT);
+  }
+}
+
 /** Night Swarm: bite everyone flown through (once per swarm each), slowing them and healing you. */
 function swarmContact(s: GameState, p: Player, ev: GameEvent[]) {
   const reach = 2 * PLAYER_R + 10;
@@ -1347,7 +1475,9 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
         continue;
       }
       const pd = PROJ[pr.kind];
-      if (hit(s.players[pr.owner], target, pr.dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
+      // A dagger cuts deep only close to where it was thrown.
+      const dmg = pr.kind === 'dagger' && pr.age * pd.speed <= DAGGER.close ? DAGGER.dmg : pr.dmg;
+      if (hit(s.players[pr.owner], target, dmg, pd.energy, pr.kind, pr.x, pr.y, ev)) {
         if (pr.kb !== 0) {
           const sp = Math.sqrt(pr.vx * pr.vx + pr.vy * pr.vy);
           knockback(target, pr.vx / sp, pr.vy / sp, pr.kb);
@@ -1370,6 +1500,7 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
           target.rootT = SNARE.root;
           ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });
         }
+        if (pr.kind === 'tongue') yank(shooter, target, ev);
       }
       continue;
     }
@@ -1483,6 +1614,41 @@ function updateZones(s: GameState, ev: GameEvent[]) {
       ev.push({ type: 'converge', owner: z.owner, x: z.x, y: z.y });
       for (const foe of areaHit(s, s.players[z.owner], z.x, z.y, CONVERGE.r, CONVERGE.dmg, 0, 0, 'converge', ev)) stun(foe, CONVERGE.stun, ev);
     }
+    if (z.kind === 'marsh') {
+      // Allies wade through it faster, enemies slower (lingering a moment after stepping out).
+      const owner = s.players[z.owner];
+      const reach = MARSH.r + PLAYER_R;
+      for (const q of s.players) {
+        const dx = q.x - z.x;
+        const dy = q.y - z.y;
+        if (q.out || q.hp <= 0 || airborne(q) || dx * dx + dy * dy >= reach * reach) continue;
+        if (q.team === owner.team) q.hasteT = Math.max(q.hasteT, 10);
+        else if (!untargetable(q)) {
+          q.slowMul = q.slowT > 0 ? Math.min(q.slowMul, MARSH.slow) : MARSH.slow;
+          q.slowT = Math.max(q.slowT, 10);
+        }
+      }
+    }
+    if (z.t === 0 && z.kind === 'toad') {
+      ev.push({ type: 'toad', owner: z.owner, x: z.x, y: z.y });
+      const owner = s.players[z.owner];
+      for (const foe of enemiesOf(s, owner)) {
+        let dx = foe.x - z.x;
+        let dy = foe.y - z.y;
+        let d = Math.sqrt(dx * dx + dy * dy);
+        if (d < TOAD.inner + PLAYER_R) {
+          if (hit(owner, foe, TOAD.dmg, 0, 'toad', foe.x, foe.y, ev)) stun(foe, TOAD.stun, ev);
+        } else if (d < TOAD.r + PLAYER_R && hit(owner, foe, TOAD.edge, 0, 'toad', foe.x, foe.y, ev)) {
+          if (d < 0.0001) {
+            dx = 1;
+            dy = 0;
+            d = 1;
+          }
+          knockback(foe, dx / d, dy / d, TOAD.kb);
+        }
+      }
+      if (s.orb.active && Math.sqrt(z.x * z.x + z.y * z.y) < TOAD.r + ORB_R) damageOrb(s, z.owner, TOAD.dmg, 0, 0, ev);
+    }
     if (z.t === 0 && z.kind === 'pulse') {
       ev.push({ type: 'pulse', owner: z.owner, x: z.x, y: z.y });
       areaHit(s, s.players[z.owner], z.x, z.y, PULSE.r, PULSE.dmg, 0, PULSE.kb, 'pulse', ev);
@@ -1490,6 +1656,56 @@ function updateZones(s: GameState, ev: GameEvent[]) {
     if (z.t > 0) left.push(z);
   }
   s.zones = left;
+}
+
+/**
+ * Healing pickups: a pair near the edge, mirrored left/right so neither side is closer.
+ * The first player to step on one (in id order) heals their whole team around it.
+ */
+function updatePickups(s: GameState, ev: GameEvent[]) {
+  // The shrinking arena swallows the ones near the edge.
+  const lim = s.arenaR - PICKUP.r;
+  s.pickups = s.pickups.filter((pk) => pk.x * pk.x + pk.y * pk.y < lim * lim);
+  if (s.pickups.length === 0 && --s.pickupT <= 0) {
+    spawnPickups(s, ev);
+    s.pickupT = PICKUP.every;
+  }
+  const reach = PLAYER_R + PICKUP.r;
+  s.pickups = s.pickups.filter((pk) => {
+    const taker = s.players.find((p) => {
+      const dx = p.x - pk.x;
+      const dy = p.y - pk.y;
+      return !p.out && p.hp > 0 && p.pickT === 0 && !airborne(p) && dx * dx + dy * dy < reach * reach;
+    });
+    if (!taker) return true;
+    taker.pickT = PICKUP.lockout;
+    ev.push({ type: 'pickup', player: taker.id, x: pk.x, y: pk.y });
+    const area = PICKUP.area + PLAYER_R;
+    for (const ally of s.players) {
+      const dx = ally.x - pk.x;
+      const dy = ally.y - pk.y;
+      if (ally.team === taker.team && dx * dx + dy * dy < area * area) heal(ally, PICKUP.heal, ev);
+    }
+    return false;
+  });
+}
+
+/** Put a pair of pickups on a circle PICKUP.inset inside the edge, clear of pillars and walls. */
+function spawnPickups(s: GameState, ev: GameEvent[]) {
+  const r = s.arenaR - PICKUP.inset;
+  let h = Math.imul(s.frame + 0x9e3779b9, 2246822519) >>> 0;
+  for (let tries = 0; tries < 16; tries++) {
+    h = (Math.imul(h, 1664525) + 1013904223) >>> 0;
+    // Somewhere on the right half (kept off the top and bottom so the pair isn't bunched up), mirrored.
+    const y = ((h / 4294967296) * 2 - 1) * r * 0.85;
+    const x = Math.sqrt(r * r - y * y);
+    if (hitsPillar(s, x, y, PICKUP.r + PLAYER_R)) continue;
+    for (const px of [x, -x]) {
+      s.pickups.push({ id: s.nextId++, x: px, y });
+      ev.push({ type: 'pickupSpawn', x: px, y });
+    }
+    return;
+  }
 }
 
 function updateMeteors(s: GameState, ev: GameEvent[]) {

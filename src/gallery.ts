@@ -98,6 +98,7 @@ const ENTRIES: Entry[] = [
   champion('Sozuki — Samurai', 'buildSamurai · straw hat and katana', CHAMP.SAMURAI),
   champion('Romulus — Blood mage', 'buildVampire · horns, high collar, blood orb', CHAMP.BLOOD),
   champion('Rustic — Time kobold', 'buildRustic · clock helmet, backpack, chronobombs', CHAMP.CHRONO),
+  champion('Lotan — Swamp frog', 'buildLotan · leaf hat with a red lotus, leaf cloak, stone spear', CHAMP.FROG),
   {
     name: 'Training dummy',
     note: 'buildTrainingDummy · lashed post for training mode',

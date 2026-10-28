@@ -340,6 +340,7 @@ export class Hud {
         def.id === 'tempest' ? { n: TEMPEST.max, on: p.stacks, color: COLORS.edge }
         : def.id === 'flicker' ? { n: FLICKER.charges, on: p.charges, color: COLORS.chrono }
         : def.id === 'chrono' ? { n: CHRONO.hits - 1, on: p.resoN, color: COLORS.chrono }
+        : def.id === 'jab' ? { n: 1, on: p.quickT > 0 ? 1 : 0, color: COLORS.tongue }
         : null;
       if (pips) {
         for (let k = 0; k < pips.n; k++) {
@@ -467,6 +468,131 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   switch (ability) {
+    case 'jab':
+      // A stone-tipped spear thrusting right, with speed lines
+      ctx.strokeStyle = '#8a6a48';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-15, 6);
+      ctx.lineTo(6, -2);
+      ctx.stroke();
+      ctx.fillStyle = '#b8bcc4';
+      ctx.beginPath();
+      ctx.moveTo(15, -5.5);
+      ctx.lineTo(5, -6);
+      ctx.lineTo(7, 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(-14, -6);
+      ctx.lineTo(-4, -10);
+      ctx.moveTo(-10, 12);
+      ctx.lineTo(0, 8);
+      ctx.stroke();
+      break;
+    case 'tongue':
+      // A frog's mouth with the tongue lashing out to a sticky tip
+      ctx.fillStyle = '#7d9a5a';
+      ctx.beginPath();
+      ctx.arc(-9, 0, 8, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.tongue;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(-4, 1);
+      ctx.quadraticCurveTo(4, -6, 11, 0);
+      ctx.stroke();
+      ctx.fillStyle = COLORS.tongue;
+      ctx.beginPath();
+      ctx.arc(12, 0, 4, 0, TAU);
+      ctx.fill();
+      break;
+    case 'lily':
+      // A frog arcing over and splashing into water
+      ctx.strokeStyle = COLORS.bog;
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(-14, 6);
+      ctx.quadraticCurveTo(-2, -16, 8, 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(8, 9, 9, 3.5, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#7d9a5a';
+      ctx.beginPath();
+      ctx.arc(-13, 6, 4, 0, TAU);
+      ctx.fill();
+      break;
+    case 'perch':
+      // A frog standing on top of an upright spear
+      ctx.strokeStyle = '#8a6a48';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, 15);
+      ctx.lineTo(0, -2);
+      ctx.stroke();
+      ctx.fillStyle = '#7d9a5a';
+      ctx.beginPath();
+      ctx.ellipse(0, -8, 8, 6, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#e2b45a';
+      for (const ex of [-4, 4]) {
+        ctx.beginPath();
+        ctx.arc(ex, -12, 2.2, 0, TAU);
+        ctx.fill();
+      }
+      ctx.strokeStyle = COLORS.bog;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.ellipse(0, 15, 9, 2.5, 0, 0, TAU);
+      ctx.stroke();
+      break;
+    case 'marsh':
+      // A pool with ripples and a lily pad
+      ctx.fillStyle = COLORS.bog;
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath();
+      ctx.ellipse(0, 3, 15, 9, 0, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = COLORS.bog;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(0, 3, 9, 5, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#7d9a5a';
+      ctx.beginPath();
+      ctx.arc(5, 0, 5, 0.4, TAU - 0.2);
+      ctx.lineTo(5, 0);
+      ctx.fill();
+      break;
+    case 'toad':
+      // A great toad's open maw rising from rings of water
+      ctx.strokeStyle = COLORS.bog;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 9, 15, 5, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#7d9a5a';
+      ctx.beginPath();
+      ctx.arc(0, 4, 12, Math.PI, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#2a1a1a';
+      ctx.beginPath();
+      ctx.ellipse(0, 3, 8, 3, 0, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = '#e2b45a';
+      for (const ex of [-7, 7]) {
+        ctx.beginPath();
+        ctx.arc(ex, -7, 3, 0, TAU);
+        ctx.fill();
+      }
+      break;
     case 'chrono':
       // A pickaxe with a green crack of time at its point
       ctx.strokeStyle = '#8a6a48';
