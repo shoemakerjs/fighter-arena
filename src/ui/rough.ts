@@ -14,7 +14,10 @@ function rng(seed: number) {
   return () => ((s = (s * 16807) % 2147483647) / 2147483647);
 }
 
+/** A torn card in FILL, the accent color for an `.accent` card, or the card's own `--card-fill`. */
 function paint(el: HTMLElement, seed: number) {
+  const own = getComputedStyle(el).getPropertyValue('--card-fill').trim();
+  const fill = own || (el.classList.contains('accent') ? cssVar('--accent') || '#7cc7ff' : FILL);
   const w = el.clientWidth;
   const h = el.clientHeight;
   if (!w || !h) return;
@@ -57,7 +60,7 @@ function paint(el: HTMLElement, seed: number) {
     }
   }
   g.closePath();
-  g.fillStyle = FILL;
+  g.fillStyle = fill;
   g.fill();
 
   // Dry-brush streaks along each edge: light ones bleed out, dark ones sit inside.
@@ -82,7 +85,7 @@ function paint(el: HTMLElement, seed: number) {
       const l = (horizontal ? 8 : 5) + r() * (horizontal ? 46 : 22);
       const x = bx + nx * off;
       const y = by + ny * off;
-      g.strokeStyle = out ? `rgba(31,31,31,${0.55 + r() * 0.45})` : `rgba(0,0,0,${0.25 + r() * 0.45})`;
+      g.strokeStyle = out ? rgba(fill, 0.55 + r() * 0.45) : `rgba(0,0,0,${0.25 + r() * 0.45})`;
       g.lineWidth = 0.6 + r() * (out ? 2.4 : 1.6);
       g.beginPath();
       g.moveTo(x, y);

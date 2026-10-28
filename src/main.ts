@@ -13,6 +13,7 @@ import { CHAMPIONS, MAPS, TICK_MS } from './sim/constants';
 import { cloneState, createMatch, step } from './sim/step';
 import type { GameState, Input } from './sim/types';
 import { BotSetup } from './ui/botsetup';
+import { ROSTER } from './ui/roster';
 import { roughenCards } from './ui/rough';
 import { Settings } from './ui/settings';
 import { TrainingPanel } from './ui/training';
@@ -98,6 +99,7 @@ function startAttract(next: Mode) {
 
 /** Back to the mode cards, optionally with a message (e.g. why the lobby closed). */
 function goHome(note?: string) {
+  showPlayModes(false);
   select.close();
   botSetup.close();
   settings.close();
@@ -123,11 +125,32 @@ const select = new ChampionSelect({
 
 const settings = new Settings(sfx, { onBack: () => goHome() });
 
-/** Home nav: the roster with every kit, nothing to pick. */
-function openCharacters() {
+/** Home nav: the roster with every kit, nothing to pick (opened on `champ`, else the last one picked). */
+function openCharacters(champ = myChamp) {
   $('menu-note').classList.add('hidden');
-  select.open('browse', myChamp);
+  select.open('browse', champ);
   setMode('select');
+}
+
+/** The newest champion is the last one added to the roster; the home screen shows them off. */
+const NEWEST = ROSTER.length - 1;
+
+function showNewest() {
+  const r = ROSTER[NEWEST];
+  const art = $('home-new-art') as HTMLImageElement;
+  art.src = r.art;
+  art.style.objectPosition = `${Math.round(r.focus * 100)}% 25%`;
+  art.style.transform = r.flip ? 'scaleX(-1)' : '';
+  $('home-new-name').textContent = r.hero;
+  const role = CHAMPIONS[NEWEST].role;
+  $('home-new-role').textContent = role.charAt(0).toUpperCase() + role.slice(1);
+}
+
+/** Home: the three cards, or (after Play) the modes to play, with Back in the top bar. */
+function showPlayModes(on: boolean) {
+  $('home-cards').classList.toggle('hidden', on);
+  $('play-modes').classList.toggle('hidden', !on);
+  $('nav-back').classList.toggle('hidden', !on);
 }
 
 function openSettings() {
@@ -335,10 +358,14 @@ function draw(dt: number) {
 
 // ------------------------------------------------------------------ UI wiring
 
+$('home-play').addEventListener('click', () => showPlayModes(true));
+$('home-characters').addEventListener('click', () => openCharacters());
+$('home-new').addEventListener('click', () => openCharacters(NEWEST));
+$('nav-back').addEventListener('click', () => showPlayModes(false));
 $('play').addEventListener('click', openBotSetup);
 $('play-training').addEventListener('click', openTraining);
 $('play-online').addEventListener('click', () => openLobby());
-$('nav-characters').addEventListener('click', openCharacters);
+$('nav-characters').addEventListener('click', () => openCharacters());
 $('nav-settings').addEventListener('click', openSettings);
 $('rematch').addEventListener('click', () => {
   if (!session) return startMatch();
@@ -355,6 +382,7 @@ window.addEventListener('keydown', (e) => {
     if (mode === 'play') setMode('pause');
     else if (mode === 'pause') setMode('play');
     else if (mode === 'settings' || (mode === 'select' && select.mode === 'browse')) goHome();
+    else if (mode === 'home' && !$('play-modes').classList.contains('hidden')) showPlayModes(false);
   } else if (e.code === 'KeyM') {
     sfx.muted = !sfx.muted;
     $('sound-state').textContent = sfx.muted ? 'off' : 'on';
@@ -384,6 +412,7 @@ if (import.meta.env.DEV) {
   });
 }
 
+showNewest();
 roughenCards();
 
 const joinCode = new URLSearchParams(location.search).get('lobby');

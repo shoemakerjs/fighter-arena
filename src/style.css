@@ -315,13 +315,6 @@ button {
   transition: transform 0.18s ease-out;
 }
 
-.mode-art {
-  width: 100%;
-  aspect-ratio: 1102 / 724;
-  object-fit: contain;
-  transition: transform 0.25s ease-out, filter 0.25s;
-}
-
 .mode-card:hover {
   transform: translateY(-4px);
 }
@@ -330,9 +323,64 @@ button {
   filter: drop-shadow(0 0 2px var(--accent)) drop-shadow(0 0 18px var(--accent-glow));
 }
 
-.mode-card:hover .mode-art {
-  transform: scale(1.04);
-  filter: brightness(1.15);
+/* Home cards: the art fills the whole card (just inside its torn edge), the text over its foot. */
+.card-art {
+  position: absolute;
+  inset: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  object-fit: cover;
+  transition: filter 0.25s;
+}
+
+.mode-card.full:hover .card-art {
+  filter: brightness(1.12);
+}
+
+/* A shade rising from the bottom so the text reads over the picture. */
+.mode-card.full::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.7) 34%, transparent 64%);
+  pointer-events: none;
+}
+
+.mode-card.full .mode-copy,
+.mode-card.full .tags,
+.mode-card.full > .tag {
+  position: relative;
+  z-index: 1;
+}
+
+/* The modes' wide drawings: shown a little smaller, across the top of the card, so less of their
+   sides is cut off; their black blends into the card and their foot fades out, so there's no edge. */
+.card-art.wide {
+  height: 74%;
+  mask-image: linear-gradient(to bottom, #000 70%, transparent);
+}
+
+/* Ink drawings on black: the black drops out against the card (screen blend). */
+.card-art.ink {
+  mix-blend-mode: screen;
+}
+
+/* Play: the card in the accent color, painted in the blue of its sword art so the two meet
+   seamlessly, the art fading back into it under the text. */
+.mode-card.accent {
+  color: var(--on-accent);
+}
+
+#home-play {
+  --card-fill: #63bbfd;
+}
+
+.mode-card.accent::after {
+  background: linear-gradient(to top, var(--card-fill, var(--accent)) 0%, var(--card-fill, var(--accent)) 28%, transparent 52%);
+}
+
+.mode-card .kicker {
+  margin-bottom: -2px;
 }
 
 .mode-copy {

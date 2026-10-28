@@ -13,7 +13,7 @@
     <canvas id="world"></canvas>
     <canvas id="hud"></canvas>
 
-    <!-- Home: pick a mode -->
+    <!-- Home: Play (opens the modes), Characters, and the newest champion -->
     <div id="home" class="screen">
       <header class="topbar">
         <svg class="topbar-shape" viewBox="0 0 1440 80" preserveAspectRatio="none" aria-hidden="true">
@@ -21,9 +21,13 @@
         </svg>
         <span class="logo">Arena</span>
         <nav class="nav nav-left">
-          <button class="nav-link" id="nav-characters">Characters</button>
+          <button class="nav-link hidden" id="nav-back">
+            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z"/></svg>
+            Back
+          </button>
         </nav>
         <nav class="nav nav-right">
+          <button class="nav-link" id="nav-characters">Characters</button>
           <button class="nav-link" id="nav-settings">
             <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.14 12.94a7.07 7.07 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.63-.94l-.36-2.54A.5.5 0 0 0 13.9 2h-3.84a.5.5 0 0 0-.49.42l-.36 2.54c-.59.24-1.13.56-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.67 8.48a.5.5 0 0 0 .12.64l2.03 1.58a7.07 7.07 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.38 1.04.7 1.63.94l.36 2.54c.04.24.25.42.49.42h3.84c.24 0 .45-.18.49-.42l.36-2.54c.59-.24 1.13-.56 1.63-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7Z"/></svg>
             Settings
@@ -31,25 +35,49 @@
         </nav>
       </header>
       <p class="toast hidden" id="menu-note"></p>
-      <div class="modes">
-        <button class="mode-card rough" id="play-online">
-          <img class="mode-art" src="./art/mode-pvp.webp" alt="" />
+      <div class="modes" id="home-cards">
+        <button class="mode-card rough accent full" id="home-play">
+          <img class="card-art" src="./art/home-play.webp" alt="" />
+          <span class="mode-copy">
+            <span class="mode-title">Play</span>
+            <span class="mode-desc">Fight friends online, take on bots, or train on a dummy</span>
+          </span>
+        </button>
+        <button class="mode-card rough full" id="home-characters">
+          <img class="card-art ink" src="./art/home-characters.webp" alt="" />
+          <span class="mode-copy">
+            <span class="mode-title">Characters</span>
+            <span class="mode-desc">Every champion, their story and their abilities</span>
+          </span>
+        </button>
+        <button class="mode-card rough full" id="home-new">
+          <img class="card-art" id="home-new-art" alt="" />
+          <span class="mode-copy">
+            <span class="kicker">New champion</span>
+            <span class="mode-title" id="home-new-name"></span>
+            <span class="mode-desc" id="home-new-role"></span>
+          </span>
+        </button>
+      </div>
+      <div class="modes hidden" id="play-modes">
+        <button class="mode-card rough full" id="play-online">
+          <img class="card-art ink wide" src="./art/mode-pvp.webp" alt="" />
           <span class="mode-copy">
             <span class="mode-title">Play vs Players</span>
             <span class="mode-desc">Invite your friends, face each other in deadly battle</span>
           </span>
           <span class="tags"><span class="tag">1v1</span><span class="tag">2v2</span></span>
         </button>
-        <button class="mode-card rough" id="play">
-          <img class="mode-art" src="./art/mode-bot.webp" alt="" />
+        <button class="mode-card rough full" id="play">
+          <img class="card-art ink wide" src="./art/mode-bot.webp" alt="" />
           <span class="mode-copy">
             <span class="mode-title">Play vs Bot</span>
             <span class="mode-desc">Test champions and train your abilities with AI</span>
           </span>
           <span class="tags"><span class="tag">1v1</span><span class="tag">2v2</span></span>
         </button>
-        <button class="mode-card rough" id="play-training">
-          <img class="mode-art" src="./art/mode-training.webp" alt="" />
+        <button class="mode-card rough full" id="play-training">
+          <img class="card-art ink wide" src="./art/mode-training.webp" alt="" />
           <span class="mode-copy">
             <span class="mode-title">Training</span>
             <span class="mode-desc">Try out any champion on a dummy that never falls</span>
