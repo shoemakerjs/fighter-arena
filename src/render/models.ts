@@ -3432,6 +3432,8 @@ function buildLotan(color: string, glowTex: THREE.Texture): ChampionRig {
   root.add(lean);
   lean.add(yaw);
   yaw.add(body);
+  // A small frog: the model is drawn smaller than its hitbox (the ring stays full size).
+  yaw.scale.setScalar(0.8);
 
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
     const mesh = new THREE.Mesh(geo, mat);

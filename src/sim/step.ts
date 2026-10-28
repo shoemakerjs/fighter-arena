@@ -70,6 +70,7 @@ import {
   SONIC,
   SPAWNS,
   STAB,
+  VENOM,
   STEP,
   SWARM,
   SUDDEN_DEATH_AT,
@@ -170,6 +171,8 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     stealthT: 0,
     ambushT: 0,
     poisonT: 0,
+    venom: 0,
+    venomT: 0,
     poisonBy: 0,
     rootT: 0,
     revealT: 0,
@@ -386,6 +389,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.hitT > 0) p.hitT--;
   if (p.pickT > 0) p.pickT--;
   if (p.markT > 0) p.markT--;
+  if (p.venomT > 0 && --p.venomT === 0) p.venom = 0;
   if (p.ambushT > 0) p.ambushT--;
   if (p.rootT > 0) p.rootT--;
   if (p.revealT > 0) p.revealT--;
@@ -759,6 +763,13 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     release(s, p, slot, inp, ev);
     return true;
   }
+  if (def.id === 'poison') {
+    p.venom = VENOM.charges;
+    p.venomT = VENOM.ticks;
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'venom', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
   if (def.id === 'smoke') {
     p.stealthT = SMOKE.ticks;
     p.cooldowns[slot] = def.cooldown;
@@ -900,15 +911,20 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
     }
 
     case 'dagger': {
-      // Someone in reach: Shade stabs instead of throwing.
-      const reach = 2 * PLAYER_R + STAB.reach;
-      const near = foes.filter((foe) => inCone(p, foe.x, foe.y, reach, STAB.minDot));
-      if (near.length === 0) {
-        fireProjectile(s, p, 'dagger', draw, ev, def.id);
-        return;
-      }
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: STAB.reach });
-      for (const foe of near) hit(p, foe, STAB.dmg, STAB.energy, 'stab', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+      const reach = 2 * PLAYER_R + STAB.reach;
+      let landed = false;
+      for (const foe of foes) {
+        if (!inCone(p, foe.x, foe.y, reach, STAB.minDot) || !hit(p, foe, STAB.dmg, STAB.energy, 'stab', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) continue;
+        landed = true;
+        // Coated knives poison whoever they cut.
+        if (p.venom > 0) {
+          foe.poisonT = POISON.ticks;
+          foe.poisonBy = p.id;
+        }
+      }
+      if (landed && p.venom > 0 && --p.venom === 0) p.venomT = 0;
+      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + STAB.reach, STAB.minDot)) damageOrb(s, p.id, STAB.dmg, 0, 0, ev);
       return;
     }
 
@@ -1496,10 +1512,6 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
           target.slowMul = pd.slowMul;
         }
         if (pr.kind === 'mark') target.markT = MARK.ticks;
-        if (pr.kind === 'poison') {
-          target.poisonT = POISON.ticks;
-          target.poisonBy = pr.owner;
-        }
         if (pr.kind === 'sonic') target.revealT = SONIC.reveal;
         if (pr.kind === 'crescent') stun(target, TEMPEST.stun, ev);
         const shooter = s.players[pr.owner];
@@ -1676,8 +1688,8 @@ function updatePickups(s: GameState, ev: GameEvent[]) {
   // The shrinking arena swallows the ones near the edge.
   const lim = s.arenaR - PICKUP.r;
   s.pickups = s.pickups.filter((pk) => pk.x * pk.x + pk.y * pk.y < lim * lim);
-  if (s.pickups.length === 0 && --s.pickupT <= 0) {
-    spawnPickups(s, ev);
+  if (s.pickups.length < PICKUP.max && --s.pickupT <= 0) {
+    spawnPickup(s, ev);
     s.pickupT = PICKUP.every;
   }
   const reach = PLAYER_R + PICKUP.r;
@@ -1700,22 +1712,45 @@ function updatePickups(s: GameState, ev: GameEvent[]) {
   });
 }
 
-/** Put a pair of pickups on a circle PICKUP.inset inside the edge, clear of pillars and walls. */
-function spawnPickups(s: GameState, ev: GameEvent[]) {
-  const r = s.arenaR - PICKUP.inset;
+/**
+ * Put a pickup at a random spot on the map, clear of pillars, walls and the river, and well away
+ * from every champion still in the round (the frame number is the dice, so every peer agrees).
+ * If no spot is far enough, the one farthest from the champions wins.
+ */
+function spawnPickup(s: GameState, ev: GameEvent[]) {
+  const lim = s.arenaR - PICKUP.inset;
+  const river = MAPS[s.map].river;
   let h = Math.imul(s.frame + 0x9e3779b9, 2246822519) >>> 0;
-  for (let tries = 0; tries < 16; tries++) {
+  const rnd = () => {
     h = (Math.imul(h, 1664525) + 1013904223) >>> 0;
-    // Somewhere on the right half (kept off the top and bottom so the pair isn't bunched up), mirrored.
-    const y = ((h / 4294967296) * 2 - 1) * r * 0.85;
-    const x = Math.sqrt(r * r - y * y);
-    if (hitsPillar(s, x, y, PICKUP.r + PLAYER_R)) continue;
-    for (const px of [x, -x]) {
-      s.pickups.push({ id: s.nextId++, x: px, y });
-      ev.push({ type: 'pickupSpawn', x: px, y });
+    return (h / 4294967296) * 2 - 1;
+  };
+  let best: { x: number; y: number } | null = null;
+  let bestD = -1;
+  for (let tries = 0; tries < 40; tries++) {
+    const x = rnd() * lim;
+    const y = rnd() * lim;
+    if (x * x + y * y > lim * lim || hitsPillar(s, x, y, PICKUP.r + PLAYER_R)) continue;
+    if (river && Math.abs(x) < river.half + PLAYER_R + PICKUP.r) continue;
+    if (s.pickups.some((pk) => (pk.x - x) * (pk.x - x) + (pk.y - y) * (pk.y - y) < PICKUP.apart * PICKUP.apart)) continue;
+    // Distance to the nearest champion.
+    let near = Infinity;
+    for (const p of s.players) {
+      if (p.out) continue;
+      near = Math.min(near, Math.sqrt((p.x - x) * (p.x - x) + (p.y - y) * (p.y - y)));
     }
-    return;
+    if (near >= PICKUP.away) {
+      best = { x, y };
+      break;
+    }
+    if (near > bestD) {
+      bestD = near;
+      best = { x, y };
+    }
   }
+  if (!best) return;
+  s.pickups.push({ id: s.nextId++, x: best.x, y: best.y });
+  ev.push({ type: 'pickupSpawn', x: best.x, y: best.y });
 }
 
 function updateMeteors(s: GameState, ev: GameEvent[]) {

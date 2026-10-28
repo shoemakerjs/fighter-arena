@@ -163,11 +163,13 @@ export const ORB_SPAWN_AT = 10 * TICK_RATE;
 export const ORB_RESPAWN = 20 * TICK_RATE;
 
 /**
- * Healing pickups: a mirrored pair appears near the edge `first` ticks into a round and
- * again `every` ticks after the last one was taken. Stepping on one heals everyone on your
- * team within `r` by `heal`; afterwards you can't take another for `lockout` ticks.
+ * Healing pickups: at most `max` lie on the map. The first appears `first` ticks into a round,
+ * then another `every` ticks after, whenever fewer than `max` are left, at a random spot at
+ * least `away` from every champion (and `apart` from the other pickup), `inset` inside the edge.
+ * Stepping on one heals everyone on your team within `area` by `heal`; afterwards you can't
+ * take another for `lockout` ticks.
  */
-export const PICKUP = { first: 18 * TICK_RATE, every: 15 * TICK_RATE, r: 16, area: 110, heal: 18, lockout: 4 * TICK_RATE, inset: 70 };
+export const PICKUP = { first: 15 * TICK_RATE, every: 12 * TICK_RATE, max: 2, r: 16, area: 110, heal: 18, lockout: 4 * TICK_RATE, inset: 60, away: 260, apart: 200 };
 
 // Abilities — every champion has six, one per slot.
 export const SLOT = {
@@ -248,11 +250,11 @@ export const CHAMPIONS: ChampionDef[] = [
     hp: 125,
     speed: 3.4,
     abilities: [
-      { id: 'dagger', name: 'Dagger', desc: 'a deep knife stab up close, or a light thrown dagger further out, hold to keep attacking', cooldown: 8, cast: 8, castSlow: 0.7, energyCost: 0 },
+      { id: 'dagger', name: 'Dagger', desc: 'quick knife stab in front of you, hold to keep stabbing', cooldown: 6, cast: 8, castSlow: 0.7, energyCost: 0 },
       { id: 'mark', name: 'Mark', desc: 'marks the enemy; your next hit deals +10', cooldown: 300, cast: 16, castSlow: 0.5, energyCost: 0 },
       { id: 'blink', name: 'Shadow Step', desc: 'instant teleport to the cursor', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'smoke', name: 'Veil', desc: 'stealth and haste for 3 s; attacking reveals you, and that first hit deals +50%', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'poison', name: 'Venom', desc: 'poisoned dagger: damage over 2 s', cooldown: 420, cast: 12, castSlow: 0.6, energyCost: 0 },
+      { id: 'poison', name: 'Venom', desc: 'coat your knives: your next 3 stabs within 5 s poison the enemy for 2 s', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'execute', name: 'Execute', desc: 'dash through the enemy; finishes it off under 30% HP, 100 energy', cooldown: 60, cast: 10, castSlow: 0.3, energyCost: 100 },
     ],
   },
@@ -349,10 +351,7 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   blast: { speed: 10, r: 16, range: 620, dmg: 20, energy: 12, kb: 11, slowMul: 1, slowT: 0 },
   frost: { speed: 11, r: 12, range: 520, dmg: 10, energy: 10, kb: 0, slowMul: 0.5, slowT: 100 },
   hook: { speed: 15, r: 10, range: 470, dmg: 12, energy: 10, kb: -22, slowMul: 1, slowT: 0 },
-  // Only thrown when nobody is in stabbing reach (STAB).
-  dagger: { speed: 14, r: 7, range: 280, dmg: 3, energy: 7, kb: 0, slowMul: 1, slowT: 0 },
   mark: { speed: 14, r: 11, range: 500, dmg: 6, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
-  poison: { speed: 15, r: 9, range: 420, dmg: 4, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
   arrow: { speed: 15, r: 7, range: 600, dmg: 6, energy: 8, kb: 0, slowMul: 1, slowT: 0 },
   // Base values for a minimal draw; LONGSHOT scales them up to a full draw.
   longshot: { speed: 15, r: 8, range: 460, dmg: 10, energy: 12, kb: 0, slowMul: 1, slowT: 0 },
@@ -395,8 +394,10 @@ export const SMOKE = { ticks: 180, speed: 1.3, ambush: 1.5, window: 45 };
 export const POISON = { ticks: 120, every: 20, dmg: 2 };
 /** Dash through the target for `dmg`; at or below `threshold` of max HP it kills outright. */
 export const EXECUTE = { ticks: 14, range: 260, dmg: 16, threshold: 0.3 };
-/** Dagger with an enemy within reach in front (like SLASH): a knife stab for `dmg` instead of a throw. */
-export const STAB = { reach: 34, minDot: 0.4, dmg: 9, energy: 9 };
+/** Dagger: a knife stab hitting enemies within reach in front (like SLASH). */
+export const STAB = { reach: 34, minDot: 0.4, dmg: 8, energy: 9 };
+/** Venom: the next `charges` stabs within `ticks` poison the enemy (POISON). */
+export const VENOM = { charges: 3, ticks: 300 };
 
 // Archer
 /** Draw at least `minDraw` ticks; a full draw adds these on top of PROJ.longshot. */

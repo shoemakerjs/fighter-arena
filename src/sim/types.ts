@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'dagger' | 'mark' | 'poison' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'mark' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab' | 'poison';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -86,6 +86,9 @@ export interface Player {
   /** Just attacked out of stealth: the next hit within these ticks is an ambush (SMOKE.ambush). */
   ambushT: number;
   poisonT: number;
+  /** Shade: Venom stabs left, and the ticks before the coating dries. */
+  venom: number;
+  venomT: number;
   /** Who applied the poison (credited with its ticks). */
   poisonBy: number;
   /** Rooted by a snare: can't walk or use mobility. */
@@ -216,7 +219,7 @@ export interface GameState {
   zones: Zone[];
   orb: Orb;
   pickups: Pickup[];
-  /** Ticks until the next pair of pickups appears (counts only while none are left). */
+  /** Ticks until the next pickup appears (counts only while fewer than PICKUP.max lie on the map). */
   pickupT: number;
   nextId: number;
 }
@@ -246,6 +249,8 @@ export type GameEvent =
   | { type: 'stealth'; player: number; x: number; y: number }
   | { type: 'reveal'; player: number; x: number; y: number }
   | { type: 'markPop'; player: number; x: number; y: number }
+  /** Shade coats its knives (Venom). */
+  | { type: 'venom'; player: number; x: number; y: number }
   /** A hit boosted by attacking out of stealth; `player` is the one hit. */
   | { type: 'ambush'; player: number; x: number; y: number }
   | { type: 'execute'; player: number; x: number; y: number; lethal: boolean }

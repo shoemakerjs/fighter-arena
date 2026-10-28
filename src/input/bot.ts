@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, STAB, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, solidsOf, teamSees, walkTarget } from '../sim/vision';
 import type { Pillar } from '../sim/constants';
@@ -168,8 +168,8 @@ export class Bot {
     const chrono = me.champ === CHAMP.CHRONO;
     const frog = me.champ === CHAMP.FROG;
     // Champions that fight up close and walk in rather than kite.
-    const melee = warrior || samurai || chrono || frog;
-    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO || foe.champ === CHAMP.FROG;
+    const melee = warrior || samurai || chrono || frog || assassin;
+    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO || foe.champ === CHAMP.FROG || foe.champ === CHAMP.ASSASSIN;
     const foeLow = foe.hp <= CHAMPIONS[foe.champ].hp * EXECUTE.threshold;
     const kit = CHAMPIONS[me.champ].abilities;
     const ready = (slot: number) => me.cooldowns[slot] === 0 && me.energy >= kit[slot].energyCost;
@@ -178,9 +178,8 @@ export class Bot {
     // --- Movement: warriors close in, mages hold range (more of it against melee) and strafe.
     let wx = 0;
     let wy = 0;
-    const pref = archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : foe.champ === CHAMP.ASSASSIN ? 400 : PREFERRED_RANGE;
-    // Shade's dagger stabs hard up close and only grazes when thrown, so it walks in to knife range too.
-    const radial = melee || assassin ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
+    const pref = archer ? (foeMelee ? 420 : 380) : blood ? (foeMelee ? 330 : 270) : foeMelee ? 360 : PREFERRED_RANGE;
+    const radial = melee ? (dist > (samurai ? 80 : 60) ? 1 : 0) : dist > pref + 60 ? 1 : dist < pref - 80 ? -1 : 0;
     // With the river in between, close in by a bridge, or (melee, near the water, mobility
     // ready) walk straight at it and hop over like a person would.
     let gx = nx;
@@ -450,8 +449,8 @@ export class Bot {
           // Stay hidden while closing in.
         } else if (ready(SLOT.SPACE) && foeLow && dist > 200 && dist < 200 + BLINK.range && r() < 0.1) press(SLOT.SPACE);
         else if (ready(SLOT.M2) && los && dist < PROJ.mark.range - 30 && r() < 0.04 * a) press(SLOT.M2);
-        else if (ready(SLOT.E) && los && dist < PROJ.poison.range - 30 && r() < 0.03 * a) press(SLOT.E);
-        else if (los && dist < PROJ.dagger.range - 10 && (!dodging || r() < 0.5) && r() < 0.9 * a) press(SLOT.M1);
+        else if (ready(SLOT.E) && me.venom === 0 && dist < 180 && r() < 0.05 * a) press(SLOT.E);
+        else if (dist < 2 * PLAYER_R + STAB.reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (warrior) {
         const reach = 2 * PLAYER_R + SLASH.reach;
         if (ready(SLOT.R) && los && dist < RIFT.len && r() < 0.1) press(SLOT.R);

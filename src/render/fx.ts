@@ -119,10 +119,7 @@ export class Fx {
           } else if (e.ability === 'hook') {
             this.burst(e.x, e.y, 8, COLORS.steel, 160, 2.5, 0.25);
             this.sound('hook');
-          } else if (e.ability === 'dagger') {
-            this.burst(e.x, e.y, 3, COLORS.players[e.player], 100, 2, 0.15);
-            this.sound('slash');
-          } else if (e.ability === 'mark' || e.ability === 'poison') {
+          } else if (e.ability === 'mark') {
             this.burst(e.x, e.y, 8, abilityColor(e.ability, e.player), 150, 2.5, 0.3);
             this.sound('frost');
           } else if (e.ability === 'arrow') {
@@ -507,6 +504,11 @@ export class Fx {
           this.sound('boom');
           break;
 
+        case 'venom':
+          this.burst(e.x, e.y, 14, COLORS.poison, 120, 2.6, 0.4, 20);
+          this.sound('frost');
+          break;
+
         case 'reveal':
           this.burst(e.x, e.y, 10, COLORS.shadow, 140, 2.5, 0.3, 25);
           break;
@@ -719,6 +721,7 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'rift':
     case 'blink':
     case 'stealth':
+    case 'venom':
     case 'reveal':
     case 'vault':
     case 'thrust':

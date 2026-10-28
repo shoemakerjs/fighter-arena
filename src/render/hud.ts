@@ -1,4 +1,4 @@
-import { CHAMP, CHAMPIONS, CHRONO, EXECUTE, FLICKER, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, type AbilityId } from '../sim/constants';
+import { CHAMP, CHAMPIONS, CHRONO, EXECUTE, FLICKER, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, VENOM, type AbilityId } from '../sim/constants';
 import { abilityOf, maxHp } from '../sim/step';
 import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
@@ -341,6 +341,7 @@ export class Hud {
         : def.id === 'flicker' ? { n: FLICKER.charges, on: p.charges, color: COLORS.chrono }
         : def.id === 'chrono' ? { n: CHRONO.hits - 1, on: p.resoN, color: COLORS.chrono }
         : def.id === 'jab' ? { n: 1, on: p.quickT > 0 ? 1 : 0, color: COLORS.tongue }
+        : def.id === 'poison' ? { n: VENOM.charges, on: p.venom, color: COLORS.poison }
         : null;
       if (pips) {
         for (let k = 0; k < pips.n; k++) {
