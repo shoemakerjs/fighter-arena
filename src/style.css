@@ -769,11 +769,14 @@ button {
 .champ-info {
   position: absolute;
   right: 64px;
-  /* Grows upwards from just above the bottom bar, so long kits never slide under it. */
+  /* Grows upwards from just above the bottom bar, so long kits never slide under it;
+     past the top of the screen the ability list scrolls instead. */
+  top: 24px;
   bottom: 112px;
   width: 362px;
   display: flex;
   flex-direction: column;
+  justify-content: flex-end;
   align-items: flex-end;
   text-align: right;
   text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
@@ -781,6 +784,18 @@ button {
 
 .champ-info .role {
   font-size: 18px;
+}
+
+.champ-info > * {
+  flex-shrink: 0;
+}
+
+.champ-info > .abilities {
+  flex-shrink: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
 }
 
 .champ-info .hero {
@@ -1198,6 +1213,20 @@ button {
 }
 
 /* ------------------------------------------------------------ small screens */
+
+/* Short screens: a smaller name and lore leave the kit room. */
+@media (max-height: 760px) {
+  .champ-info .hero {
+    font-size: 64px;
+  }
+  .champ-info .lore {
+    font-size: 15px;
+    margin-top: 8px;
+  }
+  .champ-info .abilities {
+    margin-top: 14px;
+  }
+}
 
 @media (max-width: 900px) {
   .champ-info {
