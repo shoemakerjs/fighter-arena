@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, STAB, SWARM, TEMPEST, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHARGE, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, GORE, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, STAB, STOMP, SWARM, TEMPEST, THUNDER, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, solidsOf, teamSees, walkTarget } from '../sim/vision';
 import type { Pillar } from '../sim/constants';
@@ -167,9 +167,10 @@ export class Bot {
     const blood = me.champ === CHAMP.BLOOD;
     const chrono = me.champ === CHAMP.CHRONO;
     const frog = me.champ === CHAMP.FROG;
+    const bull = me.champ === CHAMP.BULL;
     // Champions that fight up close and walk in rather than kite.
-    const melee = warrior || samurai || chrono || frog || assassin;
-    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO || foe.champ === CHAMP.FROG || foe.champ === CHAMP.ASSASSIN;
+    const melee = warrior || samurai || chrono || frog || assassin || bull;
+    const foeMelee = foe.champ === CHAMP.WARRIOR || foe.champ === CHAMP.SAMURAI || foe.champ === CHAMP.CHRONO || foe.champ === CHAMP.FROG || foe.champ === CHAMP.ASSASSIN || foe.champ === CHAMP.BULL;
     const foeLow = foe.hp <= CHAMPIONS[foe.champ].hp * EXECUTE.threshold;
     const kit = CHAMPIONS[me.champ].abilities;
     const ready = (slot: number) => me.cooldowns[slot] === 0 && me.energy >= kit[slot].energyCost;
@@ -332,7 +333,7 @@ export class Bot {
         // Deflect, facing the incoming projectile.
         buttons |= BTN.Q;
         deflecting = true;
-      } else if (!warrior && threatT < 10 && ready(SLOT.SPACE) && r() < 0.3) {
+      } else if (!warrior && !bull && threatT < 10 && ready(SLOT.SPACE) && r() < 0.3) {
         buttons |= BTN.SPACE;
       } else if (mage && threatT < 12 && threatKind !== 'bolt' && ready(SLOT.Q) && r() < 0.5) {
         buttons |= BTN.Q;
@@ -386,10 +387,10 @@ export class Bot {
         else if (ready(SLOT.SPACE) && !hidden && dist > 140 && dist < BLADE.ticks * BLADE.speed + 80 && r() < 0.06 * a) {
           press(SLOT.SPACE);
           engage = true;
-        } else if (ready(SLOT.M2) && los && dist < (crescent ? PROJ.crescent.range - 40 : TEMPEST.len + PLAYER_R * 2 - 10) && r() < 0.2 * a) press(SLOT.M2);
-        else if (dist < 2 * PLAYER_R + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
+        } else if (ready(SLOT.M2) && los && dist < (crescent ? PROJ.crescent.range - 40 : TEMPEST.len + me.r + foe.r - 10) && r() < 0.2 * a) press(SLOT.M2);
+        else if (dist < me.r + foe.r + KATANA.reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (frog) {
-        const reach = 2 * PLAYER_R + JAB.len - 8;
+        const reach = me.r + foe.r + JAB.len - 8;
         const pinned = foe.stunT > 0 || foe.slowT > 0 || foe.rootT > 0 || foe.cast !== null;
         const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.35;
         if (ready(SLOT.R) && !hidden && los && dist < PROJ.toad.range - 30 && r() < (pinned || dist < 140 ? 0.25 : 0.02)) press(SLOT.R);
@@ -402,8 +403,22 @@ export class Bot {
           escape = lowMe;
         } else if (ready(SLOT.E) && !hidden && dist < MARSH.range && r() < 0.03 * a) press(SLOT.E);
         else if (dist < reach && r() < 0.95 * a) press(SLOT.M1);
+      } else if (bull) {
+        const reach = me.r + foe.r + GORE.reach;
+        const pinned = foe.stunT > 0 || foe.slowT > 0 || foe.rootT > 0 || foe.cast !== null;
+        const hurt = me.hp < CHAMPIONS[me.champ].hp * 0.6;
+        if (ready(SLOT.R) && !hidden && dist > 90 && dist < THUNDER.range && r() < (pinned || foeLow ? 0.2 : 0.03)) {
+          press(SLOT.R);
+          engage = true;
+        } else if (ready(SLOT.Q) && me.hideT === 0 && dist < 260 && (hurt || foe.cast !== null) && r() < 0.06) press(SLOT.Q);
+        else if (ready(SLOT.SPACE) && !hidden && los && dist > 110 && dist < CHARGE.ticks * CHARGE.speed + 20 && r() < 0.07 * a) {
+          press(SLOT.SPACE);
+          engage = true;
+        } else if (ready(SLOT.E) && dist < STOMP.inner + foe.r + 10 && r() < 0.08 * a) press(SLOT.E);
+        else if (ready(SLOT.M2) && los && !hidden && dist > reach && dist < PROJ.lightning.range - 30 && r() < 0.08 * a) press(SLOT.M2);
+        else if (dist < reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (chrono) {
-        const reach = 2 * PLAYER_R + CHRONO.reach;
+        const reach = me.r + foe.r + CHRONO.reach;
         // Rewind after a bad trade (it lost a lot over the last three seconds), or when low and cornered.
         const lost = me.trail.length >= 3 ? me.trail[2] - me.hp : 0;
         const lowMe = me.hp < CHAMPIONS[me.champ].hp * 0.35;
@@ -450,9 +465,9 @@ export class Bot {
         } else if (ready(SLOT.SPACE) && foeLow && dist > 200 && dist < 200 + BLINK.range && r() < 0.1) press(SLOT.SPACE);
         else if (ready(SLOT.M2) && los && dist < PROJ.mark.range - 30 && r() < 0.04 * a) press(SLOT.M2);
         else if (ready(SLOT.E) && me.venom === 0 && dist < 180 && r() < 0.05 * a) press(SLOT.E);
-        else if (dist < 2 * PLAYER_R + STAB.reach && r() < 0.95 * a) press(SLOT.M1);
+        else if (dist < me.r + foe.r + STAB.reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (warrior) {
-        const reach = 2 * PLAYER_R + SLASH.reach;
+        const reach = me.r + foe.r + SLASH.reach;
         if (ready(SLOT.R) && los && dist < RIFT.len && r() < 0.1) press(SLOT.R);
         // War Cry pulls: interrupt a cast, or drag a target that is just out of axe reach.
         else if (ready(SLOT.Q) && dist < CRY.r && (foe.cast !== null || (dist > reach && r() < 0.15 * a))) press(SLOT.Q);
@@ -505,7 +520,7 @@ export class Bot {
       // Blink in for the kill.
       ax = tx;
       ay = ty;
-    } else if (buttons & BTN.SPACE && !warrior) {
+    } else if (buttons & BTN.SPACE && !warrior && !bull) {
       // Dash / blink: sideways out of a projectile, or straight away from a melee threat.
       // A vault jumps away from the aim point, so aim the other way.
       const flip = archer ? -1 : 1;

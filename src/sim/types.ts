@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'mark' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab' | 'poison';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'mark' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad' | 'lightning';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab' | 'poison' | 'gore' | 'charge' | 'stomp' | 'thunder' | 'shock';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -50,6 +50,8 @@ export interface Player {
   restT: number;
   /** Index into CHAMPIONS. */
   champ: number;
+  /** Body radius: the hitbox and how much room the champion takes (see champR). */
+  r: number;
   x: number;
   y: number;
   /** External velocity (knockback), decays every tick. */
@@ -74,7 +76,8 @@ export interface Player {
    * 2 = execute (can't be hit, passes through), 3 = sweeping blade (passes through, cuts once),
    * 4 = crimson step (passes through, makes each enemy bleed; dashHit is a bitmask by id),
    * 5 = night swarm (can't be hit, passes through, bites each enemy once; dashHit is a bitmask),
-   * 6 = lily leap (airborne, no landing hit), 7 = leap out of Submerge (airborne, hits on landing).
+   * 6 = lily leap (airborne, no landing hit), 7 = leap out of Submerge (airborne, hits on landing),
+   * 8 = bull rush (stops at the first enemy it runs into), 9 = thunderfall (airborne, hits on landing).
    */
   dashKind: number;
   /** Execute / sweeping blade already connected during this dash (0/1). */
@@ -101,7 +104,7 @@ export interface Player {
   stunT: number;
   /** Samurai: Deflect active (ticks left). */
   deflectT: number;
-  /** Samurai: Steel Tempest stacks and the ticks until they expire. */
+  /** Samurai: Steel Tempest stacks; storm bull: Horn Sweep hits in a row. And the ticks until they expire. */
   stacks: number;
   stackT: number;
   /** Samurai: Soul Unbound active (ticks left), where the body waits, and damage dealt meanwhile. */
@@ -130,6 +133,13 @@ export interface Player {
   trail: number[];
   /** Swamp frog: under the water (ticks left): untargetable, can't move or attack. */
   submergeT: number;
+  /** Charged by a Ball Lightning: the next Horn Sweep on it zaps. */
+  shockT: number;
+  /** Storm bull: Thick Hide (ticks left) and the damage taken under it so far. */
+  hideT: number;
+  hideDmg: number;
+  /** Storm bull: Thunderfall's storm (ticks left): every Horn Sweep hit zaps. */
+  stormT: number;
   /** Just took a healing pickup: can't take another for these ticks. */
   pickT: number;
   counterT: number;
@@ -286,6 +296,12 @@ export type GameEvent =
   | { type: 'submerge'; player: number; x: number; y: number }
   | { type: 'surface'; player: number; x: number; y: number }
   | { type: 'toad'; owner: number; x: number; y: number }
+  /** Storm bull: Thick Hide going up, a heavy Horn Sweep, Earthshaker, the Thunderfall landing, and a zap on `player`. */
+  | { type: 'hide'; player: number; x: number; y: number }
+  | { type: 'heavy'; player: number; x: number; y: number }
+  | { type: 'stomp'; player: number; x: number; y: number }
+  | { type: 'thunder'; player: number; x: number; y: number }
+  | { type: 'shock'; player: number; x: number; y: number }
   /** Romulus scatters into bats (Night Swarm). */
   | { type: 'swarm'; player: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */

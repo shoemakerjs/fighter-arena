@@ -191,7 +191,8 @@ export type AbilityId =
   | 'katana' | 'tempest' | 'blade' | 'deflect' | 'soul' | 'fate'
   | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm'
   | 'chrono' | 'clock' | 'flicker' | 'converge' | 'recall' | 'pulse'
-  | 'jab' | 'tongue' | 'lily' | 'submerge' | 'marsh' | 'toad';
+  | 'jab' | 'tongue' | 'lily' | 'submerge' | 'marsh' | 'toad'
+  | 'gore' | 'lightning' | 'charge' | 'hide' | 'stomp' | 'thunder';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -210,10 +211,12 @@ export interface ChampionDef {
   role: string;
   hp: number;
   speed: number;
+  /** Body radius when it isn't PLAYER_R: big champions are easier to hit and take more room. */
+  r?: number;
   abilities: AbilityDef[];
 }
 
-export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4, BLOOD: 5, CHRONO: 6, FROG: 7 } as const;
+export const CHAMP = { MAGE: 0, WARRIOR: 1, ASSASSIN: 2, ARCHER: 3, SAMURAI: 4, BLOOD: 5, CHRONO: 6, FROG: 7, BULL: 8 } as const;
 
 export const CHAMPIONS: ChampionDef[] = [
   {
@@ -235,8 +238,9 @@ export const CHAMPIONS: ChampionDef[] = [
     role: 'melee and engage',
     hp: 175,
     speed: 3.4,
+    r: 26,
     abilities: [
-      { id: 'slash', name: 'Cleave', desc: 'axe swing in front of you, hold to keep swinging', cooldown: 6, cast: 12, castSlow: 0.5, energyCost: 0 },
+      { id: 'slash', name: 'Cleave', desc: 'heavy axe swing in front of you, hold to keep swinging', cooldown: 6, cast: 17, castSlow: 0.5, energyCost: 0 },
       { id: 'hook', name: 'Chain', desc: 'hook that pulls the enemy in', cooldown: 360, cast: 20, castSlow: 0.4, energyCost: 0 },
       { id: 'leap', name: 'Leap', desc: 'jump to the cursor, slowing where you land; untargetable in the air', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'cry', name: 'War Cry', desc: 'pulls the enemy in close, interrupts casts', cooldown: 480, cast: 6, castSlow: 0.2, energyCost: 0 },
@@ -331,7 +335,27 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'toad', name: 'Ancestor Toad', desc: 'throw a lotus bait that sticks to the first enemy it hits (or lands); 1 s later the great toad bursts up under it, swallowing and stunning enemies in the middle and throwing out the rest, 100 energy', cooldown: 60, cast: 14, castSlow: 0.4, energyCost: 100 },
     ],
   },
+  {
+    name: 'Storm Bull',
+    role: 'tank and engage',
+    hp: 190,
+    speed: 3.2,
+    r: 28,
+    abilities: [
+      { id: 'gore', name: 'Horn Sweep', desc: 'wide sweep of the horns, hold to keep sweeping; every third hit in a row is a heavy blow that knocks back', cooldown: 6, cast: 18, castSlow: 0.5, energyCost: 0 },
+      { id: 'lightning', name: 'Ball Lightning', desc: 'hurl a ball of lightning; the enemy it hits is charged, and your next Horn Sweep on it zaps for extra damage and slows', cooldown: 240, cast: 14, castSlow: 0.5, energyCost: 0 },
+      { id: 'charge', name: 'Bull Rush', desc: 'charge toward the cursor; the first enemy you run into is stunned and thrown back', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'hide', name: 'Thick Hide', desc: 'take 30% less damage for 2.5 s, then heal back 30% of what you took', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'stomp', name: 'Earthshaker', desc: 'rear up and stomp: stuns enemies close by and slows those further out', cooldown: 420, cast: 18, castSlow: 0.3, energyCost: 0 },
+      { id: 'thunder', name: 'Thunderfall', desc: 'leap to the cursor like a lightning strike, untargetable; the landing stuns enemies around it, and for 4 s every Horn Sweep hit zaps, 100 energy', cooldown: 60, cast: 0, castSlow: 1, energyCost: 100 },
+    ],
+  },
 ];
+
+/** Body radius of a champion (PLAYER_R for anything that isn't one, like the mannequin). */
+export function champR(champ: number): number {
+  return CHAMPIONS[champ]?.r ?? PLAYER_R;
+}
 
 export interface ProjDef {
   speed: number;
@@ -369,6 +393,8 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   toad: { speed: 12, r: 10, range: 380, dmg: 0, energy: 0, kb: 0, slowMul: 1, slowT: 0 },
   // A hit yanks the frog to the target (TONGUE).
   tongue: { speed: 17, r: 9, range: 240, dmg: 6, energy: 10, kb: 0, slowMul: 0.65, slowT: 40 },
+  // Charges the enemy it hits (SHOCK).
+  lightning: { speed: 14, r: 12, range: 440, dmg: 8, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
 };
 
 // Mage
@@ -377,8 +403,8 @@ export const COUNTER = { ticks: 48, slow: 0.4, energy: 20, haste: 70 };
 export const METEOR = { range: 480, delay: 54, r: 115, dmg: 32, kb: 12 };
 
 // Warrior
-/** Hits when the target's center is within 2*PLAYER_R + reach and in front (dot >= minDot). */
-export const SLASH = { reach: 52, minDot: 0.45, dmg: 9, energy: 10 };
+/** Hits when the target's center is within both body radii + reach and in front (dot >= minDot). */
+export const SLASH = { reach: 52, minDot: 0.45, dmg: 12, energy: 11 };
 /** Landing hits everything within `r` and slows it (slowMul for slowT ticks). */
 export const LEAP = { ticks: 22, range: 280, r: 85, dmg: 14, energy: 10, slowMul: 0.6, slowT: 50 };
 /** Pulls an enemy within `r` towards the warrior, stopping `stop` from his center. */
@@ -492,3 +518,20 @@ export const MARSH = { range: 260, r: 100, ticks: 180, slow: 0.65 };
  * under it: within `inner` it deals `dmg` and stuns; out to `r`, `edge` and a throw outward.
  */
 export const TOAD = { delay: 60, r: 110, inner: 55, dmg: 24, stun: 40, edge: 16, kb: 10 };
+
+// Storm bull
+/** Horn Sweep: like SLASH; every `hits`-th hit in a row (each within `window` of the last) is heavy: +`heavy` and a knockback. */
+export const GORE = { reach: 46, minDot: 0.4, dmg: 7, energy: 11, hits: 3, window: 150, heavy: 7, kb: 8 };
+/**
+ * Ball Lightning charges the enemy it hits for `ticks`; the bull's next Horn Sweep on it zaps for
+ * `dmg` and slows. During Thunderfall's storm every Horn Sweep hit zaps for `storm` on top.
+ */
+export const SHOCK = { ticks: 180, dmg: 10, slowMul: 0.6, slowT: 50, storm: 5 };
+/** Bull Rush: charge along the aim; the first enemy run into is hit, stunned and thrown back, ending the charge. */
+export const CHARGE = { ticks: 16, speed: 13, dmg: 10, energy: 10, stun: 36, kb: 9 };
+/** Thick Hide: `reduce` less damage for `ticks`; when it ends, heal `back` of the damage taken meanwhile. */
+export const HIDE = { ticks: 150, reduce: 0.3, back: 0.3 };
+/** Earthshaker: after the windup, enemies within `inner` are stunned, out to `r` slowed. */
+export const STOMP = { inner: 70, r: 130, dmg: 12, energy: 10, stun: 24, slowMul: 0.55, slowT: 60 };
+/** Thunderfall: leap up to `range` over `ticks`, untargetable; the landing hits within `r` and stuns, then a storm for `storm` ticks. */
+export const THUNDER = { ticks: 30, range: 320, r: 95, dmg: 22, stun: 50, storm: 240 };

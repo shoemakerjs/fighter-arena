@@ -99,6 +99,7 @@ const ENTRIES: Entry[] = [
   champion('Romulus — Blood mage', 'buildVampire · horns, high collar, blood orb', CHAMP.BLOOD),
   champion('Rustic — Time kobold', 'buildRustic · clock helmet, backpack, chronobombs', CHAMP.CHRONO),
   champion('Lotan — Swamp frog', 'buildLotan · leaf hat with a red lotus, leaf cloak, stone spear', CHAMP.FROG),
+  champion("Kro'aw — Storm bull", 'buildKroaw · gold horns and spiked pauldrons, red rags, gold medallions', CHAMP.BULL),
   {
     name: 'Training dummy',
     note: 'buildTrainingDummy · lashed post for training mode',

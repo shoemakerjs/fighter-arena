@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LILY, LONGSHOT, MAPS, MARSH, SUBMERGE, type MapDef, METEOR, ORB_HP, ORB_R, PICKUP, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, SUDDEN_DEATH_AT, TEMPEST, TIDES, TOAD } from '../sim/constants';
+import { ARENA_R, CHAMP, CHAMPIONS, CLOCK, CONVERGE, FATE, LEAP, LILY, LONGSHOT, MAPS, MARSH, SUBMERGE, type MapDef, METEOR, ORB_HP, ORB_R, PICKUP, PLAYER_R, PROJ, PULSE, RAIN, RIFT, SLOT, SONIC, STOMP, SUDDEN_DEATH_AT, TEMPEST, THUNDER, TIDES, TOAD } from '../sim/constants';
 import { abilityOf, airborne, rewindPoint } from '../sim/step';
 import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
@@ -696,7 +696,8 @@ export class World3D implements WorldView {
       const dead = pc.hp <= 0;
       a.deadT = dead ? a.deadT + dt : 0;
       // Leaps arc up and down; Lotan's hop is lower, and out of Submerge it shoots up from under the water.
-      const airTicks = pc.dashKind === 6 ? LILY.ticks : pc.dashKind === 7 ? SUBMERGE.jump : LEAP.ticks;
+      // Thunderfall goes high and comes down hard.
+      const airTicks = pc.dashKind === 6 ? LILY.ticks : pc.dashKind === 7 ? SUBMERGE.jump : pc.dashKind === 9 ? THUNDER.ticks : LEAP.ticks;
       const leapK = airborne(pc) ? 1 - (pc.dashT - alpha) / airTicks : -1;
       const arc = leapK >= 0 ? Math.sin(Math.min(1, leapK) * Math.PI) : 0;
       const lift =
@@ -704,6 +705,7 @@ export class World3D implements WorldView {
         : leapK < 0 ? 0
         : pc.dashKind === 6 ? arc * 55
         : pc.dashKind === 7 ? arc * 60 - SUBMERGE_DEPTH * Math.max(0, 1 - leapK * 3)
+        : pc.dashKind === 9 ? Math.sin(Math.min(1, leapK) * Math.PI * 0.85) * 150 * Math.min(1, (1 - leapK) * 6)
         : arc * 95;
       this.updatePuddle(i, pc, lift);
 
@@ -829,6 +831,34 @@ export class World3D implements WorldView {
         if (pc.dashT > 0 && pc.dashKind === 7) swing = -2.4;
         rig.weapon.rotation.z = swing;
         twist = def?.id === 'jab' ? -ck * 0.3 : 0;
+      } else if (pc.champ === CHAMP.BULL) {
+        // The fist winds up and hooks through with the horns; rearing up for Earthshaker,
+        // head down for Bull Rush, fist raised overhead coming down from Thunderfall.
+        const goreCd = pc.cooldowns[SLOT.M1];
+        let swing = -0.2;
+        let rear = 0;
+        if (def?.id === 'gore') {
+          swing = -0.2 + ck * 1.3;
+          twist = ck * 0.45;
+        } else if (def?.id === 'stomp') {
+          swing = ck * 1.8;
+          rear = ck * 0.4;
+        } else if (def) swing = -ck * 1.2;
+        else if (goreCd > 0) {
+          const t = 1 - goreCd / kitCd(pc.champ, SLOT.M1);
+          swing = 1.1 - t * 2.5;
+          twist = 0.45 - t * 1;
+        }
+        if (pc.dashT > 0 && pc.dashKind === 8) {
+          rear = -0.35;
+          swing = -0.9;
+        }
+        if (leapK >= 0 && pc.dashKind === 9) {
+          swing = 2.2 - Math.min(1, leapK) * 3.6;
+          rear = 0.3 - Math.min(1, leapK) * 0.6;
+        }
+        rig.weapon.rotation.z = swing;
+        rig.body.rotation.z = rear;
       } else {
         rig.weapon.rotation.z = -0.22 - ck * 0.95;
       }
@@ -851,8 +881,11 @@ export class World3D implements WorldView {
       const slowed = pc.slowT > 0 && !dead;
       const poisoned = pc.poisonT > 0 && !dead;
       const pulse = poisoned ? 0.05 + 0.04 * Math.sin(this.time * 10) : 0;
+      // Thick Hide: a steady stony sheen; the storm makes the bull flicker with lightning.
+      const hide = pc.hideT > 0 && !dead ? 0.1 : 0;
+      const storm = pc.stormT > 0 && !dead && Math.sin(this.time * 37 + i) > 0.6 ? 0.18 : 0;
       for (const m of rig.mats) {
-        m.emissive.setRGB(flash + (slowed ? 0.1 : 0) + pulse * 0.4, flash + (slowed ? 0.25 : 0) + pulse, flash + (slowed ? 0.4 : 0));
+        m.emissive.setRGB(flash + (slowed ? 0.1 : 0) + pulse * 0.4 + hide * 0.6 + storm * 0.5, flash + (slowed ? 0.25 : 0) + pulse + hide * 0.75 + storm * 0.85, flash + (slowed ? 0.4 : 0) + hide + storm);
       }
       rig.markSigil.visible = pc.markT > 0 && !dead;
       if (rig.markSigil.visible) {
@@ -1047,7 +1080,7 @@ export class World3D implements WorldView {
         const light = this.lights[li++];
         light.position.set(x, PROJ_H + 10, y);
         light.color.set(abilityColor(pr.kind, pr.owner));
-        light.intensity = pr.kind === 'blast' ? 9000 : pr.kind === 'frost' ? 5000 : 2600;
+        light.intensity = pr.kind === 'blast' ? 9000 : pr.kind === 'frost' || pr.kind === 'lightning' ? 5000 : 2600;
       }
     }
 
@@ -1283,7 +1316,7 @@ export class World3D implements WorldView {
     }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue', 'toad'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue', 'toad', 'lightning'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1303,6 +1336,12 @@ export class World3D implements WorldView {
       this.aimLaneMesh.position.set(PLAYER_R + len / 2, 0, 0);
       this.aimLaneMesh.scale.set(len, half * 2, 1);
       (this.aimLaneMesh.material as THREE.MeshBasicMaterial).color.set(abilityColor(id, p.id));
+    } else if (id === 'stomp') {
+      // Earthshaker: the stun ring inside the slow ring, around you.
+      this.aimCircle.visible = true;
+      this.aimCircle.position.set(p.x, 1.4, p.y);
+      this.aimCircle.scale.setScalar(STOMP.r / METEOR.r);
+      (this.aimCircle.material as THREE.MeshBasicMaterial).color.set(COLORS.storm);
     } else if (id === 'tides' && def && p.cast) {
       // The burst's reach around you, filling up as the blood gathers.
       const draw = (def.cast - p.cast.t) / def.cast;
@@ -1451,7 +1490,7 @@ export function projectileGeometry(kind: ProjKind, size: number): THREE.BufferGe
       ? new THREE.IcosahedronGeometry(size * 0.75, 0)
       : kind === 'frost' || kind === 'hook'
         ? new THREE.OctahedronGeometry(size * 0.85, 0)
-        : kind === 'transfusion' || kind === 'pulse'
+        : kind === 'transfusion' || kind === 'pulse' || kind === 'lightning'
           ? new THREE.IcosahedronGeometry(size * 0.7, 0)
           : kind === 'clock'
             ? new THREE.SphereGeometry(size * 0.75, 14, 10)

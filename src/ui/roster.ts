@@ -106,4 +106,13 @@ export const ROSTER: RosterEntry[] = [
     focus: 0.36,
     lore: 'A frog spearman from the glowing mushroom swamps, sworn to the great toad that sleeps beneath them. It slips under the water, bursts out where its foes least expect it, and calls the ancestor up to swallow whoever trespasses.',
   },
+  {
+    hero: "Kro'aw",
+    category: 'Close combat',
+    art: art('kroaw.webp'),
+    flip: true,
+    portrait: '53% 40%',
+    focus: 0.62,
+    lore: 'A great bull from the high plateaus where the thunderheads graze. Struck by lightning as a calf, he never stopped crackling: he charges whatever stands in his way, shrugs off the blows, and brings the sky down on top of it.',
+  },
 ];

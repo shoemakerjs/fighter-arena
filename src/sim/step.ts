@@ -19,6 +19,7 @@ import {
   BUFFER_TICKS,
   CHAMP,
   CHAMPIONS,
+  CHARGE,
   CHRONO,
   CLOCK,
   CONVERGE,
@@ -32,6 +33,8 @@ import {
   EXECUTE,
   FATE,
   FLICKER,
+  GORE,
+  HIDE,
   HASTE_MUL,
   JAB,
   KATANA,
@@ -53,6 +56,7 @@ import {
   SUBMERGE,
   PICKUP,
   PLAYER_R,
+  champR,
   POISON,
   PROJ,
   PULSE,
@@ -64,18 +68,21 @@ import {
   SLASH,
   SLOT,
   SLOT_BUTTONS,
+  SHOCK,
   SMOKE,
   SNARE,
   SOUL,
   SONIC,
   SPAWNS,
   STAB,
+  STOMP,
   VENOM,
   STEP,
   SWARM,
   SUDDEN_DEATH_AT,
   TEAM_SPREAD,
   TEMPEST,
+  THUNDER,
   TIDES,
   TOAD,
   TONGUE,
@@ -148,6 +155,7 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     dummy,
     restT: 0,
     champ,
+    r: dummy ? PLAYER_R : champR(champ),
     x: spawn.x,
     y: spawn.y,
     vx: 0,
@@ -198,6 +206,10 @@ function createPlayer(id: number, champ: number, count: number, dummy = false): 
     chargeT: 0,
     trail: [],
     submergeT: 0,
+    shockT: 0,
+    hideT: 0,
+    hideDmg: 0,
+    stormT: 0,
     pickT: 0,
     counterT: 0,
     slowT: 0,
@@ -368,17 +380,17 @@ export function rewindPoint(s: GameState, p: Player): { x: number; y: number; hp
 
 /** Mid-leap or mid-hop: in the air, flies over pillars. */
 export function airborne(p: Player): boolean {
-  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7);
+  return p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7 || p.dashKind === 9);
 }
 
 /** Leaping, executing or under the water: nothing can hit them and they pass through the enemy. */
 export function untargetable(p: Player): boolean {
-  return p.submergeT > 0 || (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5 || p.dashKind === 6 || p.dashKind === 7));
+  return p.submergeT > 0 || (p.dashT > 0 && (p.dashKind === 1 || p.dashKind === 2 || p.dashKind === 5 || p.dashKind === 6 || p.dashKind === 7 || p.dashKind === 9));
 }
 
-/** Leaping, executing, sweeping or submerged: moves through the enemy instead of bumping it. */
+/** Leaping, executing, sweeping or submerged: moves through the enemy instead of bumping it (a bull rush runs into it). */
 function passesThrough(p: Player): boolean {
-  return p.submergeT > 0 || (p.dashT > 0 && p.dashKind >= 1);
+  return p.submergeT > 0 || (p.dashT > 0 && p.dashKind >= 1 && p.dashKind !== 8);
 }
 
 function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
@@ -390,6 +402,13 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
   if (p.pickT > 0) p.pickT--;
   if (p.markT > 0) p.markT--;
   if (p.venomT > 0 && --p.venomT === 0) p.venom = 0;
+  if (p.shockT > 0) p.shockT--;
+  if (p.stormT > 0) p.stormT--;
+  // Thick Hide wears off: part of what it soaked comes back as health.
+  if (p.hideT > 0 && --p.hideT === 0) {
+    heal(p, Math.round(p.hideDmg * HIDE.back), ev);
+    p.hideDmg = 0;
+  }
   if (p.ambushT > 0) p.ambushT--;
   if (p.rootT > 0) p.rootT--;
   if (p.revealT > 0) p.revealT--;
@@ -480,9 +499,10 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     p.dashT--;
     p.x += p.dashX;
     p.y += p.dashY;
-    if (p.dashT === 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7)) {
+    if (p.dashT === 0 && (p.dashKind === 1 || p.dashKind === 6 || p.dashKind === 7 || p.dashKind === 9)) {
       collideWorld(s, p);
       if (p.dashKind === 1) land(s, p, ev);
+      if (p.dashKind === 9) thunderLand(s, p, ev);
       if (p.dashKind === 6) {
         // Lily Leap: dives under where it lands, unseen until it attacks or the dive runs out.
         p.stealthT = LILY.dive;
@@ -494,6 +514,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     if (p.dashKind === 3 && !p.dashHit) bladeContact(s, p, ev);
     if (p.dashKind === 4) stepContact(s, p, ev);
     if (p.dashKind === 5) swarmContact(s, p, ev);
+    if (p.dashKind === 8) chargeContact(s, p, ev);
   } else {
     const held = p.rootT > 0 || stunned || p.submergeT > 0;
     const mx = held ? 0 : Math.sign(inp.mx);
@@ -538,7 +559,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
   if (p.cooldowns[slot] > 0 || p.energy < def.energyCost) return false;
   // Rooted: no dashes, leaps or teleports.
-  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall' || def.id === 'lily' || def.id === 'submerge';
+  const mobility = def.id === 'dash' || def.id === 'leap' || def.id === 'blink' || def.id === 'vault' || def.id === 'execute' || def.id === 'blade' || def.id === 'soul' || def.id === 'fate' || def.id === 'step' || def.id === 'swarm' || def.id === 'flicker' || def.id === 'recall' || def.id === 'lily' || def.id === 'submerge' || def.id === 'charge' || def.id === 'thunder';
   if (p.rootT > 0 && mobility) return false;
 
   // Submerge: under the water at once, cancelling any cast.
@@ -624,6 +645,37 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
     return true;
   }
 
+  // Thunderfall: a leap toward the cursor that lands like a lightning strike.
+  if (def.id === 'thunder') {
+    if (p.dashT > 0) return false;
+    let tx = inp.ax - p.x;
+    let ty = inp.ay - p.y;
+    const d = Math.sqrt(tx * tx + ty * ty);
+    if (d > THUNDER.range) {
+      tx = (tx / d) * THUNDER.range;
+      ty = (ty / d) * THUNDER.range;
+    }
+    p.cast = null;
+    p.counterT = 0;
+    p.cooldowns[slot] = def.cooldown;
+    p.energy -= def.energyCost;
+    p.dashKind = 9;
+    p.dashT = THUNDER.ticks;
+    p.dashX = tx / THUNDER.ticks;
+    p.dashY = ty / THUNDER.ticks;
+    ev.push({ type: 'leap', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
+
+  // Thick Hide: instant, even mid-cast.
+  if (def.id === 'hide') {
+    p.hideT = HIDE.ticks;
+    p.hideDmg = 0;
+    p.cooldowns[slot] = def.cooldown;
+    ev.push({ type: 'hide', player: p.id, x: p.x, y: p.y });
+    return true;
+  }
+
   // Blink: instant teleport, also usable mid-cast (cancels it).
   if (def.id === 'blink') {
     if (p.dashT > 0) return false;
@@ -646,7 +698,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
   }
 
   // Mobility works mid-cast and cancels the cast.
-  if (def.id === 'dash' || def.id === 'leap' || def.id === 'lily' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul' || def.id === 'step') {
+  if (def.id === 'dash' || def.id === 'leap' || def.id === 'lily' || def.id === 'vault' || def.id === 'blade' || def.id === 'soul' || def.id === 'step' || def.id === 'charge') {
     if (p.dashT > 0) return false;
     p.cast = null;
     p.counterT = 0;
@@ -664,6 +716,13 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       p.dashT = BLADE.ticks;
       p.dashX = p.fx * BLADE.speed;
       p.dashY = p.fy * BLADE.speed;
+      ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
+    } else if (def.id === 'charge') {
+      p.dashKind = 8;
+      p.dashHit = 0;
+      p.dashT = CHARGE.ticks;
+      p.dashX = p.fx * CHARGE.speed;
+      p.dashY = p.fy * CHARGE.speed;
       ev.push({ type: 'dash', player: p.id, x: p.x, y: p.y });
     } else if (def.id === 'step') {
       p.dashKind = 4;
@@ -691,7 +750,7 @@ function tryStart(s: GameState, p: Player, slot: number, inp: Input, ev: GameEve
       for (const foe of enemiesOf(s, p)) {
         const dx = foe.x - p.x;
         const dy = foe.y - p.y;
-        const reach = VAULT.r + PLAYER_R;
+        const reach = VAULT.r + foe.r;
         if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
           foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, VAULT.slowMul) : VAULT.slowMul;
           foe.slowT = Math.max(foe.slowT, VAULT.slowT);
@@ -840,12 +899,12 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       const dmg = JAB.dmg + (p.quickT > 0 ? JAB.bonus : 0);
       p.quickT = 0;
       ev.push({ type: 'thrust', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
-      const x0 = p.x + p.fx * PLAYER_R;
-      const y0 = p.y + p.fy * PLAYER_R;
+      const x0 = p.x + p.fx * p.r;
+      const y0 = p.y + p.fy * p.r;
       const x1 = x0 + p.fx * JAB.len;
       const y1 = y0 + p.fy * JAB.len;
-      const reach = JAB.half + PLAYER_R;
       for (const foe of foes) {
+        const reach = JAB.half + foe.r;
         if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach) hit(p, foe, dmg, JAB.energy, 'jab', foe.x, foe.y, ev);
       }
       if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (JAB.half + ORB_R) * (JAB.half + ORB_R)) damageOrb(s, p.id, dmg, 0, 0, ev);
@@ -883,9 +942,9 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
     case 'chrono': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: CHRONO.reach });
       for (const foe of foes) {
-        if (inCone(p, foe.x, foe.y, 2 * PLAYER_R + CHRONO.reach, CHRONO.minDot) && hit(p, foe, CHRONO.dmg, CHRONO.energy, 'chrono', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) resonate(p, foe, ev);
+        if (inCone(p, foe.x, foe.y, p.r + foe.r + CHRONO.reach, CHRONO.minDot) && hit(p, foe, CHRONO.dmg, CHRONO.energy, 'chrono', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) resonate(p, foe, ev);
       }
-      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + CHRONO.reach, CHRONO.minDot)) damageOrb(s, p.id, CHRONO.dmg, 0, 0, ev);
+      if (s.orb.active && inCone(p, 0, 0, p.r + ORB_R + CHRONO.reach, CHRONO.minDot)) damageOrb(s, p.id, CHRONO.dmg, 0, 0, ev);
       return;
     }
 
@@ -902,20 +961,18 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
 
     case 'slash': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: SLASH.reach });
-      const reach = 2 * PLAYER_R + SLASH.reach;
       for (const foe of foes) {
-        if (inCone(p, foe.x, foe.y, reach, SLASH.minDot)) hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+        if (inCone(p, foe.x, foe.y, p.r + foe.r + SLASH.reach, SLASH.minDot)) hit(p, foe, SLASH.dmg, SLASH.energy, 'slash', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       }
-      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + SLASH.reach, SLASH.minDot)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
+      if (s.orb.active && inCone(p, 0, 0, p.r + ORB_R + SLASH.reach, SLASH.minDot)) damageOrb(s, p.id, SLASH.dmg, 0, 0, ev);
       return;
     }
 
     case 'dagger': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: STAB.reach });
-      const reach = 2 * PLAYER_R + STAB.reach;
       let landed = false;
       for (const foe of foes) {
-        if (!inCone(p, foe.x, foe.y, reach, STAB.minDot) || !hit(p, foe, STAB.dmg, STAB.energy, 'stab', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) continue;
+        if (!inCone(p, foe.x, foe.y, p.r + foe.r + STAB.reach, STAB.minDot) || !hit(p, foe, STAB.dmg, STAB.energy, 'stab', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) continue;
         landed = true;
         // Coated knives poison whoever they cut.
         if (p.venom > 0) {
@@ -926,16 +983,61 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         }
       }
       if (landed && p.venom > 0 && --p.venom === 0) p.venomT = 0;
-      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + STAB.reach, STAB.minDot)) damageOrb(s, p.id, STAB.dmg, 0, 0, ev);
+      if (s.orb.active && inCone(p, 0, 0, p.r + ORB_R + STAB.reach, STAB.minDot)) damageOrb(s, p.id, STAB.dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'gore': {
+      // The last hit of a run is heavy.
+      const heavy = p.stacks >= GORE.hits - 1;
+      const dmg = GORE.dmg + (heavy ? GORE.heavy : 0);
+      ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: GORE.reach });
+      let landed = false;
+      for (const foe of foes) {
+        if (!inCone(p, foe.x, foe.y, p.r + foe.r + GORE.reach, GORE.minDot) || !hit(p, foe, dmg, GORE.energy, 'gore', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev)) continue;
+        landed = true;
+        if (heavy) {
+          const dx = foe.x - p.x;
+          const dy = foe.y - p.y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          knockback(foe, d > 0.0001 ? dx / d : p.fx, d > 0.0001 ? dy / d : p.fy, GORE.kb);
+        }
+        // A charged enemy takes the lightning; under the storm every hit zaps.
+        if (foe.shockT > 0) {
+          foe.shockT = 0;
+          zap(p, foe, SHOCK.dmg, true, ev);
+        } else if (p.stormT > 0) zap(p, foe, SHOCK.storm, false, ev);
+      }
+      if (landed && heavy) {
+        p.stacks = 0;
+        p.stackT = 0;
+        ev.push({ type: 'heavy', player: p.id, x: p.x + p.fx * p.r, y: p.y + p.fy * p.r });
+      } else if (landed) {
+        p.stacks++;
+        p.stackT = GORE.window;
+      }
+      if (s.orb.active && inCone(p, 0, 0, p.r + ORB_R + GORE.reach, GORE.minDot)) damageOrb(s, p.id, dmg, 0, 0, ev);
+      return;
+    }
+
+    case 'stomp': {
+      ev.push({ type: 'stomp', player: p.id, x: p.x, y: p.y });
+      for (const foe of areaHit(s, p, p.x, p.y, STOMP.r, STOMP.dmg, STOMP.energy, 0, 'stomp', ev)) {
+        const dx = foe.x - p.x;
+        const dy = foe.y - p.y;
+        const close = STOMP.inner + foe.r;
+        if (dx * dx + dy * dy < close * close) stun(foe, STOMP.stun, ev);
+        else slow(foe, STOMP.slowMul, STOMP.slowT);
+      }
       return;
     }
 
     case 'katana': {
       ev.push({ type: 'swing', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy, reach: KATANA.reach });
       for (const foe of foes) {
-        if (inCone(p, foe.x, foe.y, 2 * PLAYER_R + KATANA.reach, KATANA.minDot)) hit(p, foe, KATANA.dmg, KATANA.energy, 'katana', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
+        if (inCone(p, foe.x, foe.y, p.r + foe.r + KATANA.reach, KATANA.minDot)) hit(p, foe, KATANA.dmg, KATANA.energy, 'katana', (p.x + foe.x) / 2, (p.y + foe.y) / 2, ev);
       }
-      if (s.orb.active && inCone(p, 0, 0, PLAYER_R + ORB_R + KATANA.reach, KATANA.minDot)) damageOrb(s, p.id, KATANA.dmg, 0, 0, ev);
+      if (s.orb.active && inCone(p, 0, 0, p.r + ORB_R + KATANA.reach, KATANA.minDot)) damageOrb(s, p.id, KATANA.dmg, 0, 0, ev);
       return;
     }
 
@@ -948,13 +1050,13 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
         return;
       }
       ev.push({ type: 'thrust', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
-      const x0 = p.x + p.fx * PLAYER_R;
-      const y0 = p.y + p.fy * PLAYER_R;
+      const x0 = p.x + p.fx * p.r;
+      const y0 = p.y + p.fy * p.r;
       const x1 = x0 + p.fx * TEMPEST.len;
       const y1 = y0 + p.fy * TEMPEST.len;
-      const reach = TEMPEST.half + PLAYER_R;
       let landed = false;
       for (const foe of foes) {
+        const reach = TEMPEST.half + foe.r;
         if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, TEMPEST.dmg, TEMPEST.energy, 'tempest', foe.x, foe.y, ev)) landed = true;
       }
       // One stack per thrust, however many it hit.
@@ -971,17 +1073,16 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       const y0 = p.y;
       const x1 = x0 + p.fx * FATE.range;
       const y1 = y0 + p.fy * FATE.range;
-      const reach = FATE.half + PLAYER_R;
-      const caught = foes.filter((foe) => segDist2(foe.x, foe.y, x0, y0, x1, y1) <= reach * reach && hit(p, foe, FATE.dmg, 0, 'fate', foe.x, foe.y, ev));
+      const caught = foes.filter((foe) => segDist2(foe.x, foe.y, x0, y0, x1, y1) <= (FATE.half + foe.r) ** 2 && hit(p, foe, FATE.dmg, 0, 'fate', foe.x, foe.y, ev));
       if (s.orb.active && segDist2(0, 0, x0, y0, x1, y1) <= (FATE.half + ORB_R) * (FATE.half + ORB_R)) damageOrb(s, p.id, FATE.dmg, 0, 0, ev);
       p.x = x1;
       p.y = y1;
       collideWorld(s, p);
       caught.forEach((foe, k) => {
         // Dragged along to the end of the line, right in front of the samurai (side by side if two).
-        const side = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2 * PLAYER_R;
-        foe.x = p.x + p.fx * (2 * PLAYER_R + 2) - p.fy * side;
-        foe.y = p.y + p.fy * (2 * PLAYER_R + 2) + p.fx * side;
+        const side = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 2 * foe.r;
+        foe.x = p.x + p.fx * (p.r + foe.r + 2) - p.fy * side;
+        foe.y = p.y + p.fy * (p.r + foe.r + 2) + p.fx * side;
         foe.vx = 0;
         foe.vy = 0;
         collideWorld(s, foe);
@@ -1016,12 +1117,12 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
 
     case 'rift': {
       ev.push({ type: 'rift', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
-      const x0 = p.x + p.fx * PLAYER_R;
-      const y0 = p.y + p.fy * PLAYER_R;
+      const x0 = p.x + p.fx * p.r;
+      const y0 = p.y + p.fy * p.r;
       const x1 = x0 + p.fx * RIFT.len;
       const y1 = y0 + p.fy * RIFT.len;
       for (const foe of foes) {
-        if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= (RIFT.half + PLAYER_R) * (RIFT.half + PLAYER_R) && hit(p, foe, RIFT.dmg, 0, 'rift', foe.x, foe.y, ev)) {
+        if (segDist2(foe.x, foe.y, x0, y0, x1, y1) <= (RIFT.half + foe.r) * (RIFT.half + foe.r) && hit(p, foe, RIFT.dmg, 0, 'rift', foe.x, foe.y, ev)) {
           knockback(foe, p.fx, p.fy, RIFT.kb);
         }
       }
@@ -1052,7 +1153,7 @@ function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, e
   } else if (kind === 'transfusion' && ++p.bloodCount % TRANSFUSION.every === 0) {
     dmg = Math.round(dmg * TRANSFUSION.boost);
   }
-  const off = PLAYER_R + pd.r * 0.5;
+  const off = p.r + pd.r * 0.5;
   const x = p.x + p.fx * off;
   const y = p.y + p.fy * off;
   s.projectiles.push({
@@ -1073,9 +1174,10 @@ function fireProjectile(s: GameState, p: Player, kind: ProjKind, draw: number, e
   ev.push({ type: 'release', player: p.id, ability, x, y });
 }
 
-/** The first enemy within `reach` of p (in id order), if any. */
-function touching(s: GameState, p: Player, reach: number): Player | null {
+/** The first enemy whose body is within `gap` of p's (in id order), if any. */
+function touching(s: GameState, p: Player, gap: number): Player | null {
   for (const foe of enemiesOf(s, p)) {
+    const reach = p.r + foe.r + gap;
     const dx = foe.x - p.x;
     const dy = foe.y - p.y;
     if (dx * dx + dy * dy <= reach * reach && foe.hp > 0) return foe;
@@ -1085,7 +1187,7 @@ function touching(s: GameState, p: Player, reach: number): Player | null {
 
 /** Execute connects with the first enemy it passes through. */
 function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
-  const foe = touching(s, p, 2 * PLAYER_R + 8);
+  const foe = touching(s, p, 8);
   if (!foe) return;
   p.dashHit = 1;
   const lethal = foe.hp <= maxHp(foe) * EXECUTE.threshold;
@@ -1095,7 +1197,7 @@ function executeContact(s: GameState, p: Player, ev: GameEvent[]) {
 
 /** Sweeping Blade cuts the first enemy it passes through. */
 function bladeContact(s: GameState, p: Player, ev: GameEvent[]) {
-  const foe = touching(s, p, 2 * PLAYER_R + 6);
+  const foe = touching(s, p, 6);
   if (!foe) return;
   p.dashHit = 1;
   hit(p, foe, BLADE.dmg, BLADE.energy, 'blade', foe.x, foe.y, ev);
@@ -1131,13 +1233,45 @@ function land(s: GameState, p: Player, ev: GameEvent[]) {
   }
 }
 
+/** Bull Rush ran into an enemy: hit, stunned, thrown back along the charge, and the charge ends. */
+function chargeContact(s: GameState, p: Player, ev: GameEvent[]) {
+  const foe = touching(s, p, 8);
+  if (!foe || untargetable(foe)) return;
+  const sp = Math.sqrt(p.dashX * p.dashX + p.dashY * p.dashY);
+  const nx = sp > 0.0001 ? p.dashX / sp : p.fx;
+  const ny = sp > 0.0001 ? p.dashY / sp : p.fy;
+  p.dashT = 0;
+  p.dashHit = 1;
+  if (!hit(p, foe, CHARGE.dmg, CHARGE.energy, 'charge', foe.x, foe.y, ev)) return;
+  stun(foe, CHARGE.stun, ev);
+  knockback(foe, nx, ny, CHARGE.kb);
+}
+
+/** Thunderfall lands: everyone around is hit and stunned, and the storm starts. */
+function thunderLand(s: GameState, p: Player, ev: GameEvent[]) {
+  ev.push({ type: 'thunder', player: p.id, x: p.x, y: p.y });
+  for (const foe of areaHit(s, p, p.x, p.y, THUNDER.r, THUNDER.dmg, 0, 0, 'thunder', ev)) stun(foe, THUNDER.stun, ev);
+  p.stormT = THUNDER.storm;
+}
+
+/** Lightning arcing from the bull's horns into `foe` (slowing it if `slows`). */
+function zap(p: Player, foe: Player, dmg: number, slows: boolean, ev: GameEvent[]) {
+  ev.push({ type: 'shock', player: foe.id, x: foe.x, y: foe.y });
+  if (hit(p, foe, dmg, 0, 'shock', foe.x, foe.y, ev) && slows) slow(foe, SHOCK.slowMul, SHOCK.slowT);
+}
+
+function slow(foe: Player, mul: number, ticks: number) {
+  foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, mul) : mul;
+  foe.slowT = Math.max(foe.slowT, ticks);
+}
+
 /** Target center within `reach` and in front of the attacker (cos of the half-angle >= minDot). */
 function inCone(p: Player, x: number, y: number, reach: number, minDot: number): boolean {
   const dx = x - p.x;
   const dy = y - p.y;
   const d = Math.sqrt(dx * dx + dy * dy);
   if (d > reach) return false;
-  if (d < PLAYER_R) return true;
+  if (d < p.r) return true;
   return (dx * p.fx + dy * p.fy) / d >= minDot;
 }
 
@@ -1159,7 +1293,7 @@ function areaHit(s: GameState, p: Player, x: number, y: number, r: number, dmg: 
     let dx = foe.x - x;
     let dy = foe.y - y;
     let d = Math.sqrt(dx * dx + dy * dy);
-    if (!(d < r + PLAYER_R && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev))) continue;
+    if (!(d < r + foe.r && hit(p, foe, dmg, energy, kind, foe.x, foe.y, ev))) continue;
     landed.push(foe);
     if (kb > 0) {
       if (d < 0.0001) {
@@ -1181,7 +1315,7 @@ function collideWorld(s: GameState, p: Player) {
   for (const pl of solidsOf(s)) {
     let dx = p.x - pl.x;
     let dy = p.y - pl.y;
-    const min = pl.r + PLAYER_R;
+    const min = pl.r + p.r;
     const d2 = dx * dx + dy * dy;
     if (d2 < min * min) {
       let d = Math.sqrt(d2);
@@ -1202,7 +1336,7 @@ function collideWorld(s: GameState, p: Player) {
  * sideways onto the bridge it is walking off.
  */
 function keepOutOfRiver(river: River, p: Player) {
-  const bank = river.half + PLAYER_R / 2;
+  const bank = river.half + p.r / 2;
   const ax = Math.abs(p.x);
   if (ax >= bank) return;
   let bestDy = Infinity;
@@ -1220,7 +1354,7 @@ function keepOutOfRiver(river: River, p: Player) {
 }
 
 function clampToArena(s: GameState, p: Player) {
-  const lim = s.arenaR - PLAYER_R;
+  const lim = s.arenaR - p.r;
   const d = Math.sqrt(p.x * p.x + p.y * p.y);
   if (d > lim) {
     p.x *= lim / d;
@@ -1239,7 +1373,7 @@ function separatePair(s: GameState, a: Player, b: Player) {
   if (a.out || b.out || passesThrough(a) || passesThrough(b)) return;
   let dx = b.x - a.x;
   let dy = b.y - a.y;
-  const min = PLAYER_R * 2;
+  const min = a.r + b.r;
   const d2 = dx * dx + dy * dy;
   if (d2 >= min * min) return;
   let d = Math.sqrt(d2);
@@ -1277,6 +1411,11 @@ function hit(attacker: Player, target: Player, dmg: number, energy: number, kind
     dmg += MARK.bonus;
     ev.push({ type: 'markPop', player: target.id, x: target.x, y: target.y });
   }
+  // Thick Hide soaks part of it, and remembers what got through.
+  if (target.hideT > 0) {
+    dmg = Math.round(dmg * (1 - HIDE.reduce));
+    target.hideDmg += dmg;
+  }
   target.hp = Math.max(0, target.hp - dmg);
   target.hitT = 8;
   target.restT = 0;
@@ -1307,9 +1446,9 @@ function heal(p: Player, amount: number, ev: GameEvent[]) {
 
 /** Crimson Step: everyone passed through starts bleeding (once per dash each). */
 function stepContact(s: GameState, p: Player, ev: GameEvent[]) {
-  const reach = 2 * PLAYER_R + 6;
   for (const foe of enemiesOf(s, p)) {
     const bit = 1 << foe.id;
+    const reach = p.r + foe.r + 6;
     const dx = foe.x - p.x;
     const dy = foe.y - p.y;
     if (p.dashHit & bit || dx * dx + dy * dy > reach * reach || foe.hp <= 0 || untargetable(foe)) continue;
@@ -1376,9 +1515,9 @@ function surface(s: GameState, p: Player, ev: GameEvent[]) {
 
 /** Night Swarm: bite everyone flown through (once per swarm each), slowing them and healing you. */
 function swarmContact(s: GameState, p: Player, ev: GameEvent[]) {
-  const reach = 2 * PLAYER_R + 10;
   for (const foe of enemiesOf(s, p)) {
     const bit = 1 << foe.id;
+    const reach = p.r + foe.r + 10;
     const dx = foe.x - p.x;
     const dy = foe.y - p.y;
     if (p.dashHit & bit || dx * dx + dy * dy > reach * reach || foe.hp <= 0 || untargetable(foe)) continue;
@@ -1476,10 +1615,10 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
     }
 
     // The first enemy it touches; untargetable champions let projectiles fly through.
-    const tmin = PLAYER_R + pr.r;
     const target = enemiesOf(s, s.players[pr.owner]).find((t) => {
       const tdx = t.x - pr.x;
       const tdy = t.y - pr.y;
+      const tmin = t.r + pr.r;
       return !untargetable(t) && tdx * tdx + tdy * tdy < tmin * tmin;
     });
     if (target) {
@@ -1524,6 +1663,7 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
           ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });
         }
         if (pr.kind === 'tongue') yank(shooter, target, ev);
+        if (pr.kind === 'lightning') target.shockT = SHOCK.ticks;
       }
       continue;
     }
@@ -1574,8 +1714,8 @@ function clockTick(s: GameState, pr: Projectile, ev: GameEvent[]): boolean {
     return false;
   }
   if (pr.age < pr.life) return true;
-  const reach = CLOCK.r + PLAYER_R;
   const foeNear = enemiesOf(s, s.players[pr.owner]).some((foe) => {
+    const reach = CLOCK.r + foe.r;
     const dx = foe.x - pr.x;
     const dy = foe.y - pr.y;
     return foe.hp > 0 && !untargetable(foe) && dx * dx + dy * dy < reach * reach;
@@ -1619,7 +1759,7 @@ function updateZones(s: GameState, ev: GameEvent[]) {
       for (const foe of enemiesOf(s, owner)) {
         const dx = foe.x - z.x;
         const dy = foe.y - z.y;
-        const reach = RAIN.r + PLAYER_R;
+        const reach = RAIN.r + foe.r;
         if (dx * dx + dy * dy < reach * reach && !untargetable(foe) && foe.hp > 0) {
           foe.slowMul = foe.slowT > 0 ? Math.min(foe.slowMul, RAIN.slow) : RAIN.slow;
           foe.slowT = Math.max(foe.slowT, 10);
@@ -1641,8 +1781,8 @@ function updateZones(s: GameState, ev: GameEvent[]) {
     if (z.kind === 'marsh') {
       // Allies wade through it faster, enemies slower (lingering a moment after stepping out).
       const owner = s.players[z.owner];
-      const reach = MARSH.r + PLAYER_R;
       for (const q of s.players) {
+        const reach = MARSH.r + q.r;
         const dx = q.x - z.x;
         const dy = q.y - z.y;
         if (q.out || q.hp <= 0 || airborne(q) || dx * dx + dy * dy >= reach * reach) continue;
@@ -1660,9 +1800,9 @@ function updateZones(s: GameState, ev: GameEvent[]) {
         let dx = foe.x - z.x;
         let dy = foe.y - z.y;
         let d = Math.sqrt(dx * dx + dy * dy);
-        if (d < TOAD.inner + PLAYER_R) {
+        if (d < TOAD.inner + foe.r) {
           if (hit(owner, foe, TOAD.dmg, 0, 'toad', foe.x, foe.y, ev)) stun(foe, TOAD.stun, ev);
-        } else if (d < TOAD.r + PLAYER_R && hit(owner, foe, TOAD.edge, 0, 'toad', foe.x, foe.y, ev)) {
+        } else if (d < TOAD.r + foe.r && hit(owner, foe, TOAD.edge, 0, 'toad', foe.x, foe.y, ev)) {
           if (d < 0.0001) {
             dx = 1;
             dy = 0;
@@ -1694,9 +1834,9 @@ function updatePickups(s: GameState, ev: GameEvent[]) {
     spawnPickup(s, ev);
     s.pickupT = PICKUP.every;
   }
-  const reach = PLAYER_R + PICKUP.r;
   s.pickups = s.pickups.filter((pk) => {
     const taker = s.players.find((p) => {
+      const reach = p.r + PICKUP.r;
       const dx = p.x - pk.x;
       const dy = p.y - pk.y;
       return !p.out && p.hp > 0 && p.pickT === 0 && !airborne(p) && dx * dx + dy * dy < reach * reach;
@@ -1704,10 +1844,10 @@ function updatePickups(s: GameState, ev: GameEvent[]) {
     if (!taker) return true;
     taker.pickT = PICKUP.lockout;
     ev.push({ type: 'pickup', player: taker.id, x: pk.x, y: pk.y });
-    const area = PICKUP.area + PLAYER_R;
     for (const ally of s.players) {
       const dx = ally.x - pk.x;
       const dy = ally.y - pk.y;
+      const area = PICKUP.area + ally.r;
       if (ally.team === taker.team && dx * dx + dy * dy < area * area) heal(ally, PICKUP.heal, ev);
     }
     return false;
@@ -1768,7 +1908,7 @@ function updateMeteors(s: GameState, ev: GameEvent[]) {
       let dx = target.x - m.x;
       let dy = target.y - m.y;
       let d = Math.sqrt(dx * dx + dy * dy);
-      if (d < METEOR.r + PLAYER_R && hit(owner, target, METEOR.dmg, 0, 'meteor', target.x, target.y, ev)) {
+      if (d < METEOR.r + target.r && hit(owner, target, METEOR.dmg, 0, 'meteor', target.x, target.y, ev)) {
         if (d < 0.0001) {
           dx = 1;
           dy = 0;

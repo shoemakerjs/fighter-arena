@@ -5,7 +5,7 @@
  * World mapping: sim (x, y) → three (x, 0, y), height is +Y.
  */
 import * as THREE from 'three';
-import { ARENA_R, CHAMP, PLAYER_R, SPAWNS, type MapDef, type River } from '../sim/constants';
+import { ARENA_R, CHAMP, champR, PLAYER_R, SPAWNS, type MapDef, type River } from '../sim/constants';
 import { COLORS } from './theme';
 import { hexA } from './view';
 
@@ -1185,6 +1185,13 @@ export interface ChampionRig {
 }
 
 export function buildChampion(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
+  const rig = buildSkin(champ, color, glowTex);
+  // Big champions are drawn bigger, rings and markers included, to match their hitbox.
+  rig.root.scale.setScalar(champR(champ) / PLAYER_R);
+  return rig;
+}
+
+function buildSkin(champ: number, color: string, glowTex: THREE.Texture): ChampionRig {
   if (champ === CHAMP.MAGE) return buildMage(color, glowTex);
   if (champ === CHAMP.WARRIOR) return buildWarrior(color, glowTex);
   if (champ === CHAMP.ASSASSIN) return buildAssassin(color, glowTex);
@@ -1193,6 +1200,7 @@ export function buildChampion(champ: number, color: string, glowTex: THREE.Textu
   if (champ === CHAMP.BLOOD) return buildVampire(color, glowTex);
   if (champ === CHAMP.CHRONO) return buildRustic(color, glowTex);
   if (champ === CHAMP.FROG) return buildLotan(color, glowTex);
+  if (champ === CHAMP.BULL) return buildKroaw(color, glowTex);
   // No modeled skin yet: the test mannequin.
   return buildDummy(color, glowTex);
 }
@@ -2047,7 +2055,7 @@ function buildWarrior(color: string, glowTex: THREE.Texture): ChampionRig {
   tipGlow.position.set(8, 31, 0);
   axe.add(tipGlow);
 
-  yaw.scale.setScalar(1.08); // class size; body.scale is used for squash
+  yaw.scale.setScalar(1); // class size comes from the body radius (buildChampion); body.scale is used for squash
   shadowed(body);
   tip.castShadow = false;
   body.traverse((o) => {
@@ -3596,6 +3604,263 @@ function buildLotan(color: string, glowTex: THREE.Texture): ChampionRig {
 
   const markers = addMarkers(root, team, bright);
   return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matSkin, matBelly, matRobe, matLeafA, matLeafB, matLeafC, matHat, matScarf, matWrap, matLeather, matHaft, matStone], ...markers };
+}
+
+/**
+ * Kro'aw — the storm bull, toon style, after the concept sheet: a hulking upright bull with a
+ * black hide streaked with red war paint, ringed gold horns, a gold disc on the brow, huge spiked
+ * gold pauldrons, spiked gold bracers on both forearms, red rags over the shoulders and down the
+ * back, a belt with a big gold medallion over a torn red and cream loincloth, and wrapped shins.
+ * The right fist is the weapon; a spark of the storm glows on it.
+ */
+function buildKroaw(color: string, glowTex: THREE.Texture): ChampionRig {
+  const team = new THREE.Color(color);
+  const bright = lighten(color, 0.45);
+  const matTeam = toon(team, { side: THREE.DoubleSide });
+  const matHide = toon('#2a2422');
+  const matHideDark = toon('#171312');
+  const matChest = toonSoft('#352d2a');
+  const matMuzzle = toonSoft('#4a403b');
+  const matHorn = toon('#d9a33a');
+  const matHornTip = toon('#efd9a0');
+  const matHoof = toon('#1c1816');
+  const matGold = toon('#e3b445');
+  const matGoldDark = toon('#a8741f');
+  const matRed = toon('#a3221d', { side: THREE.DoubleSide });
+  const matRedDark = toon('#6e1814', { side: THREE.DoubleSide });
+  const matCream = toon('#c9b996', { side: THREE.DoubleSide });
+  const matLeather = toon('#4a3020');
+  const matWrap = toon('#8c7b5c');
+  const matNostril = new THREE.MeshBasicMaterial({ color: '#0e0a09' });
+  const matPaint = new THREE.MeshBasicMaterial({ color: '#b3261e' });
+  const matEye = new THREE.MeshBasicMaterial({ color: '#ff6a2a', toneMapped: false });
+  const matStorm = new THREE.MeshBasicMaterial({ color: COLORS.storm, toneMapped: false });
+
+  const root = new THREE.Group();
+  const lean = new THREE.Group();
+  const yaw = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(lean);
+  lean.add(yaw);
+  yaw.add(body);
+  // Size comes from the body radius (buildChampion).
+
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, parent: THREE.Object3D = body) => {
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    parent.add(mesh);
+    return mesh;
+  };
+  const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const outlined: THREE.Mesh[] = [];
+  const keep = <T extends THREE.Mesh>(m: T) => (outlined.push(m), m);
+  /** A gold disc with a raised rim and hub, its face turned along `normal`. */
+  const medallion = (parent: THREE.Object3D, x: number, y: number, z: number, r: number, normal: THREE.Vector3) => {
+    const disc = new THREE.Group();
+    disc.position.set(x, y, z);
+    disc.quaternion.setFromUnitVectors(v(0, 1, 0), normal.normalize());
+    parent.add(disc);
+    keep(add(new THREE.CylinderGeometry(r, r, 0.9, 16), matGold, 0, 0, 0, disc));
+    add(new THREE.TorusGeometry(r * 0.78, r * 0.09, 4, 16), matGoldDark, 0, 0.5, 0, disc).rotation.x = Math.PI / 2;
+    add(new THREE.CylinderGeometry(r * 0.28, r * 0.28, 1.3, 8), matGoldDark, 0, 0.3, 0, disc);
+    return disc;
+  };
+  /** A small gold bell-shaped tassel hanging from (x, y, z). */
+  const tassel = (parent: THREE.Object3D, x: number, y: number, z: number, s = 1) => {
+    add(new THREE.CylinderGeometry(0.25 * s, 0.25 * s, 3 * s, 4), matGoldDark, x, y - 1.5 * s, z, parent);
+    keep(add(new THREE.ConeGeometry(1.3 * s, 3.4 * s, 8), matGold, x, y - 4.4 * s, z, parent));
+  };
+  /** Gold cone spikes standing out of a surface along `dir`. */
+  const spike = (parent: THREE.Object3D, x: number, y: number, z: number, dir: THREE.Vector3, len: number, r: number) => {
+    const c = keep(add(new THREE.ConeGeometry(r, len, 8), matGold, 0, 0, 0, parent));
+    c.quaternion.setFromUnitVectors(v(0, 1, 0), dir.normalize());
+    c.position.set(x, y, z).addScaledVector(dir, len / 2);
+    return c;
+  };
+
+  // Thick legs bending back to cloven hooves, shins bound in cloth wraps
+  for (const side of [-1, 1]) {
+    keep(limb(body, v(0, 24, side * 8), v(3, 13, side * 9), 5.4, matHide));
+    keep(limb(body, v(3, 13, side * 9), v(-1, 4, side * 9), 4.2, matHideDark));
+    for (const [y, x] of [[7, 0.2], [10, 1.4]]) {
+      const wrap = keep(add(new THREE.CylinderGeometry(4.6, 4.8, 2.4, 10), matWrap, x, y, side * 9));
+      wrap.rotation.z = 0.35;
+    }
+    const hoof = keep(add(new THREE.CylinderGeometry(3.8, 4.4, 4, 10), matHoof, 0, 2, side * 9));
+    hoof.scale.set(1.3, 1, 1);
+  }
+
+  // Torn loincloth: deep red all round, a cream apron in front and a red flap behind
+  keep(add(raggedLathe([[14.6, 13], [14, 19], [13.4, 24], [12.6, 28]], 24, 4, 77), matRedDark, 0, 0, 0));
+  for (const [x, rot, w, mat, seed] of [[13.6, Math.PI / 2 - 0.12, 9, matCream, 19], [-13.6, -Math.PI / 2 + 0.12, 13, matRed, 23]] as const) {
+    const flap = keep(add(raggedPanel(w, 21, 5, seed), mat, x, 26, 0));
+    flap.rotation.y = rot;
+  }
+  for (const side of [-1, 1]) {
+    const hipFlap = add(raggedPanel(9, 16, 3, 31 + side), matRed, 2, 26, side * 13.4);
+    hipFlap.rotation.y = side > 0 ? 0.1 : Math.PI - 0.1;
+  }
+  // Leather belt in the team colour's trim, with the big gold medallion and its tassels
+  keep(add(new THREE.CylinderGeometry(13.6, 14, 4.4, 24), matLeather, 0, 27, 0));
+  const sash = add(new THREE.TorusGeometry(13.9, 0.9, 6, 26), matTeam, 0, 25, 0);
+  sash.rotation.x = Math.PI / 2;
+  medallion(body, 14.4, 27, 0, 5, v(1, 0, 0));
+  tassel(body, 15, 22, 0, 1.2);
+  tassel(body, 14.6, 23, -3.2, 0.9);
+  tassel(body, 14.6, 23, 3.2, 0.9);
+
+  // Barrel chest and the hump of the shoulders, streaked with red war paint
+  keep(add(new THREE.SphereGeometry(15.5, 20, 14), matHide, 0, 39, 0)).scale.set(1, 1.05, 1.22);
+  keep(add(new THREE.SphereGeometry(11, 16, 12), matChest, 6, 38, 0)).scale.set(0.8, 1.05, 1.2);
+  keep(add(new THREE.SphereGeometry(10.5, 16, 12), matHide, -6.5, 49, 0)).scale.set(1, 0.75, 1.35);
+  for (const [z, a] of [[-5, 0.35], [5, -0.35], [0, 0]]) {
+    const stripe = add(new THREE.BoxGeometry(0.6, 9, 1.1), matPaint, 14.6, 40, z);
+    stripe.rotation.x = a;
+  }
+  // Shaggy mane over the neck
+  for (let i = 0; i < 9; i++) {
+    const a = -0.9 + (i / 8) * 1.8;
+    const tuft = add(new THREE.ConeGeometry(3.6, 10, 6), matHideDark, -3 + Math.cos(a) * 2, 51.5, Math.sin(a) * 13.5);
+    tuft.rotation.set(Math.sin(a) * 0.9, 0, 0.6);
+  }
+
+  // Red rags hanging off the shoulders and down the back
+  const cape = keep(add(raggedPanel(24, 30, 7, 41), matRed, -15.5, 54, 0));
+  // Turned to face backwards, its hem swinging out off the hump.
+  cape.rotation.order = 'YXZ';
+  cape.rotation.set(-0.22, -Math.PI / 2, 0);
+  for (const side of [-1, 1]) {
+    const rag = add(raggedPanel(10, 18, 4, 47 + side), matRed, 2, 50, side * 18.5);
+    rag.rotation.set(0, side > 0 ? 0 : Math.PI, side * -0.12);
+  }
+
+  // Tail with a tuft
+  keep(limb(body, v(-13, 26, 0), v(-21, 13, 0), 1.3, matHide));
+  keep(add(new THREE.ConeGeometry(2.8, 7, 6), matHideDark, -22, 10, 0)).rotation.z = Math.PI + 0.6;
+
+  // Huge gold pauldrons: two layered plates bristling with spikes, a medallion and tassel in front
+  for (const side of [-1, 1]) {
+    const pad = keep(add(new THREE.SphereGeometry(9.5, 16, 10, 0, TAU, 0, Math.PI * 0.5), matGold, -1, 49, side * 16.5));
+    pad.rotation.x = side * 0.55;
+    pad.scale.set(1.15, 0.9, 1);
+    const lower = keep(add(new THREE.SphereGeometry(8, 14, 8, 0, TAU, 0, Math.PI * 0.45), matGoldDark, 0, 44.5, side * 19.5));
+    lower.rotation.x = side * 0.9;
+    spike(body, -2, 55, side * 17, v(-0.15, 1, side * 0.45), 8, 1.9);
+    spike(body, 4, 53.5, side * 19, v(0.25, 0.9, side * 0.6), 6.5, 1.7);
+    spike(body, -7.5, 52.5, side * 19, v(-0.45, 0.8, side * 0.6), 6.5, 1.7);
+    spike(body, -1, 49, side * 24.5, v(0, 0.2, side), 6, 1.6);
+    medallion(body, 7.5, 47, side * 17.5, 2.6, v(1, 0.1, side * 0.35));
+    tassel(body, 7.8, 44.6, side * 17.5, 0.85);
+    add(new THREE.OctahedronGeometry(1.5, 0), matTeam, 3, 52.5, side * 21.5);
+  }
+
+  // Head: long skull pushed forward, dark muzzle, flared nostrils, a gold disc on the brow
+  const head = new THREE.Group();
+  head.position.set(9, 55, 0);
+  body.add(head);
+  keep(add(new THREE.SphereGeometry(8, 18, 14), matHide, 0, 0, 0, head)).scale.set(1.15, 0.95, 1);
+  keep(add(new THREE.SphereGeometry(6.4, 16, 12), matMuzzle, 7.5, -3.5, 0, head)).scale.set(1, 0.8, 1.05);
+  // Snarling open mouth with a pale lower jaw
+  keep(add(new THREE.SphereGeometry(4.2, 12, 8), matMuzzle, 7, -7.6, 0, head)).scale.set(1.15, 0.5, 0.95);
+  add(new THREE.BoxGeometry(5, 1.2, 5), matNostril, 9, -6.4, 0, head);
+  for (const side of [-1, 1]) {
+    add(new THREE.SphereGeometry(1.2, 8, 6), matNostril, 13.2, -2.6, side * 2.4, head).scale.set(0.5, 1, 1);
+    // Fiery eyes under a heavy brow, a stroke of war paint below each
+    add(new THREE.SphereGeometry(1.4, 10, 8), matEye, 6, 2.6, side * 5.6, head);
+    const brow = add(new THREE.BoxGeometry(5, 1.6, 3.4), matHideDark, 5.6, 4.4, side * 5.4, head);
+    brow.rotation.x = side * -0.25;
+    brow.rotation.z = -0.25;
+    const paint = add(new THREE.BoxGeometry(0.5, 4.5, 1), matPaint, 7.6, -0.6, side * 5.2, head);
+    paint.rotation.z = -0.3;
+    // Ears flicking out under the horns, each with a hanging gold coin
+    const ear = keep(add(new THREE.SphereGeometry(2.6, 10, 6), matHide, -1.5, 3, side * 8.6, head));
+    ear.scale.set(0.5, 0.8, 1.6);
+    ear.rotation.x = side * 0.5;
+    medallion(head, 0.5, -2.5, side * 10.5, 1.6, v(0.3, 0, side));
+    tassel(head, 0.5, -4.2, side * 10.5, 0.6);
+  }
+  medallion(head, 8.6, 5.4, 0, 2.8, v(1, 0.55, 0));
+  const eyeGlow = glowSprite(glowTex, '#ff6a2a', 12, 0.45);
+  eyeGlow.position.set(7, 2.6, 0);
+  head.add(eyeGlow);
+  // Ringed gold horns: out to the sides, then curling up and forward, with pale tips and a dark band
+  for (const side of [-1, 1]) {
+    const curve = new THREE.CatmullRomCurve3([v(-1, 4, side * 4), v(-1.5, 6, side * 12), v(1, 9, side * 18.5), v(6, 14, side * 21), v(11, 19, side * 19)]);
+    keep(add(hornGeometry(curve, 3.2, 0.9), matHorn, 0, 0, 0, head));
+    const tipCone = add(new THREE.ConeGeometry(0.95, 4, 8), matHornTip, 0, 0, 0, head);
+    tipCone.position.copy(curve.getPointAt(1));
+    tipCone.quaternion.setFromUnitVectors(v(0, 1, 0), curve.getTangentAt(1));
+    for (const [t, r] of [[0.12, 3.1], [0.26, 2.8], [0.4, 2.4], [0.54, 2]]) {
+      const band = add(new THREE.TorusGeometry(r, 0.4, 5, 14), matGoldDark, 0, 0, 0, head);
+      band.position.copy(curve.getPointAt(t));
+      band.quaternion.setFromUnitVectors(v(0, 0, 1), curve.getTangentAt(t));
+    }
+  }
+
+  /** Spiked gold bracer on a forearm, centred at (x, y, z) in `parent`, tilted by `tilt`. */
+  const bracer = (parent: THREE.Object3D, x: number, y: number, z: number, tilt: number, out: number) => {
+    const b = keep(add(new THREE.CylinderGeometry(4.6, 5, 7.5, 12), matGold, x, y, z, parent));
+    b.rotation.z = tilt;
+    add(new THREE.TorusGeometry(4.9, 0.55, 4, 14), matGoldDark, x, y, z, parent).rotation.set(Math.PI / 2, 0, tilt);
+    spike(parent, x - 1, y + 1, z + out * 4.4, v(-0.2, 0.15, out), 4.5, 1.3);
+    spike(parent, x - 3.6, y + 0.4, z + out * 1.5, v(-1, 0.2, out * 0.3), 4.5, 1.3);
+    spike(parent, x + 1.2, y - 1.5, z + out * 4.2, v(0.2, -0.1, out), 4, 1.2);
+  };
+
+  // Left arm hangs at the side
+  keep(limb(body, v(-1, 46, -17.5), v(1, 34, -19.5), 4.8, matHide));
+  keep(limb(body, v(1, 34, -19.5), v(4, 24, -18.5), 4.2, matHide));
+  bracer(body, 3, 28, -18.5, -0.3, -1);
+  keep(add(new THREE.SphereGeometry(4.8, 12, 10), matHideDark, 4.6, 21, -18));
+
+  // Right arm: the weapon, a huge fist in a spiked gold bracer, the storm sparking on the knuckles
+  const weapon = new THREE.Group();
+  weapon.position.set(-1, 46, 17.5);
+  body.add(weapon);
+  const elbow = v(2, -12, 2);
+  const hand = v(7, -21, 1);
+  keep(limb(weapon, v(0, 0, 0), elbow, 4.8, matHide));
+  keep(limb(weapon, elbow, hand, 4.2, matHide));
+  bracer(weapon, 4.6, -16, 1.5, 0.5, 1);
+  keep(add(new THREE.SphereGeometry(5.4, 14, 10), matHideDark, hand.x + 1, hand.y - 2, hand.z, weapon));
+  const tip = add(new THREE.SphereGeometry(1, 8, 6), matStorm, hand.x + 5.5, hand.y - 2, hand.z, weapon);
+  const tipGlow = glowSprite(glowTex, COLORS.storm, 16, 0.55);
+  tipGlow.position.copy(tip.position);
+  weapon.add(tipGlow);
+
+  shadowed(body);
+  tip.castShadow = false;
+  body.traverse((o) => {
+    const mat = (o as THREE.Mesh).material;
+    if (mat === matNostril || mat === matStorm || mat === matEye || mat === matPaint) o.castShadow = false;
+  });
+  for (const m of outlined) outline(m);
+
+  const markers = addMarkers(root, team, bright);
+  return { root, lean, yaw, body, weapon, tip, tipGlow, mats: [matTeam, matHide, matHideDark, matChest, matMuzzle, matHorn, matHoof, matGold, matGoldDark, matRed, matRedDark, matCream, matLeather, matWrap], ...markers };
+}
+
+/** A tube along `curve` tapering from radius r0 at the start to r1 at the end (a horn). */
+function hornGeometry(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: number): THREE.BufferGeometry {
+  const segs = 20;
+  const radial = 10;
+  const geo = new THREE.TubeGeometry(curve, segs, 1, radial, false);
+  const pos = geo.attributes.position;
+  const c = new THREE.Vector3();
+  const p = new THREE.Vector3();
+  // TubeGeometry lays its vertices out ring by ring along the curve.
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    curve.getPointAt(t, c);
+    const r = r0 + (r1 - r0) * t;
+    for (let j = 0; j <= radial; j++) {
+      const k = i * (radial + 1) + j;
+      p.fromBufferAttribute(pos, k).sub(c).multiplyScalar(r).add(c);
+      pos.setXYZ(k, p.x, p.y, p.z);
+    }
+  }
+  geo.computeVertexNormals();
+  return geo;
 }
 
 export interface ToadModel {

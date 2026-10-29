@@ -1,4 +1,4 @@
-import { CHAMP, CHAMPIONS, CHRONO, EXECUTE, FLICKER, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, VENOM, type AbilityId } from '../sim/constants';
+import { CHAMP, CHAMPIONS, CHRONO, EXECUTE, FLICKER, GORE, MAX_ENERGY, ROUNDS_TO_WIN, SLOT, SLOT_KEYS, SUDDEN_DEATH_AT, TEMPEST, TICK_RATE, VENOM, type AbilityId } from '../sim/constants';
 import { abilityOf, maxHp } from '../sim/step';
 import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
@@ -342,6 +342,7 @@ export class Hud {
         : def.id === 'chrono' ? { n: CHRONO.hits - 1, on: p.resoN, color: COLORS.chrono }
         : def.id === 'jab' ? { n: 1, on: p.quickT > 0 ? 1 : 0, color: COLORS.tongue }
         : def.id === 'poison' ? { n: VENOM.charges, on: p.venom, color: COLORS.poison }
+        : def.id === 'gore' ? { n: GORE.hits - 1, on: p.stacks, color: COLORS.storm }
         : null;
       if (pips) {
         for (let k = 0; k < pips.n; k++) {
@@ -469,6 +470,145 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
   switch (ability) {
+    case 'gore': {
+      // Two horns with a sweeping arc in front of them
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(-4, 2, 15, -1.1, 1.1);
+      ctx.stroke();
+      ctx.strokeStyle = '#e8dcc0';
+      ctx.lineWidth = 3.4;
+      for (const sy of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(-8, sy * 2);
+        ctx.quadraticCurveTo(-4, sy * 13, 6, sy * 10);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#4a3326';
+      ctx.beginPath();
+      ctx.ellipse(-10, 0, 6, 5, 0, 0, TAU);
+      ctx.fill();
+      break;
+    }
+    case 'lightning':
+      // A crackling ball of lightning
+      ctx.fillStyle = COLORS.storm;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.arc(0, 0, 13, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = COLORS.storm;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      for (let k = 0; k < 5; k++) {
+        const a = (k / 5) * TAU + 0.3;
+        ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
+        ctx.lineTo(Math.cos(a + 0.35) * 10, Math.sin(a + 0.35) * 10);
+        ctx.lineTo(Math.cos(a - 0.1) * 15, Math.sin(a - 0.1) * 15);
+      }
+      ctx.stroke();
+      break;
+    case 'charge':
+      // A lowered bull's head charging right, dust behind
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (const yy of [-7, 0, 7]) {
+        ctx.moveTo(-16, yy);
+        ctx.lineTo(-7, yy);
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#4a3326';
+      ctx.beginPath();
+      ctx.ellipse(3, 2, 8, 6.5, 0, 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = '#e8dcc0';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(4, -3);
+      ctx.quadraticCurveTo(10, -10, 16, -6);
+      ctx.moveTo(4, 7);
+      ctx.quadraticCurveTo(10, 14, 16, 10);
+      ctx.stroke();
+      break;
+    case 'hide':
+      // A thick stone-grey hide plate with cracks of light
+      ctx.fillStyle = '#7d8088';
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(12, -8);
+      ctx.lineTo(10, 7);
+      ctx.lineTo(0, 14);
+      ctx.lineTo(-10, 7);
+      ctx.lineTo(-12, -8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = COLORS.storm;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(-5, -9);
+      ctx.lineTo(1, -2);
+      ctx.lineTo(-3, 3);
+      ctx.lineTo(3, 9);
+      ctx.stroke();
+      break;
+    case 'stomp':
+      // A hoof slamming down, cracks running out across the ground
+      ctx.strokeStyle = COLORS.earth;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.ellipse(0, 9, 15, 4.5, 0, 0, TAU);
+      ctx.stroke();
+      ctx.strokeStyle = COLORS.storm;
+      ctx.beginPath();
+      ctx.moveTo(-6, 9);
+      ctx.lineTo(-12, 13);
+      ctx.moveTo(6, 9);
+      ctx.lineTo(13, 12);
+      ctx.stroke();
+      ctx.fillStyle = '#26201c';
+      ctx.beginPath();
+      ctx.moveTo(-7, 8);
+      ctx.lineTo(-6, -8);
+      ctx.lineTo(6, -8);
+      ctx.lineTo(7, 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#4a3326';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -8);
+      ctx.lineTo(0, 8);
+      ctx.stroke();
+      break;
+    case 'thunder':
+      // A lightning bolt striking down into a ring on the ground
+      ctx.strokeStyle = COLORS.storm;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 14, 4.5, 0, 0, TAU);
+      ctx.stroke();
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = COLORS.storm;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(3, -15);
+      ctx.lineTo(-6, -1);
+      ctx.lineTo(0, -1);
+      ctx.lineTo(-4, 10);
+      ctx.lineTo(7, -4);
+      ctx.lineTo(1, -4);
+      ctx.lineTo(6, -15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
     case 'jab':
       // A stone-tipped spear thrusting right, with speed lines
       ctx.strokeStyle = '#8a6a48';

@@ -1,4 +1,4 @@
-import { CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, ORB_ENERGY, ORB_HEAL, SUBMERGE, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
+import { CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, STOMP, THUNDER, ORB_ENERGY, ORB_HEAL, SUBMERGE, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -141,6 +141,10 @@ export class Fx {
           } else if (e.ability === 'tongue') {
             this.burst(e.x, e.y, 5, COLORS.tongue, 120, 2.4, 0.2);
             this.sound('hook');
+          } else if (e.ability === 'lightning') {
+            this.burst(e.x, e.y, 10, COLORS.storm, 200, 2.6, 0.25);
+            this.burst(e.x, e.y, 4, '#ffffff', 150, 2, 0.15);
+            this.sound('frost');
           } else if (e.ability === 'marsh' || e.ability === 'toad') {
             this.burst(e.x, e.y, 10, COLORS.bog, 160, 2.6, 0.3);
             this.sound('frost');
@@ -173,6 +177,8 @@ export class Fx {
             e.kind === 'resonance' ||
             e.kind === 'toad' ||
             e.kind === 'submerge' ||
+            e.kind === 'charge' ||
+            e.kind === 'thunder' ||
             (e.kind === 'tides' && e.dmg >= TIDES.dmg + TIDES.bonus * 0.8) ||
             (e.kind === 'longshot' && e.dmg >= 20) ||
             (e.kind === 'rain' && e.dmg >= RAIN.dmg);
@@ -509,6 +515,48 @@ export class Fx {
           this.sound('frost');
           break;
 
+        case 'hide':
+          // The hide hardens: a grey shell settling over the bull.
+          this.rings.push({ x: e.x, y: e.y, r0: 56, r1: 26, life: 0.35, max: 0.35, color: '#b8c2cc', width: 5 });
+          this.burst(e.x, e.y, 16, '#9aa3ad', 120, 3.2, 0.45, 20);
+          this.sound('block');
+          break;
+
+        case 'heavy':
+          this.rings.push({ x: e.x, y: e.y, r0: 12, r1: 56, life: 0.25, max: 0.25, color: '#ffffff', width: 5 });
+          this.shake += 3;
+          break;
+
+        case 'stomp':
+          // Ground cracking out from the hooves: the stun ring, then the slow ring.
+          this.rings.push({ x: e.x, y: e.y, r0: 16, r1: STOMP.inner + 10, life: 0.3, max: 0.3, color: '#ffffff', width: 10 });
+          this.rings.push({ x: e.x, y: e.y, r0: 20, r1: STOMP.r + 20, life: 0.45, max: 0.45, color: COLORS.storm, width: 7 });
+          this.burst(e.x, e.y, 36, COLORS.earth, 320, 4.5, 0.55, 3);
+          this.burst(e.x, e.y, 14, COLORS.storm, 260, 3, 0.35, 12);
+          this.shake += 9;
+          this.sound('bigHit');
+          break;
+
+        case 'thunder':
+          // A bolt out of the sky where the bull lands.
+          for (let i = 0; i < 18; i++) this.particles.push({ ...spark(e.x + (Math.random() - 0.5) * 16, e.y + (Math.random() - 0.5) * 16, i % 3 ? COLORS.storm : '#ffffff', 0), z: 30 + i * 22, vz: -900, size: 3.4 });
+          this.rings.push({ x: e.x, y: e.y, r0: 20, r1: THUNDER.r + 35, life: 0.5, max: 0.5, color: COLORS.storm, width: 11 });
+          this.rings.push({ x: e.x, y: e.y, r0: 8, r1: THUNDER.r * 0.6, life: 0.3, max: 0.3, color: '#ffffff', width: 8 });
+          this.burst(e.x, e.y, 48, COLORS.storm, 440, 4.5, 0.6, 5);
+          this.burst(e.x, e.y, 24, COLORS.earth, 300, 4.5, 0.5, 3);
+          this.shake += 14;
+          this.flash = 0.2;
+          this.flashColor = COLORS.storm;
+          this.sound('boom');
+          break;
+
+        case 'shock':
+          // Lightning arcing into the target.
+          for (let i = 0; i < 7; i++) this.particles.push({ ...spark(e.x + (Math.random() - 0.5) * 30, e.y + (Math.random() - 0.5) * 30, i % 2 ? COLORS.storm : '#ffffff', 300), size: 2.8 });
+          this.rings.push({ x: e.x, y: e.y, r0: 30, r1: 10, life: 0.2, max: 0.2, color: COLORS.storm, width: 3 });
+          this.sound('tick');
+          break;
+
         case 'reveal':
           this.burst(e.x, e.y, 10, COLORS.shadow, 140, 2.5, 0.3, 25);
           break;
@@ -733,6 +781,11 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'soul':
     case 'soulReturn':
     case 'fate':
+    case 'hide':
+    case 'heavy':
+    case 'stomp':
+    case 'thunder':
+    case 'shock':
       return { x: e.x, y: e.y, player: e.player };
     case 'swarm':
     case 'flicker':
