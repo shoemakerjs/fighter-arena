@@ -192,7 +192,7 @@ export type AbilityId =
   | 'bloodbolt' | 'transfusion' | 'step' | 'tides' | 'drain' | 'swarm'
   | 'chrono' | 'clock' | 'flicker' | 'converge' | 'recall' | 'pulse'
   | 'jab' | 'tongue' | 'lily' | 'submerge' | 'marsh' | 'toad'
-  | 'gore' | 'lightning' | 'charge' | 'hide' | 'stomp' | 'thunder';
+  | 'gore' | 'bellow' | 'charge' | 'hide' | 'stomp' | 'thunder';
 
 export interface AbilityDef {
   id: AbilityId;
@@ -343,7 +343,7 @@ export const CHAMPIONS: ChampionDef[] = [
     r: 28,
     abilities: [
       { id: 'gore', name: 'Horn Sweep', desc: 'wide sweep of the horns, hold to keep sweeping; every third hit in a row is a heavy blow that knocks back', cooldown: 6, cast: 18, castSlow: 0.5, energyCost: 0 },
-      { id: 'lightning', name: 'Ball Lightning', desc: 'hurl a ball of lightning; the enemy it hits is charged, and your next Horn Sweep on it zaps for extra damage and slows', cooldown: 240, cast: 14, castSlow: 0.5, energyCost: 0 },
+      { id: 'bellow', name: 'Bellow', desc: 'roar in a wide cone: interrupts casts, slows and charges every enemy it hits; your next Horn Sweep on a charged enemy zaps for extra damage', cooldown: 480, cast: 12, castSlow: 0.5, energyCost: 0 },
       { id: 'charge', name: 'Bull Rush', desc: 'charge toward the cursor; the first enemy you run into is stunned and thrown back', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'hide', name: 'Thick Hide', desc: 'take 30% less damage for 2.5 s, then heal back 30% of what you took', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'stomp', name: 'Earthshaker', desc: 'rear up and stomp: stuns enemies close by and slows those further out', cooldown: 420, cast: 18, castSlow: 0.3, energyCost: 0 },
@@ -394,7 +394,6 @@ export const PROJ: Record<ProjKind, ProjDef> = {
   // A hit yanks the frog to the target (TONGUE).
   tongue: { speed: 17, r: 9, range: 240, dmg: 6, energy: 10, kb: 0, slowMul: 0.65, slowT: 40 },
   // Charges the enemy it hits (SHOCK).
-  lightning: { speed: 14, r: 12, range: 440, dmg: 8, energy: 10, kb: 0, slowMul: 1, slowT: 0 },
 };
 
 // Mage
@@ -526,6 +525,8 @@ export const GORE = { reach: 46, minDot: 0.4, dmg: 7, energy: 11, hits: 3, windo
  * Ball Lightning charges the enemy it hits for `ticks`; the bull's next Horn Sweep on it zaps for
  * `dmg` and slows. During Thunderfall's storm every Horn Sweep hit zaps for `storm` on top.
  */
+/** Bellow: a cone from the bull's body out to `reach` past the target's edge (cos of the half-angle >= minDot). */
+export const BELLOW = { reach: 110, minDot: 0.5, dmg: 0, energy: 10, kb: 3, slowMul: 0.7, slowT: 50 };
 export const SHOCK = { ticks: 180, dmg: 10, slowMul: 0.6, slowT: 50, storm: 5 };
 /** Bull Rush: charge along the aim; the first enemy run into is hit, stunned and thrown back, ending the charge. */
 export const CHARGE = { ticks: 16, speed: 13, dmg: 10, energy: 10, stun: 36, kb: 9 };

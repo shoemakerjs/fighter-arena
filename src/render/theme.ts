@@ -29,7 +29,7 @@ export const COLORS = {
   /** Lotan's bog glow (submerge, marsh, the toad) and its tongue. */
   bog: '#3d9bff',
   tongue: '#ff7aa8',
-  /** Kro'aw's storm: lightning, zaps and Thunderfall. */
+  /** Kro'aw's storm: Bellow, zaps and Thunderfall. */
   storm: '#7fd4ff',
   /** The blood mage's crimson, and green for heals. */
   crimson: '#d4203f',
@@ -64,7 +64,7 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'transfusion' || id === 'step' || id === 'bleed' || id === 'tides' || id === 'drain' || id === 'swarm') return COLORS.crimson;
   if (id === 'tongue') return COLORS.tongue;
   if (id === 'lily' || id === 'submerge' || id === 'marsh' || id === 'toad') return COLORS.bog;
-  if (id === 'lightning' || id === 'thunder' || id === 'shock' || id === 'stomp' || id === 'charge' || id === 'hide') return COLORS.storm;
+  if (id === 'bellow' || id === 'thunder' || id === 'shock' || id === 'stomp' || id === 'charge' || id === 'hide') return COLORS.storm;
   if (id === 'clock' || id === 'flicker' || id === 'converge' || id === 'recall' || id === 'pulse' || id === 'resonance') return COLORS.chrono;
   return COLORS.players[owner];
 }

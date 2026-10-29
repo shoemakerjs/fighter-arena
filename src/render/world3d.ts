@@ -843,12 +843,19 @@ export class World3D implements WorldView {
         } else if (def?.id === 'stomp') {
           swing = ck * 1.8;
           rear = ck * 0.4;
+        } else if (def?.id === 'bellow') {
+          // Drawing breath, chest up and back...
+          swing = -ck * 0.6;
+          rear = ck * 0.3;
         } else if (def) swing = -ck * 1.2;
         else if (goreCd > 0) {
           const t = 1 - goreCd / kitCd(pc.champ, SLOT.M1);
           swing = 1.1 - t * 2.5;
           twist = 0.45 - t * 1;
         }
+        // ...then the head thrown forward with the roar.
+        const roar = pc.cooldowns[SLOT.M2] - (kitCd(pc.champ, SLOT.M2) - 14);
+        if (!def && roar > 0) rear = -0.35 * (roar / 14);
         if (pc.dashT > 0 && pc.dashKind === 8) {
           rear = -0.35;
           swing = -0.9;
@@ -1080,7 +1087,7 @@ export class World3D implements WorldView {
         const light = this.lights[li++];
         light.position.set(x, PROJ_H + 10, y);
         light.color.set(abilityColor(pr.kind, pr.owner));
-        light.intensity = pr.kind === 'blast' ? 9000 : pr.kind === 'frost' || pr.kind === 'lightning' ? 5000 : 2600;
+        light.intensity = pr.kind === 'blast' ? 9000 : pr.kind === 'frost' ? 5000 : 2600;
       }
     }
 
@@ -1316,7 +1323,7 @@ export class World3D implements WorldView {
     }
     const def = p.cast ? abilityOf(p, p.cast.ability) : null;
     const id = def?.id ?? null;
-    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue', 'toad', 'lightning'];
+    const lanes = ['blast', 'frost', 'hook', 'rift', 'longshot', 'snare', 'sonic', 'tempest', 'fate', 'transfusion', 'pulse', 'tongue', 'toad'];
     if (id && lanes.includes(id)) {
       let len: number;
       let half: number;
@@ -1490,7 +1497,7 @@ export function projectileGeometry(kind: ProjKind, size: number): THREE.BufferGe
       ? new THREE.IcosahedronGeometry(size * 0.75, 0)
       : kind === 'frost' || kind === 'hook'
         ? new THREE.OctahedronGeometry(size * 0.85, 0)
-        : kind === 'transfusion' || kind === 'pulse' || kind === 'lightning'
+        : kind === 'transfusion' || kind === 'pulse'
           ? new THREE.IcosahedronGeometry(size * 0.7, 0)
           : kind === 'clock'
             ? new THREE.SphereGeometry(size * 0.75, 14, 10)

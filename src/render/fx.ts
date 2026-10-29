@@ -1,4 +1,4 @@
-import { CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, STOMP, THUNDER, ORB_ENERGY, ORB_HEAL, SUBMERGE, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
+import { BELLOW, CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, METEOR, STOMP, THUNDER, ORB_ENERGY, ORB_HEAL, SUBMERGE, PICKUP, PLAYER_R, PULSE, RAIN, RIFT, SONIC, TEMPEST, TIDES, TOAD, WHIRL } from '../sim/constants';
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
@@ -141,10 +141,6 @@ export class Fx {
           } else if (e.ability === 'tongue') {
             this.burst(e.x, e.y, 5, COLORS.tongue, 120, 2.4, 0.2);
             this.sound('hook');
-          } else if (e.ability === 'lightning') {
-            this.burst(e.x, e.y, 10, COLORS.storm, 200, 2.6, 0.25);
-            this.burst(e.x, e.y, 4, '#ffffff', 150, 2, 0.15);
-            this.sound('frost');
           } else if (e.ability === 'marsh' || e.ability === 'toad') {
             this.burst(e.x, e.y, 10, COLORS.bog, 160, 2.6, 0.3);
             this.sound('frost');
@@ -186,7 +182,8 @@ export class Fx {
           this.burst(e.x, e.y, big ? 26 : 10, color, big ? 340 : 220, big ? 4.5 : 3, big ? 0.5 : 0.32);
           this.burst(e.x, e.y, 4, '#ffffff', 160, 2, 0.15);
           const target = s.players[e.target];
-          this.texts.push({
+          // Hits that only carry an effect (Bellow) show no number.
+          if (e.dmg > 0) this.texts.push({
             x: target.x + (Math.random() - 0.5) * 20,
             y: target.y - 38,
             text: String(e.dmg),
@@ -537,6 +534,23 @@ export class Fx {
           this.sound('bigHit');
           break;
 
+        case 'bellow': {
+          // Waves of the roar rolling out across the cone, crackling with the storm.
+          const base = Math.atan2(e.fy, e.fx);
+          const half = Math.acos(BELLOW.minDot);
+          for (let w = 1; w <= 3; w++) {
+            const reach = 30 + (BELLOW.reach * w) / 3;
+            const n = 5 + w * 3;
+            for (let i = 0; i <= n; i++) {
+              const a = base - half + (i / n) * half * 2;
+              this.burst(e.x + Math.cos(a) * reach, e.y + Math.sin(a) * reach, 2, w === 2 ? '#ffffff' : COLORS.storm, 70 + w * 30, 2.6, 0.16 + w * 0.07, 22);
+            }
+          }
+          this.shake += 3;
+          this.sound('blast');
+          break;
+        }
+
         case 'thunder':
           // A bolt out of the sky where the bull lands.
           for (let i = 0; i < 18; i++) this.particles.push({ ...spark(e.x + (Math.random() - 0.5) * 16, e.y + (Math.random() - 0.5) * 16, i % 3 ? COLORS.storm : '#ffffff', 0), z: 30 + i * 22, vz: -900, size: 3.4 });
@@ -786,6 +800,7 @@ function cosmeticPos(e: GameEvent, s: GameState): { x: number; y: number; player
     case 'stomp':
     case 'thunder':
     case 'shock':
+    case 'bellow':
       return { x: e.x, y: e.y, player: e.player };
     case 'swarm':
     case 'flicker':

@@ -1,4 +1,4 @@
-import { ARENA_R, BLADE, BLINK, CHAMP, CHAMPIONS, CHARGE, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, GORE, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, STAB, STOMP, SWARM, TEMPEST, THUNDER, TIDES, WHIRL, type AbilityId } from '../sim/constants';
+import { ARENA_R, BELLOW, BLADE, BLINK, CHAMP, CHAMPIONS, CHARGE, CHRONO, CONVERGE, CRY, DRAIN, EXECUTE, FATE, FLICKER, GORE, JAB, KATANA, LEAP, LILY, MARSH, LONGSHOT, MAPS, METEOR, PLAYER_R, PROJ, RAIN, RIFT, SLASH, SLOT, SLOT_BUTTONS, STAB, STOMP, SWARM, TEMPEST, THUNDER, TIDES, WHIRL, type AbilityId } from '../sim/constants';
 import { BTN, type GameState, type Input, type Player, type ProjKind } from '../sim/types';
 import { canSee, solidsOf, teamSees, walkTarget } from '../sim/vision';
 import type { Pillar } from '../sim/constants';
@@ -415,7 +415,7 @@ export class Bot {
           press(SLOT.SPACE);
           engage = true;
         } else if (ready(SLOT.E) && dist < STOMP.inner + foe.r + 10 && r() < 0.08 * a) press(SLOT.E);
-        else if (ready(SLOT.M2) && los && !hidden && dist > reach && dist < PROJ.lightning.range - 30 && r() < 0.08 * a) press(SLOT.M2);
+        else if (ready(SLOT.M2) && !hidden && dist < me.r + foe.r + BELLOW.reach - 10 && (foe.cast !== null || r() < 0.06 * a)) press(SLOT.M2);
         else if (dist < reach && r() < 0.95 * a) press(SLOT.M1);
       } else if (chrono) {
         const reach = me.r + foe.r + CHRONO.reach;

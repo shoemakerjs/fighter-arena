@@ -29,8 +29,8 @@ export interface Input {
   buttons: number;
 }
 
-export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'mark' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad' | 'lightning';
-export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab' | 'poison' | 'gore' | 'charge' | 'stomp' | 'thunder' | 'shock';
+export type ProjKind = 'bolt' | 'blast' | 'frost' | 'hook' | 'mark' | 'arrow' | 'longshot' | 'sonic' | 'snare' | 'crescent' | 'bloodbolt' | 'transfusion' | 'clock' | 'pulse' | 'tongue' | 'toad';
+export type HitKind = ProjKind | 'meteor' | 'slash' | 'leap' | 'cry' | 'whirl' | 'rift' | 'execute' | 'rain' | 'katana' | 'tempest' | 'blade' | 'soul' | 'fate' | 'bleed' | 'tides' | 'drain' | 'swarm' | 'chrono' | 'resonance' | 'converge' | 'jab' | 'submerge' | 'stab' | 'poison' | 'gore' | 'bellow' | 'charge' | 'stomp' | 'thunder' | 'shock';
 
 export interface Cast {
   /** Ability slot (see SLOT). */
@@ -302,6 +302,7 @@ export type GameEvent =
   | { type: 'stomp'; player: number; x: number; y: number }
   | { type: 'thunder'; player: number; x: number; y: number }
   | { type: 'shock'; player: number; x: number; y: number }
+  | { type: 'bellow'; player: number; x: number; y: number; fx: number; fy: number }
   /** Romulus scatters into bats (Night Swarm). */
   | { type: 'swarm'; player: number; x: number; y: number }
   /** A deflected projectile turning around at (x, y). */

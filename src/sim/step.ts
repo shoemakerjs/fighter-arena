@@ -12,6 +12,7 @@ import {
   ARENA_MIN_R,
   ARENA_R,
   ARENA_SHRINK,
+  BELLOW,
   BLADE,
   BLEED,
   BLINK,
@@ -987,6 +988,21 @@ function release(s: GameState, p: Player, slot: number, inp: Input, ev: GameEven
       return;
     }
 
+    case 'bellow': {
+      ev.push({ type: 'bellow', player: p.id, x: p.x, y: p.y, fx: p.fx, fy: p.fy });
+      for (const foe of foes) {
+        if (!inCone(p, foe.x, foe.y, p.r + foe.r + BELLOW.reach, BELLOW.minDot) || !hit(p, foe, BELLOW.dmg, BELLOW.energy, 'bellow', foe.x, foe.y, ev)) continue;
+        // The roar staggers (cutting casts short), slows, and charges the enemy for the next Horn Sweep.
+        const dx = foe.x - p.x;
+        const dy = foe.y - p.y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        knockback(foe, d > 0.0001 ? dx / d : p.fx, d > 0.0001 ? dy / d : p.fy, BELLOW.kb);
+        slow(foe, BELLOW.slowMul, BELLOW.slowT);
+        foe.shockT = SHOCK.ticks;
+      }
+      return;
+    }
+
     case 'gore': {
       // The last hit of a run is heavy.
       const heavy = p.stacks >= GORE.hits - 1;
@@ -1663,7 +1679,6 @@ function updateProjectiles(s: GameState, ev: GameEvent[]) {
           ev.push({ type: 'root', player: target.id, x: target.x, y: target.y });
         }
         if (pr.kind === 'tongue') yank(shooter, target, ev);
-        if (pr.kind === 'lightning') target.shockT = SHOCK.ticks;
       }
       continue;
     }

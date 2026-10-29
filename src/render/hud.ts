@@ -491,27 +491,31 @@ function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent'
       ctx.fill();
       break;
     }
-    case 'lightning':
-      // A crackling ball of lightning
-      ctx.fillStyle = COLORS.storm;
-      ctx.globalAlpha = 0.3;
-      ctx.beginPath();
-      ctx.arc(0, 0, 13, 0, TAU);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+    case 'bellow':
+      // A roar: waves fanning out to the right from an open mouth, crackling at the front
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
-      ctx.arc(0, 0, 5, 0, TAU);
+      ctx.moveTo(-15, -5);
+      ctx.lineTo(-7, 0);
+      ctx.lineTo(-15, 5);
+      ctx.closePath();
       ctx.fill();
       ctx.strokeStyle = COLORS.storm;
-      ctx.lineWidth = 1.8;
-      ctx.beginPath();
-      for (let k = 0; k < 5; k++) {
-        const a = (k / 5) * TAU + 0.3;
-        ctx.moveTo(Math.cos(a) * 5, Math.sin(a) * 5);
-        ctx.lineTo(Math.cos(a + 0.35) * 10, Math.sin(a + 0.35) * 10);
-        ctx.lineTo(Math.cos(a - 0.1) * 15, Math.sin(a - 0.1) * 15);
+      ctx.lineWidth = 2.4;
+      for (const r of [8, 13, 18]) {
+        ctx.beginPath();
+        ctx.arc(-12, 0, r, -0.85, 0.85);
+        ctx.stroke();
       }
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(8, -11);
+      ctx.lineTo(11, -6);
+      ctx.lineTo(8, -3);
+      ctx.moveTo(8, 11);
+      ctx.lineTo(11, 6);
+      ctx.lineTo(8, 3);
       ctx.stroke();
       break;
     case 'charge':
