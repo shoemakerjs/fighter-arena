@@ -7,7 +7,7 @@ import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Meteor, Player, Projectile, ProjKind, Vec, Zone } from '../sim/types';
 import type { Fx } from './fx';
 import { buildAncestorToad, buildArena, buildChampion, buildCrystal, buildPillar, buildRidge, buildRiver, buildStatue, buildTrainingDummy, buildTree, buildWall, glowSprite, lighten, makeGlowTexture, THEME_LOOKS, updateAmbient, type ArenaModel, type ChampionRig, type RiverModel, type ToadModel } from './models';
-import { abilityColor, COLORS } from './theme';
+import { abilityColor, COLORS, playerColor, viewerTeam } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
 const TAU = Math.PI * 2;
@@ -115,6 +115,8 @@ export class World3D implements WorldView {
   private champions: ChampionRig[] = [];
   /** Which champion each rig was built for (rebuilt when a match picks others). */
   private rigChamps: number[] = [-1, -1];
+  /** Team color each rig was built in (it follows the viewer's side). */
+  private rigColors: string[] = [];
   private anim: ChampionAnim[] = [];
   private chainGeo = new THREE.BoxGeometry(1, 1, 1);
   private chainMat = new THREE.MeshStandardMaterial({ color: COLORS.steel, metalness: 0.9, roughness: 0.3 });
@@ -160,6 +162,8 @@ export class World3D implements WorldView {
   /** Obstacles of the map on screen (rebuilt when the map changes). */
   private mapGroup: THREE.Group | null = null;
   private mapShown = -1;
+  /** Viewer team the arena floor was painted for (its spawn pads are team colored). */
+  private teamShown = 0;
   /** The map's river, if it has one (its texture scrolls). */
   private river: RiverModel | null = null;
   /** Where Rewind would land (shown to Rustic's own player). */
@@ -638,12 +642,14 @@ export class World3D implements WorldView {
       const old = this.champions.pop()!;
       this.scene.remove(old.root);
       this.rigChamps.pop();
+      this.rigColors.pop();
       this.anim.pop();
     }
     for (let i = 0; i < s.players.length; i++) {
       // The training dummy gets its own rig (key -2), whatever champion slot it holds.
       const champ = s.players[i].dummy ? -2 : s.players[i].champ;
-      if (this.rigChamps[i] === champ) continue;
+      const color = playerColor(i);
+      if (this.rigChamps[i] === champ && this.rigColors[i] === color) continue;
       const old = this.champions[i];
       if (old) {
         this.scene.remove(old.root);
@@ -652,10 +658,11 @@ export class World3D implements WorldView {
           if (mesh.isMesh) mesh.geometry.dispose();
         });
       }
-      const rig = champ === -2 ? buildTrainingDummy(COLORS.players[i], this.glowTex) : buildChampion(champ, COLORS.players[i], this.glowTex);
+      const rig = champ === -2 ? buildTrainingDummy(color, this.glowTex) : buildChampion(champ, color, this.glowTex);
       this.scene.add(rig.root);
       this.champions[i] = rig;
       this.rigChamps[i] = champ;
+      this.rigColors[i] = color;
       this.anim[i] = { ghost: false, speed: 0, mx: 0, my: 0, phase: 0, deadT: 0, squash: 0, fours: 0 };
     }
   }
@@ -885,7 +892,7 @@ export class World3D implements WorldView {
       }
       rig.body.rotation.y = twist;
       rig.tip.scale.setScalar(1 + ck * 0.9);
-      (rig.tipGlow.material as THREE.SpriteMaterial).color.set(def ? abilityColor(def.id, i) : COLORS.players[i]);
+      (rig.tipGlow.material as THREE.SpriteMaterial).color.set(def ? abilityColor(def.id, i) : playerColor(i));
       rig.tipGlow.scale.setScalar(26 + ck * (def?.id === 'bolt' || def?.id === 'slash' || def?.id === 'katana' ? 22 : 60));
 
       // Squash on hit, stretch on dash
@@ -962,11 +969,13 @@ export class World3D implements WorldView {
 
   /** Build the arena, obstacles and lighting of `map` (once per change of map). */
   private showMap(map: number) {
-    if (map === this.mapShown) return;
+    if (map === this.mapShown && viewerTeam() === this.teamShown) return;
+    const repaint = viewerTeam() !== this.teamShown;
     this.mapShown = map;
+    this.teamShown = viewerTeam();
     if (this.mapGroup) dropTree(this.scene, this.mapGroup, this.glowTex);
     const def = MAPS[map];
-    if (this.arena.root.userData.theme !== def.theme) {
+    if (this.arena.root.userData.theme !== def.theme || repaint) {
       dropTree(this.scene, this.arena.root, this.glowTex);
       this.arena = buildArena(this.scene, this.glowTex, def.theme);
       this.arena.root.userData.theme = def.theme;

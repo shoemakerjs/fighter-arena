@@ -6,7 +6,7 @@
  */
 import * as THREE from 'three';
 import { ARENA_R, CHAMP, champR, PLAYER_R, SPAWNS, type MapDef, type River } from '../sim/constants';
-import { COLORS } from './theme';
+import { COLORS, playerColor } from './theme';
 import { hexA } from './view';
 
 const TAU = Math.PI * 2;
@@ -145,13 +145,13 @@ function makeFloorTexture(theme: MapTheme): THREE.CanvasTexture {
   // Team pads
   SPAWNS.forEach((sp, i) => {
     const glow = g.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, 95);
-    glow.addColorStop(0, hexA(COLORS.players[i], 0.32));
-    glow.addColorStop(1, hexA(COLORS.players[i], 0));
+    glow.addColorStop(0, hexA(playerColor(i), 0.32));
+    glow.addColorStop(1, hexA(playerColor(i), 0));
     g.fillStyle = glow;
     g.beginPath();
     g.arc(sp.x, sp.y, 95, 0, TAU);
     g.fill();
-    g.strokeStyle = hexA(COLORS.players[i], 0.75);
+    g.strokeStyle = hexA(playerColor(i), 0.75);
     g.lineWidth = 3;
     g.setLineDash([12, 9]);
     g.beginPath();

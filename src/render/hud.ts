@@ -4,7 +4,7 @@ import { canSee } from '../sim/vision';
 import type { GameState, Player, Vec } from '../sim/types';
 import { PLAYER_NAMES, type Fx } from './fx';
 import { ROSTER } from '../ui/roster';
-import { COLORS, DISPLAY, FONT } from './theme';
+import { COLORS, DISPLAY, FONT, playerColor, viewerTeam } from './theme';
 import { HUD_BOTTOM, HUD_TOP, lerpPlayer, type DrawOptions, type WorldView } from './view';
 
 const TAU = Math.PI * 2;
@@ -108,7 +108,7 @@ export class Hud {
   private drawOverhead(p: Player, at: Vec, s: GameState) {
     if (p.hp <= 0) return;
     const { ctx } = this;
-    const color = COLORS.players[p.id];
+    const color = playerColor(p.id);
     const w = 66;
     const x = Math.round(at.x - w / 2);
     const y = Math.round(at.y);
@@ -223,15 +223,16 @@ export class Hud {
   }
 
   /**
-   * Names, score pips (not in training) and HP bars: team 0 on the left, team 1 on
-   * the right; in 2v2 the second member of each team gets a smaller row below.
+   * Names, score pips (not in training) and HP bars: your team on the left, the enemy
+   * on the right; in 2v2 the second member of each team gets a smaller row below.
    */
   private drawNames(s: GameState, cx: number, y: number) {
     const { ctx } = this;
-    for (const team of [0, 1]) {
-      const dir = team === 0 ? -1 : 1;
-      const left = team === 0;
-      const color = COLORS.players[team];
+    for (const side of [0, 1]) {
+      const team = side === 0 ? viewerTeam() : 1 - viewerTeam();
+      const dir = side === 0 ? -1 : 1;
+      const left = side === 0;
+      const color = playerColor(team);
       const nameX = cx + dir * 70;
       s.players
         .filter((p) => p.team === team)
@@ -332,7 +333,7 @@ export class Hud {
 
       ctx.save();
       ctx.globalAlpha = cd > 0 || noEnergy ? 0.35 : 1;
-      drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'crescent' : def.id, x + slot / 2, y0 + slot / 2, COLORS.players[p.id]);
+      drawIcon(ctx, def.id === 'tempest' && p.stacks >= TEMPEST.max ? 'crescent' : def.id, x + slot / 2, y0 + slot / 2, playerColor(p.id));
       ctx.restore();
 
       // Pips under the icon: Steel Tempest stacks, Time Skip charges, hits towards Resonance.
@@ -433,7 +434,7 @@ export class Hud {
 
   private drawCursor(c: Vec, localId: number) {
     const { ctx } = this;
-    const color = COLORS.players[localId];
+    const color = playerColor(localId);
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;

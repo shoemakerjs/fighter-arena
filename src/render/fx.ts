@@ -2,7 +2,7 @@ import { BELLOW, CHAMP, CLOCK, CONVERGE, COUNTDOWN_TICKS, CRY, FATE, JAB, LEAP, 
 import type { GameEvent, GameState } from '../sim/types';
 import { teamSees } from '../sim/vision';
 import type { Sfx } from './audio';
-import { abilityColor, COLORS } from './theme';
+import { abilityColor, COLORS, playerColor } from './theme';
 
 export interface Particle {
   x: number;
@@ -105,7 +105,7 @@ export class Fx {
           break;
 
         case 'release': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           if (e.ability === 'bolt') {
             this.burst(e.x, e.y, 4, color, 120, 2.5, 0.18);
             this.sound('bolt');
@@ -199,7 +199,7 @@ export class Fx {
         }
 
         case 'block': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           const p = s.players[e.player];
           this.rings.push({ x: p.x, y: p.y, r0: 24, r1: 80, life: 0.35, max: 0.35, color: '#ffffff', width: 4 });
           this.burst(e.x, e.y, 16, color, 260, 3, 0.35);
@@ -253,7 +253,7 @@ export class Fx {
         }
 
         case 'dash': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           this.burst(e.x, e.y, 14, color, 120, 3.5, 0.35, 8);
           this.sound('dash');
           break;
@@ -383,7 +383,7 @@ export class Fx {
 
         case 'swing': {
           // Arc of sparks along the axe's path.
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           const base = Math.atan2(e.fy, e.fx);
           const reach = PLAYER_R + e.reach * 0.8;
           for (let i = 0; i <= 8; i++) {
@@ -601,7 +601,7 @@ export class Fx {
         }
 
         case 'nova': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           // War Cry pulls: the rings collapse inwards.
           this.rings.push({ x: e.x, y: e.y, r0: CRY.r, r1: 24, life: 0.35, max: 0.35, color, width: 8 });
           this.rings.push({ x: e.x, y: e.y, r0: CRY.r * 0.75, r1: 10, life: 0.25, max: 0.25, color: '#ffffff', width: 3 });
@@ -612,7 +612,7 @@ export class Fx {
         }
 
         case 'whirl': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           this.rings.push({ x: e.x, y: e.y, r0: WHIRL.r * 0.5, r1: WHIRL.r, life: 0.2, max: 0.2, color, width: 4 });
           this.burst(e.x, e.y, 8, color, 260, 2.5, 0.25, 26);
           this.sound('whirl');
@@ -620,7 +620,7 @@ export class Fx {
         }
 
         case 'leap': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           this.burst(e.x, e.y, 14, COLORS.earth, 160, 3.5, 0.35, 4);
           this.burst(e.x, e.y, 6, color, 120, 3, 0.3, 10);
           this.sound('dash');
@@ -652,7 +652,7 @@ export class Fx {
         }
 
         case 'ko': {
-          const color = COLORS.players[e.player];
+          const color = playerColor(e.player);
           this.burst(e.x, e.y, 70, color, 520, 5, 0.9);
           this.burst(e.x, e.y, 30, '#ffffff', 300, 3, 0.5);
           this.rings.push({ x: e.x, y: e.y, r0: 20, r1: 200, life: 0.6, max: 0.6, color, width: 8 });
@@ -673,7 +673,7 @@ export class Fx {
           let color = COLORS.text;
           // `winner` is a team.
           if (e.winner >= 0) {
-            color = COLORS.players[e.winner];
+            color = playerColor(e.winner);
             if (localId === null) text = s.players.length > 2 ? `ROUND: TEAM ${e.winner + 1}` : `ROUND: ${PLAYER_NAMES[e.winner]}`;
             else text = e.winner === s.players[localId].team ? 'ROUND WON' : 'ROUND LOST';
           }

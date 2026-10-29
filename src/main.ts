@@ -4,6 +4,7 @@ import { LocalInput } from './input/local';
 import { Sfx } from './render/audio';
 import { Fx, PLAYER_NAMES } from './render/fx';
 import { Hud } from './render/hud';
+import { setViewerTeam } from './render/theme';
 import type { WorldView } from './render/view';
 import { World2D } from './render/world2d';
 import { World3D } from './render/world3d';
@@ -347,6 +348,8 @@ function frame(now: number) {
 }
 
 function draw(dt: number) {
+  // Your side is drawn teal and the enemy red, whichever slot you play in.
+  setViewerTeam(localId % 2);
   const alpha = mode === 'pause' && !session ? 1 : acc / TICK_MS;
   const opts = {
     localId: inMenus() ? null : localId,

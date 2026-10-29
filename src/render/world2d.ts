@@ -4,7 +4,7 @@ import { canSee, teamSees } from '../sim/vision';
 import { FOG_EXTENT, FogMask } from './fog';
 import type { GameState, Player, Projectile, Vec } from '../sim/types';
 import type { Fx } from './fx';
-import { abilityColor, COLORS } from './theme';
+import { abilityColor, COLORS, playerColor } from './theme';
 import { HUD_BOTTOM, HUD_TOP, hexA, lerpPlayer, shade, type DrawOptions, type WorldView } from './view';
 
 const TAU = Math.PI * 2;
@@ -140,13 +140,13 @@ export class World2D implements WorldView {
     // Team spawn pads
     SPAWNS.forEach((sp, i) => {
       const glow = g.createRadialGradient(sp.x, sp.y, 0, sp.x, sp.y, 90);
-      glow.addColorStop(0, hexA(COLORS.players[i], 0.12));
-      glow.addColorStop(1, hexA(COLORS.players[i], 0));
+      glow.addColorStop(0, hexA(playerColor(i), 0.12));
+      glow.addColorStop(1, hexA(playerColor(i), 0));
       g.fillStyle = glow;
       g.beginPath();
       g.arc(sp.x, sp.y, 90, 0, TAU);
       g.fill();
-      g.strokeStyle = hexA(COLORS.players[i], 0.28);
+      g.strokeStyle = hexA(playerColor(i), 0.28);
       g.lineWidth = 2.5;
       g.setLineDash([10, 8]);
       g.beginPath();
@@ -392,7 +392,7 @@ export class World2D implements WorldView {
 
   private drawPlayer(p: Player, s: GameState, localId: number | null) {
     const { ctx } = this;
-    const color = COLORS.players[p.id];
+    const color = playerColor(p.id);
     const dead = p.hp <= 0;
     // Stealth: the enemy vanishes, you see yourself as a ghost.
     if (p.stealthT > 0 && localId !== null && p.id !== localId) return;

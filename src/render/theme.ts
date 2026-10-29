@@ -1,6 +1,22 @@
 import type { AbilityId } from '../sim/constants';
 import type { HitKind } from '../sim/types';
 
+let viewer = 0;
+
+/** The team the viewer plays on (team = id % 2): colors are drawn relative to it. */
+export function setViewerTeam(team: number) {
+  viewer = team;
+}
+
+export function viewerTeam(): number {
+  return viewer;
+}
+
+/** A player's color as the viewer sees it: your side is always teal, the enemy always red. */
+export function playerColor(id: number): string {
+  return COLORS.players[id % 2 === viewer ? 0 : 1];
+}
+
 export const COLORS = {
   bg: '#07090d',
   floorIn: '#232a3b',
@@ -9,7 +25,7 @@ export const COLORS = {
   rim: '#323c52',
   pillarTop: '#3d465c',
   pillarSide: '#232938',
-  /** Indexed by player id: teams alternate (2v2: 0 and 2 are teal, 1 and 3 red). */
+  /** Indexed by player id: teams alternate (2v2: 0 and 2 are teal, 1 and 3 red). In a match use playerColor, which turns them to the viewer. */
   players: ['#3be8c8', '#ff4f6d', '#3be8c8', '#ff4f6d'],
   blast: '#ffb547',
   frost: '#8fd8ff',
@@ -66,5 +82,5 @@ export function abilityColor(id: AbilityId | HitKind, owner: number): string {
   if (id === 'lily' || id === 'submerge' || id === 'marsh' || id === 'toad') return COLORS.bog;
   if (id === 'bellow' || id === 'thunder' || id === 'shock' || id === 'stomp' || id === 'charge' || id === 'hide') return COLORS.storm;
   if (id === 'clock' || id === 'flicker' || id === 'converge' || id === 'recall' || id === 'pulse' || id === 'resonance') return COLORS.chrono;
-  return COLORS.players[owner];
+  return playerColor(owner);
 }
