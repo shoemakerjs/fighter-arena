@@ -345,7 +345,7 @@ export const CHAMPIONS: ChampionDef[] = [
       { id: 'gore', name: 'Horn Sweep', desc: 'wide sweep of the horns, hold to keep sweeping; every third hit in a row is a heavy blow that knocks back', cooldown: 6, cast: 18, castSlow: 0.5, energyCost: 0 },
       { id: 'bellow', name: 'Bellow', desc: 'roar in a wide cone: interrupts casts, slows and charges every enemy it hits; your next Horn Sweep on a charged enemy zaps for extra damage', cooldown: 480, cast: 12, castSlow: 0.5, energyCost: 0 },
       { id: 'charge', name: 'Bull Rush', desc: 'charge toward the cursor; the first enemy you run into is stunned and thrown back', cooldown: 420, cast: 0, castSlow: 1, energyCost: 0 },
-      { id: 'hide', name: 'Thick Hide', desc: 'take 30% less damage for 2.5 s, then heal back 30% of what you took', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
+      { id: 'hide', name: 'Thick Hide', desc: 'drop to all fours for 2.5 s: run 30% faster and take 30% less damage, then heal back 30% of what you took', cooldown: 540, cast: 0, castSlow: 1, energyCost: 0 },
       { id: 'stomp', name: 'Earthshaker', desc: 'rear up and stomp: stuns enemies close by and slows those further out', cooldown: 420, cast: 18, castSlow: 0.3, energyCost: 0 },
       { id: 'thunder', name: 'Thunderfall', desc: 'leap to the cursor like a lightning strike, untargetable; the landing stuns enemies around it, and for 4 s every Horn Sweep hit zaps, 100 energy', cooldown: 60, cast: 0, castSlow: 1, energyCost: 100 },
     ],
@@ -531,7 +531,8 @@ export const SHOCK = { ticks: 180, dmg: 10, slowMul: 0.6, slowT: 50, storm: 5 };
 /** Bull Rush: charge along the aim; the first enemy run into is hit, stunned and thrown back, ending the charge. */
 export const CHARGE = { ticks: 16, speed: 13, dmg: 10, energy: 10, stun: 36, kb: 9 };
 /** Thick Hide: `reduce` less damage for `ticks`; when it ends, heal `back` of the damage taken meanwhile. */
-export const HIDE = { ticks: 150, reduce: 0.3, back: 0.3 };
+/** Thick Hide: on all fours for `ticks`, running `speed` times faster and taking `reduce` less damage, then healing back `back` of it. */
+export const HIDE = { ticks: 150, reduce: 0.3, back: 0.3, speed: 1.3 };
 /** Earthshaker: after the windup, enemies within `inner` are stunned, out to `r` slowed. */
 export const STOMP = { inner: 70, r: 130, dmg: 12, energy: 10, stun: 24, slowMul: 0.55, slowT: 60 };
 /** Thunderfall: leap up to `range` over `ticks`, untargetable; the landing hits within `r` and stuns, then a storm for `storm` ticks. */

@@ -523,6 +523,7 @@ function updatePlayer(s: GameState, p: Player, inp: Input, ev: GameEvent[]) {
     let speed = CHAMPIONS[p.champ].speed;
     if (p.slowT > 0) speed *= p.slowMul;
     if (p.hasteT > 0) speed *= HASTE_MUL;
+    if (p.hideT > 0) speed *= HIDE.speed;
     if (p.cast) speed *= abilityOf(p, p.cast.ability).castSlow;
     if (p.counterT > 0) speed *= COUNTER.slow;
     if (p.whirlT > 0) speed *= WHIRL.speed;

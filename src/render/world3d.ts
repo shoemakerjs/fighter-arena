@@ -29,6 +29,8 @@ interface ChampionAnim {
   phase: number;
   deadT: number;
   squash: number;
+  /** Kro'aw on all fours (Thick Hide), eased 0..1. */
+  fours: number;
 }
 
 interface ProjView {
@@ -654,7 +656,7 @@ export class World3D implements WorldView {
       this.scene.add(rig.root);
       this.champions[i] = rig;
       this.rigChamps[i] = champ;
-      this.anim[i] = { ghost: false, speed: 0, mx: 0, my: 0, phase: 0, deadT: 0, squash: 0 };
+      this.anim[i] = { ghost: false, speed: 0, mx: 0, my: 0, phase: 0, deadT: 0, squash: 0, fours: 0 };
     }
   }
 
@@ -864,8 +866,20 @@ export class World3D implements WorldView {
           swing = 2.2 - Math.min(1, leapK) * 3.6;
           rear = 0.3 - Math.min(1, leapK) * 0.6;
         }
+        // Thick Hide: down on all fours, the forelegs pounding the ground in a gallop (back up to strike).
+        const fours = pc.hideT > 0 && !dead && !def && leapK < 0 && pc.dashT === 0 && goreCd === 0;
+        a.fours += ((fours ? 1 : 0) - a.fours) * Math.min(1, dt * 12);
+        const stride = a.speed > 0.5 ? Math.sin(a.phase) * 0.45 : 0;
+        let off = 0;
+        if (a.fours > 0.001) {
+          rear += (-0.85 - rear) * a.fours;
+          swing += (0.85 + stride - swing) * a.fours;
+          off = (0.85 - stride) * a.fours;
+        }
         rig.weapon.rotation.z = swing;
         rig.body.rotation.z = rear;
+        const offArm = rig.body.getObjectByName('offArm');
+        if (offArm) offArm.rotation.z = off;
       } else {
         rig.weapon.rotation.z = -0.22 - ck * 0.95;
       }

@@ -411,6 +411,11 @@ export class Bot {
           press(SLOT.R);
           engage = true;
         } else if (ready(SLOT.Q) && me.hideT === 0 && dist < 260 && (hurt || foe.cast !== null) && r() < 0.06) press(SLOT.Q);
+        // On all fours to run down an enemy pulling away (Bull Rush spent or too far for it).
+        else if (ready(SLOT.Q) && me.hideT === 0 && !hidden && dist > reach + 40 && dist < 420 && !ready(SLOT.SPACE) && r() < 0.04 * a) {
+          press(SLOT.Q);
+          engage = true;
+        }
         else if (ready(SLOT.SPACE) && !hidden && los && dist > 110 && dist < CHARGE.ticks * CHARGE.speed + 20 && r() < 0.07 * a) {
           press(SLOT.SPACE);
           engage = true;

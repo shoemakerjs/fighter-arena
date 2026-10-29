@@ -3807,11 +3807,15 @@ function buildKroaw(color: string, glowTex: THREE.Texture): ChampionRig {
     spike(parent, x + 1.2, y - 1.5, z + out * 4.2, v(0.2, -0.1, out), 4, 1.2);
   };
 
-  // Left arm hangs at the side
-  keep(limb(body, v(-1, 46, -17.5), v(1, 34, -19.5), 4.8, matHide));
-  keep(limb(body, v(1, 34, -19.5), v(4, 24, -18.5), 4.2, matHide));
-  bracer(body, 3, 28, -18.5, -0.3, -1);
-  keep(add(new THREE.SphereGeometry(4.8, 12, 10), matHideDark, 4.6, 21, -18));
+  // Left arm hangs at the side (its own group, named so the animation can gallop it on all fours)
+  const offArm = new THREE.Group();
+  offArm.name = 'offArm';
+  offArm.position.set(-1, 46, -17.5);
+  body.add(offArm);
+  keep(limb(offArm, v(0, 0, 0), v(2, -12, -2), 4.8, matHide));
+  keep(limb(offArm, v(2, -12, -2), v(5, -22, -1), 4.2, matHide));
+  bracer(offArm, 4, -18, -1, -0.3, -1);
+  keep(add(new THREE.SphereGeometry(4.8, 12, 10), matHideDark, 5.6, -25, -0.5, offArm));
 
   // Right arm: the weapon, a huge fist in a spiked gold bracer, the storm sparking on the knuckles
   const weapon = new THREE.Group();
