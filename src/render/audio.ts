@@ -1,4 +1,4 @@
-export type SfxName = 'bolt' | 'blast' | 'frost' | 'meteorCast' | 'hit' | 'bigHit' | 'block' | 'boom' | 'dash' | 'counter' | 'orb' | 'ko' | 'tick' | 'fight' | 'impact' | 'slash' | 'hook' | 'whirl' | 'perrieBlast';
+export type SfxName = 'bolt' | 'blast' | 'frost' | 'meteorCast' | 'hit' | 'bigHit' | 'block' | 'boom' | 'dash' | 'counter' | 'orb' | 'ko' | 'tick' | 'fight' | 'impact' | 'slash' | 'hook' | 'whirl' | 'perrieBlast' | 'rusticRewind';
 
 /**
  * Recorded sounds in public/sound, loaded on unlock. `fallback` is the synth sound
@@ -6,6 +6,7 @@ export type SfxName = 'bolt' | 'blast' | 'frost' | 'meteorCast' | 'hit' | 'bigHi
  */
 const SAMPLES: Partial<Record<SfxName, { url: string; gain: number; fallback: SfxName }>> = {
   perrieBlast: { url: './sound/perrie/blast.m4a', gain: 0.7, fallback: 'blast' },
+  rusticRewind: { url: './sound/rustic/rewind.m4a', gain: 0.7, fallback: 'counter' },
 };
 
 /** Tiny Web Audio synth (every sound generated), plus the few recorded samples above. */

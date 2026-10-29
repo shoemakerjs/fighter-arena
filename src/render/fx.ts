@@ -411,7 +411,7 @@ export class Fx {
             this.burst(e.x0 + (e.x - e.x0) * k, e.y0 + (e.y - e.y0) * k, 2, i % 2 ? '#ffffff' : COLORS.chrono, 60, 2.4, 0.5, 30);
           }
           this.rings.push({ x: e.x, y: e.y, r0: 60, r1: 18, life: 0.35, max: 0.35, color: COLORS.chrono, width: 4 });
-          this.sound('counter');
+          this.sound('rusticRewind');
           break;
         }
 
