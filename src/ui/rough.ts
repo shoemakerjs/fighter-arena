@@ -98,6 +98,60 @@ function paint(el: HTMLElement, seed: number) {
   el.style.setProperty('--rough', `url(${c.toDataURL()})`);
 }
 
+/**
+ * A brushed strip for `.rough.strip` (the filter bar): top and bottom only gently torn, the
+ * ends breaking up into dry-brush streaks, as if the stroke ran out of paint.
+ */
+function paintStrip(el: HTMLElement, seed: number) {
+  const fill = getComputedStyle(el).getPropertyValue('--card-fill').trim() || FILL;
+  const w = el.clientWidth;
+  const h = el.clientHeight;
+  if (!w || !h) return;
+  const m = MARGIN;
+  const { c, g } = makeCanvas(w + m * 2, h + m * 2);
+  const r = rng(seed);
+  // The solid body stops short of the ends, where the streaks take over.
+  const fade = Math.min(80, w * 0.16);
+  const x0 = m + fade;
+  const x1 = m + w - fade;
+  const step = 4;
+  g.beginPath();
+  for (let x = x0; x <= x1; x += step) g.lineTo(x, m + (r() - 0.5) * 1.4 + (r() < 0.05 ? 1.2 : 0));
+  for (let x = x1; x >= x0; x -= step) g.lineTo(x, m + h + (r() - 0.5) * 1.4 - (r() < 0.05 ? 1.2 : 0));
+  g.closePath();
+  g.fillStyle = fill;
+  g.fill();
+  // Each end: horizontal bristle streaks of every length, thinning out towards the tip.
+  for (const dir of [-1, 1]) {
+    const base = dir < 0 ? x0 + 12 : x1 - 12;
+    const reach = fade + m - 3;
+    for (let k = 0; k < h * 3; k++) {
+      const y = m + 1 + r() * (h - 2);
+      // Mostly short, a few running nearly to the tip; the longer, the fainter and thinner.
+      const t = Math.pow(r(), 1.4);
+      const len = 12 + t * reach;
+      g.strokeStyle = rgba(fill, (0.95 - t * 0.6) * (0.6 + r() * 0.4));
+      g.lineWidth = (0.8 + r() * 3) * (1 - t * 0.5);
+      g.beginPath();
+      g.moveTo(base, y);
+      g.lineTo(base + dir * len, y + (r() - 0.5) * 2);
+      g.stroke();
+    }
+  }
+  // A few light streaks along the body for texture, and dark flecks inside.
+  for (let k = 0; k < w / 12; k++) {
+    const x = x0 + r() * (x1 - x0);
+    const y = m + 2 + r() * (h - 4);
+    g.strokeStyle = r() < 0.5 ? `rgba(255,255,255,${0.03 + r() * 0.05})` : `rgba(0,0,0,${0.12 + r() * 0.2})`;
+    g.lineWidth = 0.6 + r() * 1.4;
+    g.beginPath();
+    g.moveTo(x, y);
+    g.lineTo(x + 8 + r() * 40, y + (r() - 0.5));
+    g.stroke();
+  }
+  el.style.setProperty('--rough', `url(${c.toDataURL()})`);
+}
+
 interface Sample {
   x: number;
   y: number;
@@ -203,7 +257,7 @@ function paintPill(w: number, h: number, color: string, seed: number): string {
 }
 
 /**
- * Selection ring: brush strokes laid along a rounded square of `size` (radius
+ * Selection ring: a torn dry-brush stroke laid along a rounded square of `size` (radius
  * `rad`), spread over a band of `band` px centered on its edge. The image is
  * `size + 2 * pad` square.
  */
@@ -213,29 +267,143 @@ export function brushRing(size: number, rad: number, band: number, pad: number, 
   const r = rng(seed);
   const pts = roundedRect(pad, pad, size, size, rad, 2);
 
-  // A solid core so the ring reads as one shape, then strokes on top for texture.
-  g.strokeStyle = rgba(color, 0.9);
-  g.lineWidth = band * 0.55;
-  strokeAlong(g, pts, 0, pts.length, 0);
-  const count = pts.length * 3;
-  for (let k = 0; k < count; k++) {
-    const i = Math.floor(r() * pts.length);
-    g.strokeStyle = rgba(color, 0.35 + r() * 0.65);
-    g.lineWidth = 0.8 + r() * 2.6;
-    strokeAlong(g, pts, i, 3 + Math.floor(r() * 14), (r() - 0.5) * band);
+  // The core in uneven dabs: each a little off the edge and its own width, with the odd gap.
+  for (let i = 0; i < pts.length; ) {
+    const len = 6 + Math.floor(r() * 22);
+    g.strokeStyle = rgba(color, 0.75 + r() * 0.25);
+    g.lineWidth = band * (0.3 + r() * 0.4);
+    strokeAlong(g, pts, i, len, (r() - 0.5) * band * 0.35);
+    i += len - (r() < 0.2 ? -1 - Math.floor(r() * 3) : 1);
   }
-  // A few dark nicks so it doesn't look machine-perfect.
-  for (let k = 0; k < 10; k++) {
-    g.strokeStyle = 'rgba(0,0,0,0.45)';
-    g.lineWidth = 1 + r() * 1.5;
-    strokeAlong(g, pts, Math.floor(r() * pts.length), 1 + Math.floor(r() * 3), (r() - 0.5) * band * 0.6);
+  // Streaks across the whole band for texture.
+  const count = pts.length * 4;
+  for (let k = 0; k < count; k++) {
+    g.strokeStyle = rgba(color, 0.25 + r() * 0.75);
+    g.lineWidth = 0.6 + r() * 2.4;
+    strokeAlong(g, pts, Math.floor(r() * pts.length), 2 + Math.floor(r() * 16), (r() - 0.5) * band * 1.4);
+  }
+  // Stray bristles flicking out past the band.
+  for (let k = 0; k < 46; k++) {
+    g.strokeStyle = rgba(color, 0.3 + r() * 0.5);
+    g.lineWidth = 0.5 + r();
+    strokeAlong(g, pts, Math.floor(r() * pts.length), 1 + Math.floor(r() * 5), (r() < 0.5 ? -1 : 1) * band * (0.6 + r() * 0.5));
+  }
+  // Dark nicks and tears through it so it doesn't look machine-perfect.
+  for (let k = 0; k < 28; k++) {
+    g.strokeStyle = `rgba(0,0,0,${0.35 + r() * 0.3})`;
+    g.lineWidth = 1 + r() * 2.2;
+    strokeAlong(g, pts, Math.floor(r() * pts.length), 1 + Math.floor(r() * 4), (r() - 0.5) * band * 0.8);
+  }
+  return c.toDataURL();
+}
+
+/**
+ * A torn square to mask an image with: white inside an edge that wobbles, is bitten into
+ * here and there, and frays into short bristles (across the edge, never along it, so it
+ * reads as torn paper rather than a frame). `size` px square; `strength` scales how torn
+ * it is (1 for portraits, lower for small boxes).
+ */
+export function tornSquare(size: number, seed: number, strength = 1, rad = 7): string {
+  const { c, g } = makeCanvas(size, size);
+  const r = rng(seed);
+  const m = 2 + 3.5 * strength;
+  const pts = roundedRect(m, m, size - m * 2, size - m * 2, rad, 1.5);
+  // Slow wobble plus grain, and bites: a few px deep, a few samples wide.
+  const p1 = r() * 6.3;
+  const p2 = r() * 6.3;
+  const bite = new Float32Array(pts.length);
+  for (let k = 0; k < pts.length * 0.035 * strength; k++) {
+    const at = Math.floor(r() * pts.length);
+    const w = 2 + Math.floor(r() * 5);
+    const d = (1.5 + r() * 3.5) * strength;
+    for (let q = -w; q <= w; q++) bite[(at + q + pts.length) % pts.length] = Math.max(bite[(at + q + pts.length) % pts.length], d * (1 - Math.abs(q) / (w + 1)));
+  }
+  const edgeAt = new Float32Array(pts.length);
+  g.beginPath();
+  pts.forEach((p, i) => {
+    const t = (i / pts.length) * Math.PI * 2;
+    const j = (Math.sin(t * 7 + p1) * 0.9 + Math.sin(t * 19 + p2) * 0.5 + (r() - 0.5) * 1.1) * strength - bite[i];
+    edgeAt[i] = j;
+    const x = p.x + p.nx * j;
+    const y = p.y + p.ny * j;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  });
+  g.closePath();
+  g.fillStyle = '#fff';
+  g.fill();
+  // Fraying: short bristles across the edge, some sticking out, some cut in.
+  for (let k = 0; k < pts.length * 1.4 * strength; k++) {
+    const i = Math.floor(r() * pts.length);
+    const p = pts[i];
+    const out = r() < 0.55;
+    const len = (1 + r() * 4) * strength;
+    // From just inside the torn edge outwards, or from just outside it inwards.
+    const start = edgeAt[i] + (out ? -0.5 : 0.8);
+    g.globalCompositeOperation = out ? 'source-over' : 'destination-out';
+    g.strokeStyle = out ? `rgba(255,255,255,${0.4 + r() * 0.6})` : `rgba(0,0,0,${0.5 + r() * 0.5})`;
+    g.lineWidth = 0.5 + r() * 1.1;
+    const sx = p.x + p.nx * start;
+    const sy = p.y + p.ny * start;
+    const dir = out ? 1 : -1;
+    const lean = (r() - 0.5) * 0.6;
+    g.beginPath();
+    g.moveTo(sx, sy);
+    g.lineTo(sx + (p.nx + p.tx * lean) * len * dir, sy + (p.ny + p.ty * lean) * len * dir);
+    g.stroke();
+  }
+  g.globalCompositeOperation = 'source-over';
+  return c.toDataURL();
+}
+
+/**
+ * A thin torn frame in `color` around a rounded square of `size` (radius `rad`), `width` px
+ * thick with dry-brush streaks off both edges, like the Lock in pill's. The image is
+ * `size + 2 * pad` square.
+ */
+export function tornFrame(size: number, rad: number, width: number, pad: number, color: string, seed = 5): string {
+  const S = size + pad * 2;
+  const { c, g } = makeCanvas(S, S);
+  const r = rng(seed);
+  const pts = roundedRect(pad, pad, size, size, rad, 2);
+  const edge = (side: number) => {
+    pts.forEach((p, i) => {
+      // Wobble only outwards, so the band never thins to a gap.
+      let j = r() * 1.2;
+      if (r() < 0.07) j += 1 + r() * 2.5;
+      const o = side * (width / 2 + j);
+      const x = p.x + p.nx * o;
+      const y = p.y + p.ny * o;
+      if (i === 0) g.moveTo(x, y);
+      else g.lineTo(x, y);
+    });
+    g.closePath();
+  };
+  g.beginPath();
+  edge(1);
+  edge(-1);
+  g.fillStyle = color;
+  g.fill('evenodd');
+  // Streaks off both edges fray it; the band itself stays unbroken.
+  for (let k = 0; k < pts.length * 1.2; k++) {
+    const out = r() < 0.5 ? 1 : -1;
+    g.strokeStyle = rgba(color, 0.4 + r() * 0.6);
+    g.lineWidth = 0.5 + r() * 1.8;
+    strokeAlong(g, pts, Math.floor(r() * pts.length), 2 + Math.floor(r() * 10), out * (width / 2 + r() * 2.5));
+  }
+  // Only a few faint dry spots inside it.
+  for (let k = 0; k < pts.length * 0.06; k++) {
+    g.strokeStyle = `rgba(0,0,0,${0.12 + r() * 0.15})`;
+    g.lineWidth = 0.5 + r() * 0.8;
+    strokeAlong(g, pts, Math.floor(r() * pts.length), 2 + Math.floor(r() * 6), (r() - 0.5) * width * 0.5);
   }
   return c.toDataURL();
 }
 
 const cssVar = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const seeds = new Map<Element, number>();
+// Weak, so cards that get re-rendered away don't stay around.
+const seeds = new WeakMap<Element, number>();
 let nextSeed = 1;
 let observer: ResizeObserver | null = null;
 
@@ -249,6 +417,8 @@ function paintOne(el: HTMLElement) {
     const accent = cssVar('--accent') || '#7cc7ff';
     el.style.setProperty('--brush', `url(${paintPill(w, h, accent, seed)})`);
     if (el.classList.contains('pill')) el.style.setProperty('--brush-off', `url(${paintPill(w, h, '#3a3a40', seed)})`);
+  } else if (el.classList.contains('strip')) {
+    paintStrip(el, seed);
   } else {
     paint(el, seed);
   }
@@ -261,6 +431,12 @@ export function roughen(el: HTMLElement) {
   });
   paintOne(el);
   observer.observe(el);
+}
+
+/** Stop repainting the rough shapes inside `root` (before it's re-rendered). */
+export function release(root: Element) {
+  if (!observer) return;
+  for (const el of root.querySelectorAll('.rough, .pill, .brush')) observer.unobserve(el);
 }
 
 /**

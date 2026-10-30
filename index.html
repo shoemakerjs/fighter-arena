@@ -21,10 +21,7 @@
         </svg>
         <span class="logo">Arena</span>
         <nav class="nav nav-left">
-          <button class="nav-link hidden" id="nav-back">
-            <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z"/></svg>
-            Back
-          </button>
+          <button class="nav-link back-link hidden" id="nav-back">Back</button>
         </nav>
         <nav class="nav nav-right">
           <button class="nav-link" id="nav-characters">Characters</button>
@@ -114,30 +111,44 @@
         <div class="lobby-slots" id="lobby-seats"></div>
         <button class="pill pill-lg" id="lobby-start" disabled>Start</button>
         <p class="slot-sub hidden" id="lobby-wait">Waiting for the host to start…</p>
-        <button class="link-btn" id="invite-leave">Back</button>
+        <button class="nav-link back-link" id="invite-leave">Back</button>
       </div>
     </div>
 
-    <!-- Champion select (vs bot and online) -->
+    <!-- Wobbles lines as if drawn by hand (champion select skill icons). -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true">
+      <filter id="sketch" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="2" seed="4" />
+        <feDisplacementMap in="SourceGraphic" scale="2.4" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
+
+    <!-- Champion select (vs bot, online, training; the Characters page browses it) -->
     <div id="select" class="screen hidden">
-      <div class="select-art" id="select-art"></div>
-      <div class="select-shade"></div>
-      <div class="select-grunge"></div>
-      <div class="select-left">
-        <button class="link-btn select-back" id="select-back">← Back</button>
-        <h1 class="display select-title" id="select-title">Select your character</h1>
-        <div class="roster" id="roster"></div>
-      </div>
-      <section class="champ-info" id="champ-info"></section>
-      <footer class="select-bar">
+      <div class="select-backdrop-wrap" id="select-backdrop"></div>
+      <div class="select-vignette"></div>
+      <canvas class="select-embers" id="select-embers"></canvas>
+      <header class="select-bar select-top rough">
+        <button class="nav-link back-link select-back" id="select-back">Exit</button>
+        <div class="select-head">
+          <h1 class="display select-title" id="select-title">Select your character</h1>
+          <span class="display timer hidden" id="select-timer">30s</span>
+        </div>
         <div class="enemy">
-          <span class="body-text">Enemy team</span>
-          <span class="status-chip" id="enemy-status"></span>
+          <span class="body-text">Enemy pick</span>
+          <span class="enemy-picks" id="enemy-picks"></span>
         </div>
-        <div class="lock">
-          <span class="display timer" id="select-timer">30s</span>
-          <button class="pill pill-lg" id="lock-in">Lock in</button>
-        </div>
+      </header>
+      <div class="select-body">
+        <aside class="select-seats" id="select-seats"></aside>
+        <main class="select-center">
+          <nav class="roster-filter rough strip" id="roster-filter" aria-label="Champion type"></nav>
+          <div class="roster" id="roster"></div>
+        </main>
+        <section class="champ-info" id="champ-info"></section>
+      </div>
+      <footer class="select-bottom">
+        <button class="pill pill-lg" id="lock-in">Lock in</button>
       </footer>
     </div>
 
@@ -174,7 +185,7 @@
           </div>
         </div>
         <button class="pill pill-lg" id="start-matchup">Start matchup</button>
-        <button class="link-btn" id="setup-back">Back</button>
+        <button class="nav-link back-link" id="setup-back">Back</button>
       </div>
     </div>
 
@@ -194,7 +205,7 @@
             <input class="slider" id="sfx-volume" type="range" min="0" max="100" step="5" value="100" />
           </div>
         </div>
-        <button class="link-btn" id="settings-back">Back</button>
+        <button class="nav-link back-link" id="settings-back">Back</button>
       </div>
     </div>
 
@@ -218,7 +229,7 @@
 
     <!-- Training overlay: exit, the champion's skills, training settings -->
     <div id="training-ui" class="hidden">
-      <button class="link-btn training-exit" id="training-exit">← Exit</button>
+      <button class="nav-link back-link training-exit" id="training-exit">Exit</button>
       <aside class="training-skills" id="training-skills"></aside>
       <section class="training-panel rough">
         <h3 class="display">Training</h3>

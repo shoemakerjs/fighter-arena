@@ -283,6 +283,18 @@ button {
   transform: scaleX(1);
 }
 
+/* Every Back / Exit button: a nav link led by an arrow. */
+.back-link::before {
+  --arrow-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2Z'/%3E%3C/svg%3E");
+  content: '';
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background: currentColor;
+  -webkit-mask: var(--arrow-left) center / contain no-repeat;
+  mask: var(--arrow-left) center / contain no-repeat;
+}
+
 .toast {
   position: fixed;
   top: 100px;
@@ -557,72 +569,362 @@ button {
 
 /* ------------------------------------------------------------ champion select */
 
+/*
+ * A full-width bar on top (Exit, title or countdown, the enemies' pick indicators) and
+ * one at the bottom (Lock in); between them three columns: your team's cards, the
+ * roster with its type filter, and the picked champion's kit.
+ */
 #select {
-  background: #18181e;
+  display: flex;
+  flex-direction: column;
+  background: #0c0c0f;
   overflow: hidden;
 }
 
-.select-art {
-  position: absolute;
-  inset: 0 0 80px;
-  background-size: cover;
-  background-position: right center;
-  transition: background-image 0.2s;
-}
-
-.select-art.flip {
-  transform: scaleX(-1);
-}
-
-.select-shade {
+/* The picked champion's art behind everything: dimmed, drifting slowly, crossfading on change. */
+.select-backdrop-wrap {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to left, transparent 26.562%, #000 93.775%);
+  overflow: hidden;
 }
 
-/* Figma: torn black edge over the art (opaque on the left, transparent on the right). */
-.select-grunge {
+.select-backdrop {
+  position: absolute;
+  inset: -40px;
+  background-size: cover;
+  filter: blur(2px) brightness(0.34) saturate(0.85);
+  animation:
+    backdrop-in 0.7s ease-out both,
+    backdrop-drift 26s ease-in-out infinite alternate;
+  transition: opacity 0.6s;
+}
+
+.select-backdrop.out {
+  opacity: 0;
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes backdrop-drift {
+  from {
+    transform: scaleX(var(--flip, 1)) scale(1.03) translateX(-1%);
+  }
+  to {
+    transform: scaleX(var(--flip, 1)) scale(1.09) translateX(1%);
+  }
+}
+
+/* Darkness pooling at the edges and under the bars, torn paper on the left. */
+.select-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 75% 70% at 50% 45%, transparent 35%, rgba(0, 0, 0, 0.8) 100%),
+    linear-gradient(rgba(0, 0, 0, 0.55), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.6));
+}
+
+.select-vignette::before {
+  content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -23.53%;
-  width: 106.67%;
+  left: -38%;
+  width: 70%;
   background: url(/art/grunge.webp) 0 0 / 100% 100% no-repeat;
+  opacity: 0.85;
+}
+
+/* Characters page: no card, the art itself stands bright in the left column and fades into the roster. */
+@media (min-width: 901px) {
+  #select.browse .select-backdrop-wrap {
+    /* Below the top bar, so art with the head at its top edge keeps it. */
+    top: 76px;
+    right: auto;
+    /* Out to where the roster starts, fading over the last stretch. */
+    width: calc(56px + min(400px, 22vw) + 40px);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 160px), transparent);
+  }
+
+  /* Still and whole: no blur, no dimming, no drifting zoom. */
+  #select.browse .select-backdrop {
+    inset: 0;
+    filter: none;
+    transform: scaleX(var(--flip, 1));
+    animation: backdrop-in 0.7s ease-out both;
+  }
+
+  #select.browse .select-vignette {
+    background: linear-gradient(rgba(0, 0, 0, 0.55), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.6));
+  }
+
+  #select.browse .select-vignette::before {
+    display: none;
+  }
+}
+
+.select-embers {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
+}
+
+/* Torn dark bars across the top and bottom (painted by rough.ts). */
+.select-bar {
+  --card-fill: #0b0b0e;
+  flex-shrink: 0;
+  z-index: 2;
+  padding: 0 56px;
+}
+
+.select-top {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 76px;
+}
+
+.select-bottom {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  /* No bar: Lock in floats over the art, well clear of the bottom edge. */
+  padding: 4px 0 56px;
 }
 
 .select-back {
-  align-self: flex-start;
-  margin-bottom: -24px;
-  pointer-events: auto;
+  justify-self: start;
 }
 
-.select-left {
-  position: absolute;
-  left: 64px;
-  top: 28px;
-  bottom: 112px;
-  width: 440px;
-  pointer-events: none;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
+.select-head {
+  text-align: center;
 }
 
 .select-title {
   font-size: 32px;
 }
 
-/* One column of champions that scrolls (SimpleBar) once it outgrows the screen. */
+.select-top .enemy {
+  justify-self: end;
+  gap: 16px;
+}
+
+.enemy-picks {
+  display: flex;
+  gap: 10px;
+}
+
+.enemy-picks .status-chip {
+  width: 40px;
+  height: 40px;
+}
+
+.status-chip.rough {
+  --card-fill: #1d1c1b;
+  background: none;
+}
+
+.status-chip.rough.ok {
+  --card-fill: #1f2a1a;
+}
+
+#select.browse .select-top .enemy,
+#select.training .select-top .enemy {
+  visibility: hidden;
+}
+
+#select.browse .select-bottom {
+  display: none;
+}
+
+.select-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* The side columns give way first, so the roster keeps a few portraits a row. */
+  grid-template-columns: minmax(200px, min(400px, 22vw)) minmax(0, 1fr) minmax(280px, min(420px, 26vw));
+  column-gap: 40px;
+  padding: 28px 56px;
+}
+
+/* Your team: your card on top, an ally's under it; they keep their shape, shrinking only if short of room. */
+.select-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 0;
+  padding: 10px;
+}
+
+.seat {
+  --card-fill: #17171c;
+  flex: 0 1 auto;
+  width: 100%;
+  aspect-ratio: 10 / 11;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 20px 22px;
+}
+
+.seat-art {
+  position: absolute;
+  inset: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  object-fit: cover;
+  border-radius: 10px;
+  z-index: -1;
+  /* Fades to the card at the bottom, where the name sits. */
+  mask-image: linear-gradient(#000 45%, transparent 96%);
+  transition: filter 0.25s;
+}
+
+/* Still picking: the art looks switched off (grey and dim) until it's locked in. */
+.seat:not(.locked) .seat-art {
+  filter: grayscale(1) brightness(0.5) contrast(0.9);
+}
+
+/* Lock in: the art flares up into color. */
+.seat.flash .seat-art {
+  animation: seat-lock 0.8s ease-out;
+}
+
+.seat.flash::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 10px;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.45) 50%, transparent 70%) no-repeat;
+  background-size: 250% 100%;
+  animation: seat-sweep 0.7s ease-out both;
+  pointer-events: none;
+}
+
+@keyframes seat-lock {
+  from {
+    filter: grayscale(1) brightness(0.5);
+  }
+  35% {
+    filter: grayscale(0) brightness(1.7);
+  }
+}
+
+@keyframes seat-sweep {
+  from {
+    background-position: 120% 0;
+  }
+  to {
+    background-position: -120% 0;
+    opacity: 0;
+  }
+}
+
+.seat-art.flip {
+  transform: scaleX(-1);
+}
+
+.seat-art.empty {
+  background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0 10px, transparent 10px 20px);
+}
+
+.seat-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
+}
+
+.seat-name {
+  font-size: 38px;
+  line-height: 1;
+  color: var(--p0);
+}
+
+.seat-label {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+/* Middle: the type filter across the column, then the roster. */
+.select-center {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+}
+
+.roster-filter {
+  /* A faint, torn blue-grey strip; the picked type sits on a dab of the accent brush, like Lock in. */
+  --card-fill: #3b4350;
+  display: flex;
+  gap: 6px;
+  height: 40px;
+  padding: 3px 6px;
+}
+
+/* Half see-through, so the strip all but melts into the art. */
+.roster-filter::before {
+  opacity: 0.6;
+}
+
+.filter-btn {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 0.12s;
+}
+
+.filter-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.filter-btn::before {
+  content: '';
+  position: absolute;
+  inset: -4px -2px;
+  z-index: -1;
+  background: var(--brush, var(--accent)) no-repeat 0 0 / 100% 100%;
+  opacity: 0;
+  transform: scaleX(0.7);
+  transition:
+    opacity 0.15s,
+    transform 0.2s;
+}
+
+.filter-btn:hover {
+  color: #fff;
+}
+
+.filter-btn.active {
+  color: var(--on-accent);
+}
+
+.filter-btn.active::before {
+  opacity: 1;
+  transform: none;
+}
+
+/* The roster scrolls (SimpleBar) once it outgrows the column. */
 .roster {
-  pointer-events: auto;
-  align-self: flex-start;
   flex: 0 1 auto;
   min-height: 0;
-  /* Three portraits a row, plus the ring's room on the left and the scrollbar on the right. */
-  width: min(420px, calc(100vw - 40px));
-  /* Room for the selection ring, which reaches 12px past each portrait. */
-  margin: -14px 0 0 -14px;
+  width: 100%;
 }
 
 /* Champions fade out at the edges instead of being cut off mid-portrait. */
@@ -630,102 +932,85 @@ button {
   mask-image: linear-gradient(transparent, #000 14px, #000 calc(100% - 22px), transparent);
 }
 
-.roster .simplebar-content {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  padding: 14px 0 14px 14px !important;
+.roster-grid {
+  display: grid;
+  /* A dense wall of square portraits: as many a row as fit, stretched to fill it. */
+  grid-template-columns: repeat(auto-fill, minmax(clamp(84px, 5.2vw, 120px), 1fr));
+  gap: 10px;
+  /* Room for the selection frame, which reaches past each portrait, and the scrollbar on the right. */
+  padding: 10px 20px 14px 10px;
 }
 
+/* A hairline of grey at the far edge, clear of the portraits; it lights up blue while scrolling. */
 .roster .simplebar-track.simplebar-vertical {
-  right: 4px;
-  width: 10px;
-  overflow: visible;
+  right: 0;
+  width: 6px;
 }
 
-/* Track: a faint hand-drawn groove. */
-.roster .simplebar-track.simplebar-vertical::before {
-  content: '';
-  position: absolute;
-  left: 4px;
-  top: 6px;
-  bottom: 6px;
-  width: 2px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-/* Thumb: brush stroke in the accent color (painted into --brush by roughenCards). */
-.roster .simplebar-scrollbar {
+#roster .simplebar-scrollbar::before {
   left: 1px;
   right: 1px;
-}
-
-/* The id beats SimpleBar's own `.simplebar-vertical .simplebar-scrollbar:before` rules. */
-#roster .simplebar-scrollbar::before {
-  inset: -6px;
   opacity: 1;
-  border-radius: 0;
-  background: var(--brush, var(--accent)) no-repeat 0 0 / 100% 100%;
-  transition: filter 0.15s;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
 }
 
-#roster .simplebar-track:hover .simplebar-scrollbar::before,
-#roster.simplebar-dragging .simplebar-scrollbar::before {
-  filter: brightness(1.1) drop-shadow(0 0 8px var(--accent-glow));
-}
-
-.roster-group {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  /* Scrolled into view clear of the faded edges, label included. */
-  scroll-margin: 40px 0;
-}
-
-.roster-label {
-  font-size: 18px;
-  white-space: nowrap;
-}
-
-.roster-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 24px;
+#roster.simplebar-scrolling .simplebar-scrollbar::before,
+#roster.simplebar-dragging .simplebar-scrollbar::before,
+#roster .simplebar-track:hover .simplebar-scrollbar::before {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
 }
 
 .champ-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  width: 110px;
+  position: relative;
+  aspect-ratio: 1;
+  scroll-margin: 24px 0;
+  animation: tile-in 0.35s ease-out both;
+  animation-delay: calc(var(--i, 0) * 30ms);
+}
+
+@keyframes tile-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+}
+
+.champ-tile.hidden {
+  display: none;
 }
 
 .portrait-wrap {
-  position: relative;
-  width: 110px;
-  height: 110px;
+  position: absolute;
+  inset: 0;
 }
 
 .portrait {
   position: absolute;
   inset: 0;
-  border-radius: 24px;
-  border: 1px solid var(--line);
-  background-color: #d9d9d9;
+  background-color: #2a2a30;
   background-size: 560% auto;
   background-repeat: no-repeat;
   overflow: hidden;
-  transition: border-color 0.12s;
+  border-radius: 4px;
+  filter: brightness(0.82) saturate(0.85);
+  transition:
+    background-size 0.25s ease-out,
+    filter 0.2s;
+}
+
+.champ-tile:hover .portrait,
+.champ-tile.active .portrait {
+  background-size: 610% auto;
+  filter: none;
 }
 
 .portrait.flip {
   transform: scaleX(-1);
-}
-
-.champ-tile.active .portrait {
-  border-color: transparent;
 }
 
 .champ-tile.active .portrait::after {
@@ -735,82 +1020,225 @@ button {
   background: var(--accent-soft);
 }
 
-/* Brush-stroke selection ring (painted once into --ring by ChampionSelect). */
+/* The picked portrait gets a thin torn accent frame (painted once by ChampionSelect); none at rest. */
 .ring {
   position: absolute;
-  inset: -12px;
+  z-index: 1;
+  /* The frame image is 8px bigger each side than the 110px square it's drawn around. */
+  inset: -7.3%;
   background: var(--ring) no-repeat 0 0 / 100% 100%;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s;
 }
 
-.champ-tile:hover .ring {
-  opacity: 0.4;
-}
-
 .champ-tile.active .ring {
   opacity: 1;
-  filter: drop-shadow(0 0 10px var(--accent-glow));
+  filter: drop-shadow(0 0 8px var(--accent-glow));
+  animation: ring-in 0.3s ease-out;
 }
 
-.champ-name {
-  font-family: var(--display);
-  font-size: 24px;
-  line-height: 1;
+@keyframes ring-in {
+  from {
+    transform: scale(1.12) rotate(-2deg);
+    opacity: 0;
+  }
 }
+
+/* Names stay for screen readers; sighted players get the tooltip, the card and the kit. */
+.champ-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+
 
 .champ-tile.locked:not(.active) {
   opacity: 0.35;
   pointer-events: none;
 }
 
-/* Picked champion (Figma: right-aligned at 64px from the right edge, name 88px) */
+#lock-in {
+  min-width: 400px;
+  height: 62px;
+  font-size: 40px;
+}
+
+/* Locked: the pill turns to a plain white outline. */
+#lock-in.locked {
+  color: var(--text);
+}
+
+#lock-in.locked::before {
+  background: none;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 999px;
+}
+
+/* Right: the picked champion's kit; the skill list scrolls if it runs out of room. */
 .champ-info {
-  position: absolute;
-  right: 64px;
-  /* Grows upwards from just above the bottom bar, so long kits never slide under it;
-     past the top of the screen the ability list scrolls instead. */
-  top: 24px;
-  bottom: 112px;
-  width: 362px;
+  position: relative;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-end;
-  text-align: right;
-  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.85);
+  min-height: 0;
+  padding-top: 10px;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
+}
+
+/* A pool of shadow under the kit so it reads over any art. */
+.champ-info::before {
+  content: '';
+  position: absolute;
+  inset: -40px -56px -40px -60px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 60% 40%, rgba(0, 0, 0, 0.7), transparent 70%);
+  pointer-events: none;
+}
+
+.info-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.champ-info .hero {
+  font-size: 54px;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.8);
+  animation: ink-in 0.45s ease-out both;
+}
+
+/* The name is brushed on from the left, then underlined with a stroke of the accent brush. */
+@keyframes ink-in {
+  from {
+    clip-path: inset(0 100% 0 0);
+    transform: translateX(-10px);
+  }
+  to {
+    clip-path: inset(0 -10% 0 0);
+  }
+}
+
+.hero-stroke {
+  display: block;
+  width: 58%;
+  height: 8px;
+  margin-top: 8px;
+  background: var(--brush, var(--accent)) no-repeat 0 0 / 100% 100%;
+  transform-origin: left;
+  animation: stroke-in 0.4s 0.15s ease-out both;
+}
+
+@keyframes stroke-in {
+  from {
+    transform: scaleX(0);
+  }
 }
 
 .champ-info .role {
-  font-size: 18px;
+  font-size: 14px;
+  color: var(--muted);
+  text-align: right;
 }
 
-.champ-info > * {
-  flex-shrink: 0;
+.champ-info .lore {
+  margin-top: 12px;
+  animation: rise 0.4s 0.1s ease-out both;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--muted);
 }
 
-.champ-info > .abilities {
-  flex-shrink: 1;
+.kit {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 18px;
+  padding-right: 8px;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
 }
 
-.champ-info .hero {
-  font-size: 88px;
-  line-height: 1.05;
+.skill {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  animation: rise 0.35s ease-out both;
+  animation-delay: calc(0.18s + var(--i, 0) * 45ms);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+.skill-icon canvas {
+  filter: url(#sketch);
+}
+
+.skill-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  background: rgba(59, 67, 80, 0.55);
+  /* Square, the edges just a little torn. */
+  mask: var(--torn-soft) 0 0 / 100% 100% no-repeat;
+}
+
+/* A cartoon key: a pale cap in a thick, uneven ink outline sitting on its own ink shadow, each one a little askew. */
+.key.keycap {
+  min-width: 32px;
+  padding: 0 8px 1px;
+  border: 2px solid #0c0c0f;
+  border-radius: 8px 10px 6px 11px / 10px 7px 11px 8px;
+  background: #ebe4d3;
+  box-shadow: 0 3px 0 #0c0c0f;
+  transform: rotate(var(--tilt, 0deg));
+  font-family: var(--display);
+  font-size: 15px;
+  line-height: 1.25;
+  color: #15151a;
+  text-shadow: none;
+}
+
+.skill-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.skill-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skill-top b {
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.skill-text p {
   margin-top: 2px;
-  white-space: nowrap;
-}
-
-.champ-info .lore {
-  font-size: 18px;
+  font-size: 13px;
   line-height: 1.4;
-  margin-top: 14px;
+  color: var(--muted);
 }
 
+/* Kit rows of the training overlay. */
 .abilities {
   display: grid;
   gap: 6px;
@@ -841,7 +1269,8 @@ button {
   font-weight: 500;
 }
 
-.ability .key {
+.key {
+  flex-shrink: 0;
   min-width: 52px;
   padding: 1px 6px;
   border: 1px solid #000;
@@ -849,42 +1278,6 @@ button {
   font-size: 12px;
   text-align: center;
   text-shadow: none;
-}
-
-/* Characters page (browse mode): no pick bar, the content uses its space. */
-#select.browse .select-bar {
-  display: none;
-}
-
-/* Training: nobody to wait for. */
-#select.training .enemy {
-  visibility: hidden;
-}
-
-#select.browse .select-art {
-  bottom: 0;
-}
-
-#select.browse .select-left {
-  bottom: 32px;
-}
-
-#select.browse .champ-info {
-  bottom: 48px;
-}
-
-.select-bar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 80px;
-  padding: 0 64px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  background: var(--bg);
 }
 
 .enemy {
@@ -916,20 +1309,44 @@ button {
   }
 }
 
-.lock {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-
 .timer {
-  font-size: 32px;
-  min-width: 52px;
-  text-align: right;
+  font-size: 40px;
 }
 
 .timer.low {
   color: #ff5a6e;
+}
+
+/* Narrower screens: tighter columns, then the kit and the cards make way for the roster. */
+@media (max-width: 1200px) {
+  .select-bar {
+    padding: 0 28px;
+  }
+  .select-body {
+    column-gap: 28px;
+    padding: 20px 28px;
+  }
+}
+
+@media (max-width: 900px) {
+  .select-bar {
+    padding: 0 16px;
+  }
+  .select-body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+  .select-seats,
+  .champ-info {
+    display: none;
+  }
+  .select-top .enemy .body-text {
+    display: none;
+  }
+  #lock-in {
+    min-width: 0;
+    width: min(300px, 100%);
+  }
 }
 
 /* ------------------------------------------------------------ bot settings */
@@ -1214,31 +1631,7 @@ button {
 
 /* ------------------------------------------------------------ small screens */
 
-/* Short screens: a smaller name and lore leave the kit room. */
-@media (max-height: 760px) {
-  .champ-info .hero {
-    font-size: 64px;
-  }
-  .champ-info .lore {
-    font-size: 15px;
-    margin-top: 8px;
-  }
-  .champ-info .abilities {
-    margin-top: 14px;
-  }
-}
-
 @media (max-width: 900px) {
-  .champ-info {
-    display: none;
-  }
-  .select-left {
-    left: 24px;
-    top: 32px;
-  }
-  .select-bar {
-    padding: 0 16px;
-  }
   .pill-lg {
     min-width: 0;
     font-size: 26px;
@@ -1292,7 +1685,6 @@ button {
   position: absolute;
   left: 24px;
   top: 20px;
-  font-size: 18px;
 }
 
 /* The champion's skills, top right below the HUD bars */

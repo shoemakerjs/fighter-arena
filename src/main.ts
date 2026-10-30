@@ -20,6 +20,9 @@ import { Settings } from './ui/settings';
 import { TrainingPanel } from './ui/training';
 import { ChampionSelect } from './ui/select';
 
+// Visual feedback toolbar while developing; never part of the build.
+if (import.meta.env.DEV) void import('./dev/agentation');
+
 /** home → (select | online) → play ⇄ pause → end. Menus run a bot match in the background. */
 type Mode = 'home' | 'select' | 'setup' | 'settings' | 'online' | 'play' | 'pause' | 'end';
 
@@ -177,7 +180,14 @@ function openBotSetup() {
 /** Vs bot, second step: pick and lock in your champion to start. */
 function openBotSelect() {
   botSetup.close();
-  select.open('bot', myChamp);
+  // The bots as set up ("Random" ones are rolled when the match starts).
+  const bots = botSetup.chosen;
+  const seat = (label: string, champ: number | null, enemy: boolean) => ({ label, champ, enemy, locked: true, status: 'Random' });
+  const others =
+    botSetup.format === '2v2'
+      ? [seat('Ally', bots.ally, false), seat('Bot 1', bots.enemy, true), seat('Bot 2', bots.enemy2, true)]
+      : [seat('Bot', bots.enemy, true)];
+  select.open('bot', myChamp, others);
   setMode('select');
 }
 

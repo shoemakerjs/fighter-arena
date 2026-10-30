@@ -465,6 +465,42 @@ export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w
   ctx.roundRect(x, y, Math.max(0, w), h, Math.min(r, Math.max(0, w) / 2, h / 2));
 }
 
+/**
+ * An ability's HUD icon on a canvas of its own, `size` CSS pixels square (champion select),
+ * inked like a drawing: the icon sits inside a thick dark outline of its own silhouette.
+ */
+export function abilityIcon(ability: AbilityId, size: number, color: string): HTMLCanvasElement {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const px = Math.round(size * dpr);
+  const layer = () => {
+    const c = document.createElement('canvas');
+    c.width = c.height = px;
+    return c;
+  };
+  // Icons are drawn for the 54px HUD slot, shrunk a little to leave the outline room.
+  const icon = layer();
+  const ic = icon.getContext('2d')!;
+  const k = (size * dpr * 0.9) / 54;
+  ic.translate(px / 2, px / 2);
+  ic.scale(k, k);
+  drawIcon(ic, ability, 0, 0, color);
+  // Its silhouette in ink...
+  const ink = layer();
+  const kc = ink.getContext('2d')!;
+  kc.drawImage(icon, 0, 0);
+  kc.globalCompositeOperation = 'source-in';
+  kc.fillStyle = '#0b0b0e';
+  kc.fillRect(0, 0, px, px);
+  // ...stamped around it to make the outline, then the icon on top.
+  const out = layer();
+  out.style.width = out.style.height = `${size}px`;
+  const oc = out.getContext('2d')!;
+  const w = 2.2 * dpr;
+  for (let a = 0; a < 12; a++) oc.drawImage(ink, Math.cos((a / 12) * TAU) * w, Math.sin((a / 12) * TAU) * w);
+  oc.drawImage(icon, 0, 0);
+  return out;
+}
+
 function drawIcon(ctx: CanvasRenderingContext2D, ability: AbilityId | 'crescent', x: number, y: number, color: string) {
   ctx.save();
   ctx.translate(x, y);

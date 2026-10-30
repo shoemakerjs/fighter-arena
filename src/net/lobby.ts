@@ -386,11 +386,20 @@ export class Lobby {
     this.refresh();
   }
 
-  /** Redraw whatever is showing: the lobby, or the ready chip on champion select. */
+  /** Redraw whatever is showing: the lobby, or the other players' cards on champion select. */
   private refresh() {
     if (this.select.isOpen) {
       const others = this.seats.map((id, i) => (id && i !== this.mySeat ? i : -1)).filter((i) => i >= 0);
-      this.select.setEnemy(others.every((i) => this.ready[i]) ? 'locked' : 'waiting');
+      // Teams alternate by seat. Picks stay hidden until the match starts.
+      this.select.setOthers(
+        others.map((i) => ({
+          label: this.names[i] ?? 'A player',
+          champ: null,
+          enemy: i % 2 !== this.mySeat % 2,
+          locked: this.ready[i],
+          status: this.ready[i] ? 'Locked in' : 'Picking…',
+        })),
+      );
       return;
     }
     if ($('invite').classList.contains('hidden')) return;

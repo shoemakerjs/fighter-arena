@@ -73,6 +73,12 @@ export class BotSetup {
     return pick(this.ally);
   }
 
+  /** The bots' champions as set up, null where it's Random (for the champion select cards). */
+  get chosen(): { enemy: number | null; enemy2: number | null; ally: number | null } {
+    const known = (d: Dropdown) => (Number(d.value) < 0 ? null : Number(d.value));
+    return { enemy: known(this.champ), enemy2: known(this.champ2), ally: known(this.ally) };
+  }
+
   get difficulty(): Difficulty {
     return this.diff.value as Difficulty;
   }
