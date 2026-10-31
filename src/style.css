@@ -639,30 +639,41 @@ button {
   opacity: 0.85;
 }
 
-/* Characters page: no card, the art itself stands bright in the left column and fades into the roster. */
+/* Characters page: the champion's splash art fills the whole screen, bright, with the roster over its lower part. */
 @media (min-width: 901px) {
-  #select.browse .select-backdrop-wrap {
-    /* Below the top bar, so art with the head at its top edge keeps it. */
-    top: 76px;
-    right: auto;
-    /* Out to where the roster starts, fading over the last stretch. */
-    width: calc(56px + min(400px, 22vw) + 40px);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 160px), transparent);
-  }
-
-  /* Still and whole: no blur, no dimming, no drifting zoom. */
+  /*
+   * Still and whole: no blur, no dimming, no drifting zoom. Full height; left and width come from
+   * placeBackdrop, which centers the figure even if the art then runs out before the screen's edge,
+   * so that edge fades into the dark page behind.
+   */
   #select.browse .select-backdrop {
-    inset: 0;
+    inset: 0 auto;
     filter: none;
     transform: scaleX(var(--flip, 1));
     animation: backdrop-in 0.7s ease-out both;
+    mask-image: linear-gradient(
+      90deg,
+      transparent,
+      #000 var(--fade-l, 0%),
+      #000 calc(100% - var(--fade-r, 0%)),
+      transparent
+    );
   }
 
+  /* Shade only where text sits: the kit on the right and the roster along the bottom. */
   #select.browse .select-vignette {
-    background: linear-gradient(rgba(0, 0, 0, 0.55), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.6));
+    background:
+      linear-gradient(90deg, transparent 56%, rgba(0, 0, 0, 0.88) 74%),
+      linear-gradient(transparent 42%, rgba(0, 0, 0, 0.85) 82%),
+      linear-gradient(rgba(0, 0, 0, 0.55), transparent 18%);
   }
 
   #select.browse .select-vignette::before {
+    display: none;
+  }
+
+  /* No torn bar over the top either: Back and the title sit on the art, over the top shading. */
+  #select.browse .select-top::before {
     display: none;
   }
 }
@@ -980,7 +991,7 @@ button {
   }
 }
 
-.champ-tile.hidden {
+.champ-tile.filtered {
   display: none;
 }
 
@@ -1060,6 +1071,70 @@ button {
 .champ-tile.locked:not(.active) {
   opacity: 0.35;
   pointer-events: none;
+}
+
+/*
+ * Characters page: equal side columns keep the roster mid-screen, under the art's figure;
+ * it sits on the bottom edge, eight a row, each portrait named underneath.
+ */
+@media (min-width: 901px) {
+  /* The roster grows faster than the screen, so portraits get big on wide monitors; the kit keeps ~420px. */
+  #select.browse .select-body {
+    grid-template-columns: 1fr min(max(42vw, 60vw - 260px), 1300px) 1fr;
+  }
+
+  #select.browse .champ-info {
+    max-width: 420px;
+    justify-self: end;
+  }
+
+  #select.browse .select-center {
+    justify-content: flex-end;
+  }
+
+  #select.browse .roster-grid {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: clamp(14px, 0.8vw, 22px) clamp(10px, 0.6vw, 18px);
+  }
+
+  #select.browse .champ-tile {
+    aspect-ratio: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  /* Filtered out: moved to the back and made invisible, so the grid (and the filter on it) never shrinks. */
+  #select.browse .champ-tile.filtered {
+    order: 1;
+    visibility: hidden;
+  }
+
+  #select.browse .portrait-wrap {
+    position: relative;
+    aspect-ratio: 1;
+  }
+
+  #select.browse .champ-name {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
+    /* Two-word names break onto a second line rather than being cut. */
+    white-space: normal;
+    font-size: clamp(11px, 0.55vw, 15px);
+    line-height: 1.2;
+    /* Always room for two lines, so rows keep their height whichever names land in them. */
+    min-height: 2.4em;
+    text-align: center;
+    color: var(--muted);
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  }
+
+  #select.browse .champ-tile:hover .champ-name,
+  #select.browse .champ-tile.active .champ-name {
+    color: var(--text);
+  }
 }
 
 #lock-in {
@@ -1174,6 +1249,15 @@ button {
   align-items: flex-start;
   animation: rise 0.35s ease-out both;
   animation-delay: calc(0.18s + var(--i, 0) * 45ms);
+}
+
+/* Characters page: under the kit, straight into training with this champion. */
+.champ-test {
+  flex-shrink: 0;
+  /* As wide as the skill rows: the brush reaches 6px past the box, the kit keeps 8px for its scrollbar. */
+  margin: 26px 14px 0 6px;
+  /* Backwards only, so the pill's own press nudge still works once it's in. */
+  animation: rise 0.35s 0.45s ease-out backwards;
 }
 
 @keyframes rise {

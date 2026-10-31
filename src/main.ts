@@ -125,6 +125,11 @@ const select = new ChampionSelect({
     else if (lobby.active) lobby.leave();
     else openBotSetup();
   },
+  onTest(champ) {
+    myChamp = champ;
+    testFromCharacters = true;
+    startTraining();
+  },
 });
 
 const settings = new Settings(sfx, { onBack: () => goHome() });
@@ -249,8 +254,17 @@ function startMatch() {
 function openTraining() {
   sfx.unlock();
   $('menu-note').classList.add('hidden');
+  testFromCharacters = false;
   select.open('training', myChamp);
   setMode('select');
+}
+
+/** Training started from a champion's page (Test) leads back to that page, not home. */
+let testFromCharacters = false;
+
+function leaveTraining() {
+  goHome();
+  if (testFromCharacters) openCharacters();
 }
 
 const training = new TrainingPanel({
@@ -258,7 +272,7 @@ const training = new TrainingPanel({
     myChamp = champ;
     startTraining();
   },
-  onExit: () => goHome(),
+  onExit: () => leaveTraining(),
 });
 
 /** (Re)start training with the current champion; the dummy is driven by the training settings. */
@@ -386,7 +400,11 @@ $('rematch').addEventListener('click', () => {
   startAttract('online');
 });
 $('resume').addEventListener('click', () => setMode('play'));
-$('quit').addEventListener('click', () => (session ? lobby.leave() : goHome()));
+$('quit').addEventListener('click', () => {
+  if (session) lobby.leave();
+  else if (state.training) leaveTraining();
+  else goHome();
+});
 $('to-menu').addEventListener('click', () => (session ? lobby.leave() : goHome()));
 
 window.addEventListener('keydown', (e) => {

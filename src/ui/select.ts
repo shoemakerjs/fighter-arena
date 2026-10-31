@@ -12,6 +12,8 @@ export interface SelectHooks {
   /** The player locked in this champion. */
   onLock(champ: number): void;
   onBack(): void;
+  /** Characters page: try this champion out on the training dummy. */
+  onTest(champ: number): void;
 }
 
 /** Seconds to pick online before the current choice is locked automatically. */
@@ -210,10 +212,10 @@ export class ChampionSelect {
     for (const t of document.querySelectorAll<HTMLElement>('.champ-tile')) {
       t.classList.toggle('active', Number(t.dataset.champ) === this.champ);
       t.classList.toggle('locked', this.locked);
-      t.classList.toggle('hidden', this.filter !== 'All' && t.dataset.category !== this.filter);
+      t.classList.toggle('filtered', this.filter !== 'All' && t.dataset.category !== this.filter);
     }
     // Next frame, once SimpleBar has sized the scroll area of a screen that may have just been shown.
-    requestAnimationFrame(() => document.querySelector('.champ-tile.active:not(.hidden)')?.scrollIntoView({ block: 'nearest' }));
+    requestAnimationFrame(() => document.querySelector('.champ-tile.active:not(.filtered)')?.scrollIntoView({ block: 'nearest' }));
   }
 
   /**
@@ -222,7 +224,7 @@ export class ChampionSelect {
    */
   private renderSeats() {
     const you: SeatCard = { label: 'You', champ: this.champ, enemy: false, locked: this.locked };
-    // The Characters page has no cards: the art itself stands in that column (see placeBackdrop).
+    // The Characters page has no cards: the splash art fills the screen instead (see placeBackdrop).
     const cards = this.mode === 'browse' ? [] : [you, ...this.others.filter((o) => !o.enemy)];
     const el = $('select-seats');
     release(el);
@@ -260,16 +262,16 @@ export class ChampionSelect {
   }
 
   /**
-   * Behind the whole screen the art just centers on the figure. On the Characters page it
-   * stands bright in the left column instead of a card, so slide it until the figure
-   * (ROSTER focus) sits in the middle of that column.
+   * Behind the whole screen the art just centers on the figure. On the Characters page it is
+   * the splash art over the roster: the figure (ROSTER focus) stands right above the roster
+   * column, mid-screen, even if that leaves a strip the art doesn't reach; that edge fades to dark.
    */
   private placeBackdrop() {
     const bg = $('select-backdrop').lastElementChild as HTMLElement | null;
     if (!bg) return;
     const r = ROSTER[this.champ];
     const aspect = this.aspects.get(r.art);
-    const col = $('select-seats').getBoundingClientRect();
+    const col = document.querySelector('#select .select-center')!.getBoundingClientRect();
     if (this.mode !== 'browse' || !col.width || aspect === undefined) {
       bg.style.backgroundPosition = `${Math.round(r.focus * 100)}% 30%`;
       if (aspect === undefined) {
@@ -282,12 +284,18 @@ export class ChampionSelect {
       }
       return;
     }
-    const W = bg.offsetWidth;
-    const imgW = Math.max(W, bg.offsetHeight * aspect);
-    // The column's middle in the art box's own coordinates (mirrored art counts from the right).
-    const target = col.left + col.width / 2 - ($('select-backdrop').getBoundingClientRect().left + bg.offsetLeft);
-    const offset = (r.flip ? W - target : target) - r.focus * imgW;
-    bg.style.backgroundPosition = `${Math.min(0, Math.max(W - imgW, offset))}px ${r.artY ?? 'center'}`;
+    // The box is exactly the art, as wide as covering the screen takes, slid so the figure lands mid-column.
+    const box = $('select-backdrop').getBoundingClientRect();
+    const imgW = Math.max(box.width, box.height * aspect);
+    const left = col.left + col.width / 2 - box.left - (r.flip ? 1 - r.focus : r.focus) * imgW;
+    bg.style.left = `${left}px`;
+    bg.style.width = `${imgW}px`;
+    bg.style.backgroundPosition = `center ${r.artY ?? 'center'}`;
+    // Fade only the edges that end on screen; mirrored art has its own left on the right.
+    const fade = [left > 0, left + imgW < box.width];
+    if (r.flip) fade.reverse();
+    bg.style.setProperty('--fade-l', fade[0] ? '14%' : '0%');
+    bg.style.setProperty('--fade-r', fade[1] ? '14%' : '0%');
   }
 
   private renderInfo() {
@@ -315,11 +323,13 @@ export class ChampionSelect {
         </div>`,
           )
           .join('')}
-      </div>`;
+      </div>
+      ${this.mode === 'browse' ? '<button class="pill champ-test" id="champ-test">Test</button>' : ''}`;
     for (const slot of $('champ-info').querySelectorAll<HTMLElement>('.skill-icon')) {
       slot.append(abilityIcon(c.abilities[Number(slot.dataset.slot)].id, 40, '#ffffff'));
     }
-    for (const el of $('champ-info').querySelectorAll<HTMLElement>('.rough, .brush')) roughen(el);
+    document.getElementById('champ-test')?.addEventListener('click', () => this.hooks.onTest(this.champ));
+    for (const el of $('champ-info').querySelectorAll<HTMLElement>('.rough, .brush, .pill')) roughen(el);
   }
 }
 
